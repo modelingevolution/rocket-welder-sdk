@@ -1,0 +1,121 @@
+# Build directories
+build/
+dist/
+bin/
+obj/
+out/
+
+# C++ specific
+*.o
+*.a
+*.so
+*.dll
+*.dylib
+*.exe
+cmake-build-*/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+compile_commands.json
+CTestTestfile.cmake
+_deps/
+
+# C# / .NET specific
+*.user
+*.userosscache
+*.sln.docstates
+.vs/
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+*.nupkg
+*.snupkg
+project.lock.json
+project.fragment.lock.json
+artifacts/
+.dotnet/
+
+# Python specific
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+*.whl
+venv/
+env/
+ENV/
+.env
+.venv
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+htmlcov/
+.mypy_cache/
+.dmypy.json
+dmypy.json
+*.pyo
+
+# IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Package manager
+node_modules/
+package-lock.json
+yarn.lock
+.pnp.*
+.yarn/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+*.bak
+*.orig
+
+# Documentation
+docs/_build/
+docs/.doctrees/
+site/
+
+# Testing
+coverage/
+*.gcov
+*.gcda
+*.gcno
+test-results/
+TestResults/
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Desktop.ini
+
+# Local configuration
+*.local
+*.local.*
+local_settings.*
+.env.local
