@@ -5,10 +5,44 @@
 
 set -e
 
-# Configuration
+# Default configuration
 BUFFER_NAME="test_buffer"
 FRAME_COUNT=20
-CONNECTION_STRING="shm://${BUFFER_NAME}"
+MODE="duplex"  # Default mode
+
+# Parse command line arguments
+for arg in "$@"; do
+    case $arg in
+        --exit-after=*)
+            FRAME_COUNT="${arg#*=}"
+            shift
+            ;;
+        --mode=*)
+            MODE="${arg#*=}"
+            if [[ "$MODE" != "duplex" && "$MODE" != "oneway" ]]; then
+                echo "Error: Mode must be 'duplex' or 'oneway'"
+                exit 1
+            fi
+            shift
+            ;;
+        --help)
+            echo "Usage: $0 [OPTIONS]"
+            echo "Options:"
+            echo "  --exit-after=N    Exit after N frames (default: 20)"
+            echo "  --mode=MODE       Connection mode: duplex or oneway (default: duplex)"
+            echo "  --help            Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown argument: $arg"
+            echo "Use --help for usage information"
+            exit 1
+            ;;
+    esac
+done
+
+# Build connection string with mode parameter
+CONNECTION_STRING="shm://${BUFFER_NAME}?mode=${MODE}"
 
 # Colors for output
 RED='\033[0;31m'
@@ -26,6 +60,7 @@ echo ""
 echo "Configuration:"
 echo "  Buffer: ${BUFFER_NAME}"
 echo "  Frames: ${FRAME_COUNT}"
+echo "  Mode: ${MODE}"
 echo "  Connection: ${CONNECTION_STRING}"
 echo ""
 
@@ -37,10 +72,14 @@ if ! command -v gst-launch-1.0 &> /dev/null; then
 fi
 
 # Check if zerosink plugin is available
+# First try with the built plugin path
+export GST_PLUGIN_PATH=/mnt/d/source/modelingevolution/streamer/src/gstreamer/zerobuffer/build:$GST_PLUGIN_PATH
 if ! gst-inspect-1.0 zerosink &> /dev/null; then
     echo -e "${YELLOW}⚠ Warning: zerosink plugin not found${NC}"
     echo "Tests will use fakesink instead (mock mode)"
     USE_MOCK=1
+else
+    echo -e "${GREEN}✓ Found zerosink plugin${NC}"
 fi
 
 # Function to run test for a specific language
@@ -53,8 +92,8 @@ run_test() {
     # Start GStreamer pipeline in background
     if [ -z "$USE_MOCK" ]; then
         echo "Starting GStreamer pipeline with zerosink..."
-        GST_DEBUG=2 gst-launch-1.0 videotestsrc num-buffers=${FRAME_COUNT} ! \
-            video/x-raw,width=640,height=480,framerate=30/1 ! \
+        gst-launch-1.0 videotestsrc num-buffers=${FRAME_COUNT} pattern=ball ! \
+            video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! \
             zerosink buffer-name=${BUFFER_NAME} sync=false &> gst_${LANG}.log &
     else
         echo "Starting mock GStreamer pipeline..."

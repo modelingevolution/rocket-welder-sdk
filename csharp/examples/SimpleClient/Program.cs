@@ -1,78 +1,128 @@
 using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Emgu.CV;
 using RocketWelder.SDK;
-using OpenCvSharp;
 
 class Program
 {
-    static void Main(string[] args)
+    static async Task Main(string[] args)
     {
-        Console.WriteLine("Starting RocketWelder client...");
-        
-        // Parse exit-after parameter
-        int exitAfter = -1;  // -1 means run forever
-        bool shouldExit = false;
-        
-        foreach (var arg in args)
+        // Print all arguments for debugging
+        Console.WriteLine("========================================");
+        Console.WriteLine("RocketWelder SDK SimpleClient");
+        Console.WriteLine("========================================");
+        Console.WriteLine($"Arguments received: {args.Length}");
+        for (int i = 0; i < args.Length; i++)
         {
-            if (arg.StartsWith("--exit-after="))
-            {
-                exitAfter = int.Parse(arg.Substring(13));
-            }
+            Console.WriteLine($"  [{i}]: {args[i]}");
         }
-        
-        // Create client from args/environment
-        var client = RocketWelderClient.From(args);
-        
-        int frameCount = 0;
-        
-        // Set up frame processing
-        client.OnFrame((Mat frame) =>
-        {
-            frameCount++;
-            
-            // Add overlay text
-            Cv2.PutText(frame, "Processing", new Point(10, 30),
-                       HersheyFonts.HersheySimplex, 1.0, new Scalar(0, 255, 0), 2);
-            
-            // Add frame counter overlay
-            Cv2.PutText(frame, $"Frame: {frameCount}", new Point(10, 60),
-                       HersheyFonts.HersheySimplex, 0.5, new Scalar(255, 255, 255), 1);
-            
-            Console.WriteLine($"Processed frame {frameCount} ({frame.Width}x{frame.Height})");
-            
-            // Check if we should exit
-            if (exitAfter > 0 && frameCount >= exitAfter)
+        Console.WriteLine("========================================");
+        Console.WriteLine();
+
+        await Host.CreateDefaultBuilder(args)
+            .ConfigureServices((context, services) =>
             {
-                Console.WriteLine($"Reached {exitAfter} frames, exiting...");
-                shouldExit = true;
-            }
-        });
+                services.AddHostedService<VideoProcessingService>();
+                services.AddSingleton<RocketWelderClient>(sp =>
+                {
+                    var configuration = sp.GetRequiredService<IConfiguration>();
+                    return RocketWelderClient.From(configuration);
+                });
+            })
+            .RunConsoleAsync();
+    }
+}
+
+public class VideoProcessingService : BackgroundService
+{
+    private readonly RocketWelderClient _client;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<VideoProcessingService> _logger;
+    private readonly IHostApplicationLifetime _lifetime;
+    private int _frameCount = 0;
+    private int _exitAfter = -1;
+
+    public VideoProcessingService(
+        RocketWelderClient client,
+        IConfiguration configuration,
+        ILogger<VideoProcessingService> logger,
+        IHostApplicationLifetime lifetime)
+    {
+        _client = client;
+        _configuration = configuration;
+        _logger = logger;
+        _lifetime = lifetime;
         
+        // Get exit-after from configuration
+        _exitAfter = configuration.GetValue<int>("exit-after", -1);
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        _logger.LogInformation("Starting RocketWelder client..." + _client.Connection);
+        _logger.LogInformation($"Can be tested with: \n\n\tgst-launch-1.0 videotestsrc num-buffers={_exitAfter} pattern=ball ! video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! zerosink buffer-name={_client.Connection.BufferName} sync=false");
+        if (_exitAfter > 0)
+        {
+            _logger.LogInformation("Will exit after {ExitAfter} frames", _exitAfter);
+        }
+
+        // Set up frame processing callback
+        _client.OnFrame(ProcessFrame);
+
         // Start processing
-        if (exitAfter > 0)
+        _client.Start();
+
+        // Run until cancelled or frame limit reached
+        try
         {
-            Console.WriteLine($"Will exit after {exitAfter} frames");
+            await Task.Delay(Timeout.Infinite, stoppingToken);
         }
-        client.Start();
-        
-        // Run until interrupted or frame limit reached
-        if (exitAfter > 0)
+        catch (OperationCanceledException)
         {
-            while (!shouldExit && client.IsRunning)
-            {
-                System.Threading.Thread.Sleep(100);
-            }
+            // Expected when stopping
         }
-        else
+
+        _logger.LogInformation("Stopping client...");
+        _logger.LogInformation("Total frames processed: {FrameCount}", _frameCount);
+        _client.Stop();
+    }
+
+    private void ProcessFrame(Mat frame)
+    {
+        _frameCount++;
+
+        // Add overlay text using Emgu CV
+        CvInvoke.PutText(frame, "Processing", new System.Drawing.Point(10, 30),
+                   Emgu.CV.CvEnum.FontFace.HersheySimplex, 1.0, new Emgu.CV.Structure.MCvScalar(0, 255, 0), 2);
+
+        // Add timestamp overlay
+        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        CvInvoke.PutText(frame, timestamp, new System.Drawing.Point(10, 60),
+                   Emgu.CV.CvEnum.FontFace.HersheySimplex, 0.5, new Emgu.CV.Structure.MCvScalar(255, 255, 255), 1);
+
+        // Add frame counter
+        CvInvoke.PutText(frame, $"Frame: {_frameCount}", new System.Drawing.Point(10, 90),
+                   Emgu.CV.CvEnum.FontFace.HersheySimplex, 0.5, new Emgu.CV.Structure.MCvScalar(255, 255, 255), 1);
+
+        _logger.LogInformation("Processed frame {FrameCount} ({Width}x{Height})", 
+            _frameCount, frame.Width, frame.Height);
+
+        // Check if we should exit
+        if (_exitAfter > 0 && _frameCount >= _exitAfter)
         {
-            Console.WriteLine("Press any key to stop...");
-            Console.ReadKey();
+            _logger.LogInformation("Reached {ExitAfter} frames, exiting...", _exitAfter);
+            _lifetime.StopApplication();
         }
-        
-        // Stop processing
-        Console.WriteLine("Stopping client...");
-        Console.WriteLine($"Total frames processed: {frameCount}");
-        client.Stop();
-        client.Dispose();
+    }
+
+    public override void Dispose()
+    {
+        _client?.Dispose();
+        base.Dispose();
     }
 }

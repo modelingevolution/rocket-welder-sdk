@@ -1,40 +1,39 @@
 using System;
 using System.Threading;
 using System.Threading.Tasks;
-using OpenCvSharp;
-using ModelingEvolution.ZeroBuffer;
-using System.Runtime.InteropServices;
-using System.Net.Http;
-using System.Net.Sockets;
-using System.IO;
+using Emgu.CV;
+using ZeroBuffer;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
+using System.Text;
 
 namespace RocketWelder.SDK
 {
     public class RocketWelderClient : IDisposable
     {
         private readonly ConnectionString _connection;
+        private readonly ILogger<RocketWelderClient> _logger;
+        public ConnectionString Connection => _connection;
         private Action<Mat>? _frameCallback;
         private CancellationTokenSource? _cancellationTokenSource;
         private Task? _processingTask;
         private bool _isRunning;
-        private bool _disposed;
         
-        // ZeroBuffer components
-        private IBufferReader? _reader;
-        private IDuplexChannel? _duplexChannel;
+        private Reader? _reader;
+        private Writer? _writer;
         
-        // Network components
-        private HttpClient? _httpClient;
-        private TcpClient? _tcpClient;
-        private Stream? _networkStream;
+        // Cached video format from metadata
+        private GstCaps? _videoFormat;
 
-        private RocketWelderClient(string connectionString)
+        private RocketWelderClient(string connectionString, ILogger<RocketWelderClient>? logger = null)
         {
             if (string.IsNullOrWhiteSpace(connectionString))
                 throw new ArgumentNullException(nameof(connectionString));
             
             _connection = ConnectionString.Parse(connectionString);
+            _logger = logger ?? NullLogger<RocketWelderClient>.Instance;
         }
 
         /// <summary>
@@ -61,7 +60,7 @@ namespace RocketWelder.SDK
                 }
             }
 
-            return new RocketWelderClient(connectionString ?? "shm://default");
+            return new RocketWelderClient(connectionString ?? "shm://default", NullLogger<RocketWelderClient>.Instance);
         }
 
         /// <summary>
@@ -70,14 +69,30 @@ namespace RocketWelder.SDK
         /// </summary>
         public static RocketWelderClient From(IConfiguration configuration)
         {
+            return From(configuration, null);
+        }
+        
+        /// <summary>
+        /// Creates a client from IConfiguration with logger.
+        /// Looks for "RocketWelder:ConnectionString" in configuration.
+        /// </summary>
+        public static RocketWelderClient From(IConfiguration configuration, ILogger<RocketWelderClient>? logger)
+        {
             if (configuration == null)
                 throw new ArgumentNullException(nameof(configuration));
 
             // Try to get connection string from different configuration sources
-            string? connectionString = 
-                configuration["RocketWelder:ConnectionString"] ??
-                configuration["ConnectionString"] ??
-                configuration.GetConnectionString("RocketWelder");
+            // First check environment variable directly (for backward compatibility)
+            string? connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
+            
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                connectionString = 
+                    configuration["CONNECTION_STRING"] ??  // Environment variable via IConfiguration
+                    configuration["RocketWelder:ConnectionString"] ??
+                    configuration["ConnectionString"] ??
+                    configuration.GetConnectionString("RocketWelder");
+            }
 
             if (string.IsNullOrWhiteSpace(connectionString))
             {
@@ -103,7 +118,7 @@ namespace RocketWelder.SDK
                 }
             }
 
-            return new RocketWelderClient(connectionString ?? "shm://default");
+            return new RocketWelderClient(connectionString ?? "shm://default", logger);
         }
 
         /// <summary>
@@ -112,7 +127,7 @@ namespace RocketWelder.SDK
         public static RocketWelderClient FromEnvironment()
         {
             string? connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
-            return new RocketWelderClient(connectionString ?? "shm://default");
+            return new RocketWelderClient(connectionString ?? "shm://default", NullLogger<RocketWelderClient>.Instance);
         }
 
         /// <summary>
@@ -120,7 +135,15 @@ namespace RocketWelder.SDK
         /// </summary>
         public static RocketWelderClient FromConnectionString(string connectionString)
         {
-            return new RocketWelderClient(connectionString);
+            return new RocketWelderClient(connectionString, NullLogger<RocketWelderClient>.Instance);
+        }
+        
+        /// <summary>
+        /// Creates a client from a specific connection string with logger.
+        /// </summary>
+        public static RocketWelderClient FromConnectionString(string connectionString, ILogger<RocketWelderClient> logger)
+        {
+            return new RocketWelderClient(connectionString, logger);
         }
 
         /// <summary>
@@ -171,7 +194,7 @@ namespace RocketWelder.SDK
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"Error in frame processing: {ex.Message}");
+                    _logger.LogError(ex, "Error in frame processing");
                     throw;
                 }
             }, _cancellationTokenSource.Token);
@@ -179,58 +202,58 @@ namespace RocketWelder.SDK
 
         private async Task ProcessSharedMemoryAsync(CancellationToken cancellationToken)
         {
-            // Initialize ZeroBuffer for shared memory
             var bufferName = _connection.BufferName ?? "default";
             var bufferSize = _connection.BufferSize;
             var metadataSize = _connection.MetadataSize;
             
-            // Create buffer configuration
-            var config = new BufferConfiguration
-            {
-                Name = bufferName,
-                BufferSize = bufferSize,
-                MetadataSize = metadataSize
-            };
+            var config = new BufferConfig(
+                metadataSize: (int)metadataSize,
+                payloadSize: (int)bufferSize
+            );
 
-            // Create reader based on mode
+            // Create reader - this creates the shared memory buffer
+            _reader = new Reader(bufferName, config);
+            
+            // If duplex mode, also create a writer
             if (_connection.Mode == "duplex")
             {
-                _duplexChannel = BufferFactory.CreateDuplexChannel(config);
-                _reader = _duplexChannel.Reader;
-            }
-            else
-            {
-                _reader = BufferFactory.CreateReader(config);
+                // For duplex, we'd need a separate buffer for writing back
+                // For now, we'll just read
+                _logger.LogWarning("Duplex mode not fully implemented yet, operating in read-only mode");
             }
 
-            // Process frames
+            _logger.LogDebug("Created shared memory buffer: {BufferName} (size: {BufferSize}, metadata: {MetadataSize})", 
+                bufferName, bufferSize, metadataSize);
+            
             while (!cancellationToken.IsCancellationRequested)
             {
                 try
                 {
                     // Read frame from shared memory
-                    var frameData = await _reader.ReadAsync(cancellationToken);
-                    if (frameData != null && frameData.Length > 0)
+                    var frame = _reader.ReadFrame();
+                    if (!frame.IsValid)
                     {
-                        // Decode frame data to Mat
-                        // Assuming raw BGR format for now
-                        // First 8 bytes contain width and height (4 bytes each)
-                        if (frameData.Length > 8)
-                        {
-                            int width = BitConverter.ToInt32(frameData, 0);
-                            int height = BitConverter.ToInt32(frameData, 4);
-                            int pixelDataSize = width * height * 3; // BGR
-                            
-                            if (frameData.Length >= 8 + pixelDataSize)
-                            {
-                                // Create Mat from pixel data
-                                using var frame = new Mat(height, width, MatType.CV_8UC3);
-                                Marshal.Copy(frameData, 8, frame.Data, pixelDataSize);
-                                
-                                // Invoke callback
-                                _frameCallback!(frame);
-                            }
-                        }
+                        _logger.LogInformation("No valid frame read, waiting for next frame");
+                        continue;
+                    }
+                    // Parse metadata on first frame or when not yet parsed
+                    if (_videoFormat == null) 
+                        ParseMetadata();
+
+
+                    // Use video format from metadata, or fallback to connection parameters
+                    var format = _videoFormat ?? throw new InvalidOperationException("No video format detected");
+
+
+                    // Create Mat from the raw data using zero-copy pointer
+                    unsafe
+                    {
+                        // Create Mat wrapping the shared memory directly
+                        using var mat = format.CreateMat(frame.Pointer);
+
+                        // Call the frame callback with zero-copy Mat
+                        _frameCallback!(mat);
+
                     }
                 }
                 catch (OperationCanceledException)
@@ -239,81 +262,129 @@ namespace RocketWelder.SDK
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"Error reading frame: {ex.Message}");
+                    _logger.LogError(ex, "Error reading from shared memory");
                     await Task.Delay(100, cancellationToken);
                 }
             }
         }
 
+        private void ParseMetadata()
+        {
+            try
+            {
+                var metadataSpan = _reader!.GetMetadata();
+                if (metadataSpan.Length <= 12) return; // Need at least 8-byte prefix + 4-byte GStreamer prefix
+                
+                // The C# GetMetadata returns the raw metadata including the 8-byte size prefix
+                // Skip the first 8 bytes (uint64_t size prefix from ZeroBuffer Writer)
+                metadataSpan = metadataSpan.Slice(8);
+                
+                // Now read GStreamer's 4-byte size prefix (little-endian)
+                uint jsonSize = metadataSpan[0] |
+                                ((uint)metadataSpan[1] << 8) |
+                                ((uint)metadataSpan[2] << 16) |
+                                ((uint)metadataSpan[3] << 24);
+
+                // Validate size
+                if (jsonSize == 0 || jsonSize > metadataSpan.Length - 4) 
+                {
+                    _logger.LogWarning("Invalid JSON size: {Size} (available: {Available})", 
+                        jsonSize, metadataSpan.Length - 4);
+                    return;
+                }
+
+                // Parse JSON metadata (skip the 4-byte GStreamer size prefix)
+                var jsonSpan = metadataSpan.Slice(4, (int)jsonSize);
+                var jsonString = Encoding.UTF8.GetString(jsonSpan);
+                        
+                using var doc = JsonDocument.Parse(jsonString);
+                var root = doc.RootElement;
+                        
+                // Try to parse from caps string first (most complete)
+                if (root.TryGetProperty("caps", out var capsElem))
+                {
+                    var caps = capsElem.GetString();
+                    if (!string.IsNullOrEmpty(caps))
+                    {
+                        _videoFormat = GstCaps.Parse(caps, null);
+                        _logger.LogInformation("Parsed video format from caps: {VideoFormat}", _videoFormat);
+                        return;
+                    }
+                }
+                        
+                // Fallback to individual properties
+                if (!root.TryGetProperty("width", out var widthElem) ||
+                    !root.TryGetProperty("height", out var heightElem)) return;
+
+                var width = widthElem.GetInt32();
+                var height = heightElem.GetInt32();
+                var format = root.TryGetProperty("format", out var formatElem) 
+                    ? formatElem.GetString() ?? "RGB" 
+                    : "RGB";
+                            
+                _videoFormat = GstCaps.FromSimple(width, height, format);
+                            
+                _logger.LogInformation("Parsed video format from properties: {VideoFormat}", _videoFormat);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to parse metadata, using defaults");
+            }
+        }
+
+        
+
         private async Task ProcessMjpegHttpAsync(CancellationToken cancellationToken)
         {
-            _httpClient = new HttpClient();
             var url = $"http://{_connection.Host}:{_connection.Port ?? 80}/{_connection.Path}";
-            
-            using var response = await _httpClient.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
-            response.EnsureSuccessStatusCode();
-            
-            using var stream = await response.Content.ReadAsStreamAsync();
-            await ProcessMjpegStreamAsync(stream, cancellationToken);
+            await ProcessMjpegWithVideoCaptureAsync(url, cancellationToken);
         }
 
         private async Task ProcessMjpegTcpAsync(CancellationToken cancellationToken)
         {
-            _tcpClient = new TcpClient();
-            await _tcpClient.ConnectAsync(_connection.Host!, _connection.Port ?? 8080);
-            _networkStream = _tcpClient.GetStream();
-            
-            await ProcessMjpegStreamAsync(_networkStream, cancellationToken);
+            var url = $"tcp://{_connection.Host}:{_connection.Port ?? 8080}/{_connection.Path}";
+            await ProcessMjpegWithVideoCaptureAsync(url, cancellationToken);
         }
 
-        private async Task ProcessMjpegStreamAsync(Stream stream, CancellationToken cancellationToken)
+        private async Task ProcessMjpegWithVideoCaptureAsync(string url, CancellationToken cancellationToken)
         {
-            var buffer = new byte[1024 * 1024]; // 1MB buffer for JPEG frames
-            var frameBuffer = new MemoryStream();
+            // Use Emgu CV's VideoCapture which can handle MJPEG streams directly
+            using var capture = new VideoCapture(url);
             
-            while (!cancellationToken.IsCancellationRequested)
+            if (!capture.IsOpened)
             {
-                try
+                throw new InvalidOperationException($"Failed to open video stream: {url}");
+            }
+            
+            _logger.LogInformation("Opened MJPEG stream: {Url}", url);
+            
+            using var frame = new Mat();
+            
+            await Task.Run(() =>
+            {
+                while (!cancellationToken.IsCancellationRequested)
                 {
-                    var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length, cancellationToken);
-                    if (bytesRead == 0) break;
-                    
-                    // Simple MJPEG parsing - look for JPEG markers
-                    for (int i = 0; i < bytesRead - 1; i++)
+                    try
                     {
-                        if (buffer[i] == 0xFF && buffer[i + 1] == 0xD8) // Start of JPEG
+                        // Read frame from the stream
+                        if (capture.Read(frame) && !frame.IsEmpty)
                         {
-                            frameBuffer.SetLength(0);
-                            frameBuffer.Position = 0;
+                            // Process the frame
+                            _frameCallback!(frame);
                         }
-                        
-                        frameBuffer.WriteByte(buffer[i]);
-                        
-                        if (buffer[i] == 0xFF && buffer[i + 1] == 0xD9) // End of JPEG
+                        else
                         {
-                            frameBuffer.WriteByte(buffer[i + 1]);
-                            i++; // Skip the next byte
-                            
-                            // Decode JPEG frame
-                            var jpegData = frameBuffer.ToArray();
-                            using var frame = Cv2.ImDecode(jpegData, ImreadModes.Color);
-                            if (!frame.Empty())
-                            {
-                                _frameCallback!(frame);
-                            }
+                            // Small delay if no frame available
+                            Thread.Sleep(10);
                         }
                     }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error reading from MJPEG stream");
+                        Thread.Sleep(100);
+                    }
                 }
-                catch (OperationCanceledException)
-                {
-                    break;
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"Error processing MJPEG stream: {ex.Message}");
-                    await Task.Delay(100, cancellationToken);
-                }
-            }
+            }, cancellationToken);
         }
 
         /// <summary>
@@ -335,17 +406,10 @@ namespace RocketWelder.SDK
                 // Cancellation is expected
             }
             
-            // Clean up resources
             _reader?.Dispose();
             _reader = null;
-            _duplexChannel?.Dispose();
-            _duplexChannel = null;
-            _httpClient?.Dispose();
-            _httpClient = null;
-            _networkStream?.Dispose();
-            _networkStream = null;
-            _tcpClient?.Dispose();
-            _tcpClient = null;
+            _writer?.Dispose();
+            _writer = null;
             
             _cancellationTokenSource?.Dispose();
             _cancellationTokenSource = null;

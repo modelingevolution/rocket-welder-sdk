@@ -20,21 +20,13 @@ fi
 echo "Building SimpleClient example..."
 cd examples/SimpleClient
 
-# Restore dependencies
-echo "Restoring dependencies..."
-dotnet restore
-
-# Build
-echo "Building..."
-dotnet build --configuration Release
+# Publish as self-contained executable
+echo "Publishing..."
+dotnet publish --configuration Release --output ./publish --self-contained false
 
 echo ""
 echo "C# examples built successfully!"
-echo "Example: $SCRIPT_DIR/examples/SimpleClient/bin/Release/net9.0/SimpleClient"
+echo "Executable: $SCRIPT_DIR/examples/SimpleClient/publish/SimpleClient"
 echo ""
 echo "To run:"
-echo "  export CONNECTION_STRING='shm://test' # or other connection string"
-echo "  dotnet run --project $SCRIPT_DIR/examples/SimpleClient"
-echo "Or:"
-echo "  cd $SCRIPT_DIR/examples/SimpleClient"
-echo "  dotnet run"
+echo "  $SCRIPT_DIR/examples/SimpleClient/publish/SimpleClient 'shm://test' --exit-after=10"

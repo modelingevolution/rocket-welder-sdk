@@ -1,0 +1,21 @@
+{
+  "profiles": {
+    "SimpleClient": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development",
+        "CONNECTION_STRING": "shm://test_buffer?mode=oneway&buffer_size=20MB&metadata_size=4KB"
+      }
+    },
+    "WSL": {
+      "commandName": "WSL2",
+      "environmentVariables": {
+        "DOTNET_ENVIRONMENT": "Development",
+        "CONNECTION_STRING": "shm://test_buffer?mode=oneway&buffer_size=20MB&metadata_size=4KB",
+        "RocketWelder__ConnectionString": "shm://test_buffer?mode=oneway&buffer_size=20MB&metadata_size=4KB"
+      },
+      "distributionName": ""
+    }
+  },
+  "$schema": "https://json.schemastore.org/launchsettings.json"
+}
