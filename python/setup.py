@@ -12,8 +12,8 @@ else:
 setup(
     name="rocket-welder-sdk",
     version="1.0.0",
-    author="RocketWelder",
-    description="Client library for RocketWelder video streaming services",
+    author="ModelingEvolution",
+    description="High-performance video streaming client library for RocketWelder services",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/modelingevolution/rocket-welder-sdk",

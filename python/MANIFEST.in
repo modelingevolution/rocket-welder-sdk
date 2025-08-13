@@ -1,0 +1,6 @@
+include README.md
+include ../README.md
+include logo.png
+include LICENSE
+include ../LICENSE
+recursive-include rocket_welder_sdk *.py
