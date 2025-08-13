@@ -246,18 +246,11 @@ namespace RocketWelder.SDK
 
 
                     // Create Mat from the raw data using zero-copy pointer
-                    unsafe
-                    {
-                        // Create Mat wrapping the shared memory directly
-                        // Use Span for zero-copy access if Pointer is not available
-                        fixed (byte* ptr = frame.Span)
-                        {
-                            using var mat = format.CreateMat(new IntPtr(ptr));
+                    // Use Span for zero-copy access
+                    using var mat = format.CreateMat(frame.Span);
 
-                            // Call the frame callback with zero-copy Mat
-                            _frameCallback!(mat);
-                        }
-                    }
+                    // Call the frame callback with zero-copy Mat
+                    _frameCallback!(mat);
                 }
                 catch (OperationCanceledException)
                 {
