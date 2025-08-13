@@ -14,7 +14,6 @@ on:
 
 permissions:
   contents: read
-  packages: write  # Required for GitHub Packages
 
 jobs:
   publish-nuget:
@@ -72,18 +71,6 @@ jobs:
       env:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
     
-    - name: Push to GitHub Packages
-      working-directory: ./csharp
-      continue-on-error: true  # GitHub Packages is optional, NuGet.org is primary
-      run: |
-        # Push package directly to GitHub Packages
-        dotnet nuget push ./nupkg/RocketWelder.SDK.*.nupkg \
-          --api-key ${{ secrets.GITHUB_TOKEN }} \
-          --source "https://nuget.pkg.github.com/modelingevolution/index.json" \
-          --skip-duplicate
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    
     - name: Summary
       run: |
         echo "## C# SDK Published to NuGet" >> $GITHUB_STEP_SUMMARY
@@ -91,7 +78,6 @@ jobs:
         echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Package**: RocketWelder.SDK" >> $GITHUB_STEP_SUMMARY
         echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK" >> $GITHUB_STEP_SUMMARY
-        echo "- **GitHub Packages**: https://github.com/modelingevolution/rocket-welder-sdk/packages" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "Install with:" >> $GITHUB_STEP_SUMMARY
         echo '```bash' >> $GITHUB_STEP_SUMMARY
