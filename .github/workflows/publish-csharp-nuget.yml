@@ -14,6 +14,7 @@ on:
 
 permissions:
   contents: read
+  packages: write  # Required for GitHub Packages
 
 jobs:
   publish-nuget:
@@ -75,14 +76,10 @@ jobs:
       working-directory: ./csharp
       continue-on-error: true  # GitHub Packages is optional, NuGet.org is primary
       run: |
-        # Add GitHub Packages source
-        dotnet nuget add source --username modelingevolution --password ${{ secrets.GITHUB_TOKEN }} \
-          --store-password-in-clear-text --name github "https://nuget.pkg.github.com/modelingevolution/index.json" || true
-        
-        # Push package
+        # Push package directly to GitHub Packages
         dotnet nuget push ./nupkg/RocketWelder.SDK.*.nupkg \
           --api-key ${{ secrets.GITHUB_TOKEN }} \
-          --source "github" \
+          --source "https://nuget.pkg.github.com/modelingevolution/index.json" \
           --skip-duplicate
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
