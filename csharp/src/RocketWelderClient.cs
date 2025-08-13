@@ -249,11 +249,14 @@ namespace RocketWelder.SDK
                     unsafe
                     {
                         // Create Mat wrapping the shared memory directly
-                        using var mat = format.CreateMat(frame.Pointer);
+                        // Use Span for zero-copy access if Pointer is not available
+                        fixed (byte* ptr = frame.Span)
+                        {
+                            using var mat = format.CreateMat(new IntPtr(ptr));
 
-                        // Call the frame callback with zero-copy Mat
-                        _frameCallback!(mat);
-
+                            // Call the frame callback with zero-copy Mat
+                            _frameCallback!(mat);
+                        }
                     }
                 }
                 catch (OperationCanceledException)

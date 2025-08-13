@@ -1,7 +1,13 @@
 from setuptools import setup, find_packages
+import os
 
-with open("../README.md", "r", encoding="utf-8") as fh:
-    long_description = fh.read()
+# Try to find README.md in parent directory or current directory
+readme_path = "../README.md" if os.path.exists("../README.md") else "README.md"
+if os.path.exists(readme_path):
+    with open(readme_path, "r", encoding="utf-8") as fh:
+        long_description = fh.read()
+else:
+    long_description = "Client library for RocketWelder video streaming services"
 
 setup(
     name="rocket-welder-sdk",
