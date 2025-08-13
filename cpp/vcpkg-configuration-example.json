@@ -1,0 +1,22 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg-configuration.schema.json",
+  "default-registry": {
+    "kind": "git",
+    "repository": "https://github.com/Microsoft/vcpkg",
+    "baseline": "latest"
+  },
+  "registries": [
+    {
+      "kind": "git",
+      "repository": "https://github.com/modelingevolution/zerobuffer-vcpkg-registry",
+      "baseline": "main",
+      "packages": ["zerobuffer"]
+    },
+    {
+      "kind": "git",
+      "repository": "https://github.com/modelingevolution/rocket-welder-sdk-vcpkg-registry",
+      "baseline": "main",
+      "packages": ["rocket-welder-sdk"]
+    }
+  ]
+}

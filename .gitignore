@@ -4,6 +4,8 @@ dist/
 bin/
 obj/
 out/
+vcpkg_installed/
+build_test/
 
 # C++ specific
 *.o

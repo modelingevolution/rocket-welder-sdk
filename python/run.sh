@@ -1,19 +1,18 @@
 #!/bin/bash
 
-# Run script for Python Rocket Welder SDK example
-# Usage: ./run.sh <connection_string> [--exit-after=N]
+# Run script for Python RocketWelder SDK
+# Maps command line arguments to environment variables (mirrors C# run.sh)
 
 set -e
 
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Ensure virtual environment exists and package is installed
-if [ ! -d "$SCRIPT_DIR/venv" ]; then
-    echo "Building Python environment first..."
-    "$SCRIPT_DIR/build.sh"
+# Parse first positional argument as CONNECTION_STRING if it looks like a connection string
+if [[ $1 =~ ^(shm|mjpeg\+http|mjpeg\+tcp):// ]]; then
+    export CONNECTION_STRING="$1"
+    shift
 fi
 
-# Activate virtual environment and run
-source "$SCRIPT_DIR/venv/bin/activate"
-exec python "$SCRIPT_DIR/examples/simple_client.py" "$@"
+# Run the Python client with remaining arguments
+exec python3 "$SCRIPT_DIR/examples/simple_client.py" "$@"

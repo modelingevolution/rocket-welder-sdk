@@ -9,8 +9,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{7C
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimpleClient", "examples\SimpleClient\SimpleClient.csproj", "{4BEFE04D-2685-469E-9655-3FCA49CA7B5F}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZeroBuffer", "..\..\streamer\src\zerobuffer\csharp\ZeroBuffer\ZeroBuffer.csproj", "{D4CDF93C-88CB-EAA0-2D93-10606D32ADDD}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -25,15 +23,14 @@ Global
 		{4BEFE04D-2685-469E-9655-3FCA49CA7B5F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4BEFE04D-2685-469E-9655-3FCA49CA7B5F}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4BEFE04D-2685-469E-9655-3FCA49CA7B5F}.Release|Any CPU.Build.0 = Release|Any CPU
-		{D4CDF93C-88CB-EAA0-2D93-10606D32ADDD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{D4CDF93C-88CB-EAA0-2D93-10606D32ADDD}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{D4CDF93C-88CB-EAA0-2D93-10606D32ADDD}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{D4CDF93C-88CB-EAA0-2D93-10606D32ADDD}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{4BEFE04D-2685-469E-9655-3FCA49CA7B5F} = {7CF0E3FA-F73A-4B08-BED8-E958401112C1}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {ADE4D0E4-F9FD-41BA-92BE-60E5E288C642}
 	EndGlobalSection
 EndGlobal

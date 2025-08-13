@@ -1,0 +1,117 @@
+name: Release All SDKs
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release-all:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${VERSION#v}"
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+    
+    - name: Create Release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: v${{ steps.version.outputs.version }}
+        release_name: Release v${{ steps.version.outputs.version }}
+        body: |
+          ## Rocket Welder SDK v${{ steps.version.outputs.version }}
+          
+          ### What's New
+          - C++ SDK for vcpkg
+          - C# SDK for NuGet
+          - Python SDK for PyPI
+          
+          ### Installation
+          
+          #### C++ (vcpkg)
+          Configure your `vcpkg-configuration.json`:
+          ```json
+          {
+            "registries": [
+              {
+                "kind": "git",
+                "repository": "https://github.com/modelingevolution/rocket-welder-sdk-vcpkg-registry",
+                "baseline": "main",
+                "packages": ["rocket-welder-sdk"]
+              }
+            ]
+          }
+          ```
+          Then: `vcpkg install rocket-welder-sdk`
+          
+          #### C# (NuGet)
+          ```bash
+          dotnet add package RocketWelder.SDK --version ${{ steps.version.outputs.version }}
+          ```
+          
+          #### Python (PyPI)
+          ```bash
+          pip install rocket-welder-sdk==${{ steps.version.outputs.version }}
+          ```
+        draft: false
+        prerelease: false
+    
+    - name: Trigger C++ Publishing
+      uses: peter-evans/repository-dispatch@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        event-type: publish-cpp
+        client-payload: '{"version": "${{ steps.version.outputs.version }}"}'
+    
+    - name: Trigger C# Publishing
+      uses: peter-evans/repository-dispatch@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        event-type: publish-csharp
+        client-payload: '{"version": "${{ steps.version.outputs.version }}"}'
+    
+    - name: Trigger Python Publishing
+      uses: peter-evans/repository-dispatch@v2
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        event-type: publish-python
+        client-payload: '{"version": "${{ steps.version.outputs.version }}"}'
+    
+    - name: Summary
+      run: |
+        echo "## Release Created Successfully" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: v${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Tag**: v${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Publishing Status" >> $GITHUB_STEP_SUMMARY
+        echo "- C++ SDK: Publishing to vcpkg registry..." >> $GITHUB_STEP_SUMMARY
+        echo "- C# SDK: Publishing to NuGet..." >> $GITHUB_STEP_SUMMARY
+        echo "- Python SDK: Publishing to PyPI..." >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Check individual workflow runs for publishing status." >> $GITHUB_STEP_SUMMARY

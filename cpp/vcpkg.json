@@ -1,0 +1,18 @@
+{
+  "name": "rocket-welder-sdk-example",
+  "version": "1.0.0",
+  "description": "Example project using RocketWelder SDK",
+  "dependencies": [
+    "zerobuffer",
+    "opencv4",
+    "jsoncpp"
+  ],
+  "features": {
+    "tests": {
+      "description": "Build tests",
+      "dependencies": [
+        "gtest"
+      ]
+    }
+  }
+}

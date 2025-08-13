@@ -1,0 +1,199 @@
+name: Publish C++ SDK to vcpkg Registry
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - 'cpp-v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  publish-vcpkg:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout rocket-welder-sdk
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Set version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${GITHUB_REF#refs/tags/}"
+          VERSION="${VERSION#v}"
+          VERSION="${VERSION#cpp-v}"
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_ENV
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+    
+    - name: Verify tag exists
+      run: |
+        if ! git rev-parse "v${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+          echo "Creating tag v${{ steps.version.outputs.version }}"
+          git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
+        fi
+    
+    - name: Calculate SHA512
+      id: sha512
+      run: |
+        # Create release tarball URL
+        TARBALL_URL="https://github.com/modelingevolution/rocket-welder-sdk/archive/refs/tags/v${{ steps.version.outputs.version }}.tar.gz"
+        
+        # For workflow_dispatch, we might need to push the tag first
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          git push origin "v${{ steps.version.outputs.version }}" || true
+        fi
+        
+        # Download and calculate SHA512
+        echo "Downloading $TARBALL_URL..."
+        curl -L -o release.tar.gz "$TARBALL_URL" || {
+          echo "Failed to download release tarball. The tag might not be pushed yet."
+          exit 1
+        }
+        SHA512=$(sha512sum release.tar.gz | cut -d' ' -f1)
+        echo "SHA512=$SHA512" >> $GITHUB_OUTPUT
+        echo "SHA512: $SHA512"
+        rm release.tar.gz
+    
+    - name: Update port files
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        SHA512="${{ steps.sha512.outputs.SHA512 }}"
+        
+        # Update version in vcpkg.json
+        sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$VERSION\"/" cpp/vcpkg-port/rocket-welder-sdk/vcpkg.json
+        
+        # Update SHA512 in portfile.cmake
+        sed -i "s/SHA512 .*/SHA512 $SHA512/" cpp/vcpkg-port/rocket-welder-sdk/portfile.cmake
+    
+    - name: Setup registry structure
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        # Create registry structure
+        mkdir -p registry-repo/ports/rocket-welder-sdk
+        mkdir -p registry-repo/versions/r-
+        
+        # Copy port files
+        cp -r cpp/vcpkg-port/rocket-welder-sdk/* registry-repo/ports/rocket-welder-sdk/
+        
+        # Initialize git repo for git-tree calculation
+        cd registry-repo
+        git init
+        git add ports/rocket-welder-sdk
+        git -c user.name="GitHub Actions" -c user.email="actions@github.com" commit -m "Add rocket-welder-sdk port"
+        GIT_TREE=$(git rev-parse HEAD:ports/rocket-welder-sdk)
+        echo "GIT_TREE=$GIT_TREE" >> $GITHUB_ENV
+    
+    - name: Create registry files
+      run: |
+        cd registry-repo
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        # Create baseline.json
+        cat > versions/baseline.json << EOF
+        {
+          "default": {
+            "rocket-welder-sdk": {
+              "baseline": "$VERSION",
+              "port-version": 0
+            }
+          }
+        }
+        EOF
+        
+        # Create version database
+        cat > versions/r-/rocket-welder-sdk.json << EOF
+        {
+          "versions": [
+            {
+              "version": "$VERSION",
+              "port-version": 0,
+              "git-tree": "$GIT_TREE"
+            }
+          ]
+        }
+        EOF
+        
+        # Create README
+        cat > README.md << 'EOF'
+        # Rocket Welder SDK vcpkg Registry
+        
+        Custom vcpkg registry for Rocket Welder SDK - C++ client library for RocketWelder video streaming services.
+        
+        ## Usage
+        
+        Add to your `vcpkg-configuration.json`:
+        
+        ```json
+        {
+          "registries": [
+            {
+              "kind": "git",
+              "repository": "https://github.com/modelingevolution/rocket-welder-sdk-vcpkg-registry",
+              "baseline": "<commit-sha>",
+              "packages": ["rocket-welder-sdk"]
+            }
+          ]
+        }
+        ```
+        
+        Then install:
+        ```bash
+        vcpkg install rocket-welder-sdk
+        ```
+        EOF
+    
+    - name: Push to registry repository
+      env:
+        # Use PAT for cross-repository access
+        GH_TOKEN: ${{ secrets.VCPKG_REGISTRY_PAT || secrets.GITHUB_TOKEN }}
+      run: |
+        cd registry-repo
+        git add .
+        git -c user.name="GitHub Actions" -c user.email="actions@github.com" commit -m "Update rocket-welder-sdk to version ${{ steps.version.outputs.version }}"
+        
+        # Configure git authentication
+        git config --global url."https://x-access-token:${GH_TOKEN}@github.com/".insteadOf "https://github.com/"
+        
+        # Clone or create the registry repository
+        git clone https://github.com/modelingevolution/rocket-welder-sdk-vcpkg-registry.git ../existing-registry || {
+          echo "Creating new registry repository..."
+          gh repo create modelingevolution/rocket-welder-sdk-vcpkg-registry --public --description "vcpkg registry for Rocket Welder SDK"
+          git remote add origin https://github.com/modelingevolution/rocket-welder-sdk-vcpkg-registry.git
+          git branch -M main
+          git push -u origin main
+        }
+        
+        # Update existing registry
+        if [ -d ../existing-registry ]; then
+          cp -r * ../existing-registry/
+          cd ../existing-registry
+          git add .
+          git -c user.name="GitHub Actions" -c user.email="actions@github.com" commit -m "Update rocket-welder-sdk to version ${{ steps.version.outputs.version }}" || echo "No changes"
+          git push
+        fi
+    
+    - name: Summary
+      run: |
+        echo "## C++ SDK Published to vcpkg Registry" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Registry**: https://github.com/modelingevolution/rocket-welder-sdk-vcpkg-registry" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Users can now install with:" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo 'vcpkg install rocket-welder-sdk' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY

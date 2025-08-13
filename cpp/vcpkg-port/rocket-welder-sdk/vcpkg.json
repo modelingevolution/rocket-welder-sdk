@@ -1,0 +1,20 @@
+{
+  "name": "rocket-welder-sdk",
+  "version": "1.0.0",
+  "description": "C++ SDK for RocketWelder video streaming services",
+  "homepage": "https://github.com/modelingevolution/rocket-welder-sdk",
+  "license": "MIT",
+  "dependencies": [
+    "zerobuffer",
+    "opencv4",
+    "jsoncpp",
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ]
+}
