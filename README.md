@@ -1,5 +1,10 @@
 # Rocket Welder SDK
 
+[![NuGet](https://img.shields.io/nuget/v/RocketWelder.SDK.svg)](https://www.nuget.org/packages/RocketWelder.SDK/)
+[![PyPI](https://img.shields.io/pypi/v/rocket-welder-sdk.svg)](https://pypi.org/project/rocket-welder-sdk/)
+[![vcpkg](https://img.shields.io/badge/vcpkg-rocket--welder--sdk-blue)](https://github.com/modelingevolution/rocket-welder-sdk-vcpkg-registry)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 Multi-language client libraries for interacting with RocketWelder video streaming services.
 
 ## Overview
@@ -65,22 +70,99 @@ CONNECTION_STRING=shm://camera_feed?buffer_size=20MB&metadata_size=4KB
 
 ## Installation
 
-### C++ (vcpkg)
+### C++ with vcpkg
 
+Configure the custom registry in your `vcpkg-configuration.json`:
+```json
+{
+  "registries": [
+    {
+      "kind": "git",
+      "repository": "https://github.com/modelingevolution/rocket-welder-sdk-vcpkg-registry",
+      "baseline": "YOUR_BASELINE_HERE",
+      "packages": ["rocket-welder-sdk"]
+    }
+  ]
+}
+```
+
+Then install:
 ```bash
+# Install via vcpkg
 vcpkg install rocket-welder-sdk
+
+# Or integrate with CMake
+find_package(rocket-welder-sdk CONFIG REQUIRED)
+target_link_libraries(your_app PRIVATE rocket-welder-sdk::rocket-welder-sdk)
 ```
 
-### C# (NuGet)
+### C# with NuGet
+
+[![NuGet Downloads](https://img.shields.io/nuget/dt/RocketWelder.SDK.svg)](https://www.nuget.org/packages/RocketWelder.SDK/)
 
 ```bash
+# Package Manager Console
+Install-Package RocketWelder.SDK
+
+# .NET CLI
 dotnet add package RocketWelder.SDK
+
+# PackageReference in .csproj
+<PackageReference Include="RocketWelder.SDK" Version="1.0.*" />
 ```
 
-### Python (pip)
+### Python with pip
+
+[![PyPI Downloads](https://img.shields.io/pypi/dm/rocket-welder-sdk.svg)](https://pypi.org/project/rocket-welder-sdk/)
 
 ```bash
+# Install from PyPI
 pip install rocket-welder-sdk
+
+# Install with optional dependencies
+pip install rocket-welder-sdk[opencv]  # Includes OpenCV
+pip install rocket-welder-sdk[all]     # All optional dependencies
+
+# Install specific version
+pip install rocket-welder-sdk==1.0.0
+```
+
+## Quick Start
+
+### C++ Quick Start
+```cpp
+#include <rocket_welder/client.hpp>
+
+auto client = rocket_welder::Client::from_connection_string("shm://my-buffer");
+client.on_frame([](cv::Mat& frame) {
+    // Process frame
+});
+client.start();
+```
+
+### C# Quick Start  
+```csharp
+using RocketWelder.SDK;
+
+var client = RocketWelderClient.FromConnectionString("shm://my-buffer");
+client.OnFrame(frame => {
+    // Process frame
+});
+client.Start();
+```
+
+### Python Quick Start
+```python
+import rocket_welder_sdk as rw
+
+client = rw.Client.from_connection_string("shm://my-buffer")
+
+@client.on_frame
+def process(frame):
+    # Process frame
+    pass
+
+client.start()
 ```
 
 ## Usage Examples
