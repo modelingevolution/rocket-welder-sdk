@@ -64,7 +64,7 @@ jobs:
     - name: Push to NuGet
       working-directory: ./csharp
       run: |
-        dotnet nuget push ./nupkg/*.nupkg \
+        dotnet nuget push ./nupkg/RocketWelder.SDK.*.nupkg \
           --api-key ${{ secrets.NUGET_API_KEY }} \
           --source https://api.nuget.org/v3/index.json \
           --skip-duplicate
@@ -74,7 +74,7 @@ jobs:
     - name: Push to GitHub Packages
       working-directory: ./csharp
       run: |
-        dotnet nuget push ./nupkg/*.nupkg \
+        dotnet nuget push ./nupkg/RocketWelder.SDK.*.nupkg \
           --api-key ${{ secrets.GITHUB_TOKEN }} \
           --source "https://nuget.pkg.github.com/modelingevolution/index.json" \
           --skip-duplicate
