@@ -1,0 +1,15 @@
+cmake_minimum_required(VERSION 3.20)
+
+# Test executable for core functionality (no jsoncpp dependency)
+add_executable(rocket-welder-tests
+    test_connection_string.cpp
+    test_gst_caps.cpp
+    main.cpp
+)
+
+target_link_libraries(rocket-welder-tests
+    rocket-welder::rocket-welder
+)
+
+# Add tests to CTest
+add_test(NAME rocket-welder-tests COMMAND rocket-welder-tests)

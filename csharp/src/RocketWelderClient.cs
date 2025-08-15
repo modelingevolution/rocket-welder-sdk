@@ -230,7 +230,7 @@ namespace RocketWelder.SDK
                 try
                 {
                     // Read frame from shared memory
-                    var frame = _reader.ReadFrame();
+                    using var frame = _reader.ReadFrame();
                     if (!frame.IsValid)
                     {
                         _logger.LogInformation("No valid frame read, waiting for next frame");

@@ -1,0 +1,27 @@
+{
+  "name": "rocket-welder",
+  "version": "1.0.0",
+  "description": "Client library for RocketWelder video streaming services with zero-copy support",
+  "homepage": "https://github.com/modelingevolution/rocket-welder-sdk",
+  "license": "MIT",
+  "dependencies": [
+    {
+      "name": "zerobuffer"
+    },
+    {
+      "name": "opencv4",
+      "features": ["core", "imgproc", "videoio"]
+    },
+    {
+      "name": "jsoncpp"
+    },
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ]
+}

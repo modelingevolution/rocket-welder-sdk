@@ -1,0 +1,42 @@
+cmake_minimum_required(VERSION 3.20)
+project(rocket-welder-sdk VERSION 1.0.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# Find required packages
+find_package(OpenCV REQUIRED COMPONENTS core imgproc videoio)
+find_package(Threads REQUIRED)
+
+# Add ZeroBuffer include path directly
+set(ZEROBUFFER_INCLUDE_DIR "/mnt/d/source/modelingevolution/streamer/src/zerobuffer/cpp/include")
+
+# Create header-only library
+add_library(rocket-welder INTERFACE)
+add_library(rocket-welder::rocket-welder ALIAS rocket-welder)
+
+target_include_directories(rocket-welder INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:include>
+    ${ZEROBUFFER_INCLUDE_DIR}
+)
+
+target_link_libraries(rocket-welder INTERFACE
+    ${OpenCV_LIBS}
+    Threads::Threads
+)
+
+target_compile_features(rocket-welder INTERFACE cxx_std_20)
+
+# Build tests if requested
+option(BUILD_TESTS "Build tests" ON)
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
+
+# Build examples if requested
+option(BUILD_EXAMPLES "Build examples" ON)
+if(BUILD_EXAMPLES)
+    add_subdirectory(examples)
+endif()
