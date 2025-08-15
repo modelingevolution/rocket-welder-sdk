@@ -179,27 +179,30 @@ inline void RocketWelderClient::process_shared_memory() {
         
         while (!stop_requested_.load()) {
             try {
-                // Read frame from shared memory (zero-copy)
-                auto frame = reader_->read_frame(1000);  // 1 second timeout
-                
-                if (!frame.is_valid()) {
-                    continue;
-                }
-                
-                // Parse metadata on first frame or when not yet parsed
-                if (!video_format_.has_value()) {
-                    parse_metadata();
-                }
-                
-                if (!video_format_.has_value()) {
-                    throw std::runtime_error("No video format detected");
-                }
-                
-                // Create Mat from the raw data using zero-copy pointer
-                cv::Mat mat = video_format_->create_mat(frame.data());
-                
-                // Call the frame callback with zero-copy Mat
-                frame_callback_(mat);
+                // Use scope block to ensure Frame is destroyed immediately after processing
+                {
+                    // Read frame from shared memory (zero-copy)
+                    auto frame = reader_->read_frame(1000);  // 1 second timeout
+                    
+                    if (!frame.is_valid()) {
+                        continue;
+                    }
+                    
+                    // Parse metadata on first frame or when not yet parsed
+                    if (!video_format_.has_value()) {
+                        parse_metadata();
+                    }
+                    
+                    if (!video_format_.has_value()) {
+                        throw std::runtime_error("No video format detected");
+                    }
+                    
+                    // Create Mat from the raw data using zero-copy pointer
+                    cv::Mat mat = video_format_->create_mat(frame.data());
+                    
+                    // Call the frame callback with zero-copy Mat
+                    frame_callback_(mat);
+                } // Frame destructor called here, semaphore signaled immediately
                 
             } catch (const zerobuffer::WriterDeadException&) {
                 // Writer process died

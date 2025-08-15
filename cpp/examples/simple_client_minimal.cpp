@@ -100,24 +100,27 @@ int main(int argc, char* argv[]) {
         // Process frames
         while (running.load()) {
             try {
-                // Read frame with 1 second timeout
-                auto frame = reader.read_frame(std::chrono::milliseconds(1000));
-                
-                if (frame.is_valid()) {
-                    int current = ++frame_count;
+                // Use scope block to ensure Frame is destroyed immediately after processing
+                {
+                    // Read frame with 1 second timeout
+                    auto frame = reader.read_frame(std::chrono::milliseconds(1000));
                     
-                    std::cout << "Received frame " << current 
-                              << " (size: " << frame.size() 
-                              << ", seq: " << frame.sequence() << ")" << std::endl;
-                    
-                    // In a real application, we would process the frame data here
-                    // For now, just count frames
-                    
-                    if (exit_after > 0 && current >= exit_after) {
-                        std::cout << "Reached " << exit_after << " frames, exiting..." << std::endl;
-                        break;
+                    if (frame.is_valid()) {
+                        int current = ++frame_count;
+                        
+                        std::cout << "Received frame " << current 
+                                  << " (size: " << frame.size() 
+                                  << ", seq: " << frame.sequence() << ")" << std::endl;
+                        
+                        // In a real application, we would process the frame data here
+                        // For now, just count frames
+                        
+                        if (exit_after > 0 && current >= exit_after) {
+                            std::cout << "Reached " << exit_after << " frames, exiting..." << std::endl;
+                            break;
+                        }
                     }
-                }
+                } // Frame destructor called here, semaphore signaled immediately
             } catch (const zerobuffer::WriterDeadException&) {
                 std::cout << "Writer disconnected" << std::endl;
                 break;
