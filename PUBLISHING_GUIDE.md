@@ -15,10 +15,10 @@ The following secrets need to be configured in the GitHub repository settings:
 
 ## Dependency Versions
 
-All SDKs depend on ZeroBuffer v1.0.0:
-- **C++ SDK**: Uses zerobuffer from vcpkg custom registry
-- **C# SDK**: Uses ZeroBuffer from NuGet
-- **Python SDK**: Uses zerobuffer-ipc from PyPI
+All SDKs depend on ZeroBuffer v1.1.0:
+- **C++ SDK**: Uses zerobuffer v1.1.0 from vcpkg custom registry
+- **C# SDK**: Uses ZeroBuffer v1.1.0 from NuGet
+- **Python SDK**: Uses zerobuffer-ipc v1.1.0 from PyPI
 
 ## Publishing Process
 
