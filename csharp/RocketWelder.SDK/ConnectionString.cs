@@ -38,6 +38,7 @@ namespace RocketWelder.SDK
         public Bytes BufferSize { get; }
         public Bytes MetadataSize { get; }
         public Mode Mode { get; }
+        public int TimeoutMs { get; } = 5000; // Default timeout for connections
 
         private ConnectionString(
             Protocol protocol,
