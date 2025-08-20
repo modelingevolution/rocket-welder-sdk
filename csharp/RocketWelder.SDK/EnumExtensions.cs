@@ -125,6 +125,8 @@ public static class EnumExtensions
         return x > 0 && (x & (x - 1)) == 0;
     }
     
+    private static readonly Dictionary<(Type, object), string> DescriptionCache = new();
+    
     /// <summary>
     /// Gets the description from the DescriptionAttribute of an enum value.
     /// Falls back to the enum name if no description is found.
@@ -135,16 +137,30 @@ public static class EnumExtensions
     public static string GetDescription<TEnum>(this TEnum value) where TEnum : struct, Enum
     {
         var type = value.GetType();
+        var key = (type, (object)value);
+        
+        if (DescriptionCache.TryGetValue(key, out var cached))
+            return cached;
+        
         var name = Enum.GetName(type, value);
         
         if (name == null)
-            return value.ToString();
+        {
+            var result = value.ToString();
+            DescriptionCache[key] = result;
+            return result;
+        }
             
         var field = type.GetField(name);
         if (field == null)
+        {
+            DescriptionCache[key] = name;
             return name;
+        }
             
         var attribute = field.GetCustomAttribute<DescriptionAttribute>();
-        return attribute?.Description ?? name;
+        var description = attribute?.Description ?? name;
+        DescriptionCache[key] = description;
+        return description;
     }
 }

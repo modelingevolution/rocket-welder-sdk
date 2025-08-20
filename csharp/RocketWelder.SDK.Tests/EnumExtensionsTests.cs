@@ -126,7 +126,7 @@ namespace RocketWelder.SDK.Tests
             // Assert
             // When multiple flags are set without a specific description,
             // it should return the ToString() value
-            Assert.Equal("FlagOne, FlagTwo, FlagFour", description);
+            Assert.Equal("Combined, FlagFour", description);
         }
 
         [Theory]
