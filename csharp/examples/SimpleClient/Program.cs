@@ -72,15 +72,14 @@ public class VideoProcessingService : BackgroundService
         {
             _logger.LogInformation("Running in DUPLEX mode - will process frames and return results");
             _logger.LogInformation($"Can be tested with: \n\n\tgst-launch-1.0 videotestsrc num-buffers={_exitAfter} pattern=ball ! video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! zerofilter channel-name={_client.Connection.BufferName} ! fakesink");
-           
+            _client.Start(ProcessFrameDuplex);
         }
         else
         {
             _logger.LogInformation("Running in ONE-WAY mode - will receive and process frames in-place");
             _logger.LogInformation($"Can be tested with: \n\n\tgst-launch-1.0 videotestsrc num-buffers={_exitAfter} pattern=ball ! video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! zerosink buffer-name={_client.Connection.BufferName} sync=false");
-            
+            _client.Start(ProcessFrameOneWay);
         }
-        _client.Start(ProcessFrameDuplex);
         if (_exitAfter > 0)
         {
             _logger.LogInformation("Will exit after {ExitAfter} frames", _exitAfter);
@@ -102,6 +101,21 @@ public class VideoProcessingService : BackgroundService
     }
 
     
+
+    private void ProcessFrameOneWay(Mat input)
+    {
+        _frameCount++;
+
+        _logger.LogInformation("Processed frame {FrameCount} ({Width}x{Height}) in one-way mode", 
+            _frameCount, input.Width, input.Height);
+
+        // Check if we should exit
+        if (_exitAfter > 0 && _frameCount >= _exitAfter)
+        {
+            _logger.LogInformation("Reached {ExitAfter} frames, exiting...", _exitAfter);
+            _lifetime.StopApplication();
+        }
+    }
 
     private void ProcessFrameDuplex(Mat input, Mat output)
     {
