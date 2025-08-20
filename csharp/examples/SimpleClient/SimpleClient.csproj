@@ -7,7 +7,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="../../RocketWelder.SDK.csproj" />
+    <ProjectReference Include="../../RocketWelder.SDK/RocketWelder.SDK.csproj" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.8" />
     <PackageReference Include="Emgu.CV" Version="4.11.0.5746" />
     <PackageReference Include="Emgu.CV.runtime.ubuntu-x64" Version="4.11.0.5746" />

@@ -145,10 +145,9 @@ client.start();
 using RocketWelder.SDK;
 
 var client = RocketWelderClient.FromConnectionString("shm://my-buffer");
-client.OnFrame(frame => {
+client.Start(frame => {
     // Process frame
 });
-client.Start();
 ```
 
 ### Python Quick Start
@@ -225,7 +224,7 @@ class Program
         int frameCount = 0;
         
         // Process frames as OpenCV Mat
-        client.OnFrame((Mat frame) => 
+        client.Start((Mat frame) => 
         {
             // Add overlay text
             Cv2.PutText(frame, "Processing", new Point(10, 30),
@@ -235,8 +234,6 @@ class Program
             Cv2.PutText(frame, $"Frame: {frameCount++}", new Point(10, 60),
                        HersheyFonts.HersheySimplex, 0.5, new Scalar(255, 255, 255), 1);
         });
-        
-        client.Start();
     }
 }
 ```

@@ -27,7 +27,8 @@
     <PackageReference Include="Emgu.CV.runtime.ubuntu-x64" Version="4.11.0.5746" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.8" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.8" />
-    <PackageReference Include="ZeroBuffer" Version="1.1.0" />
+    <PackageReference Include="ModelingEvolution.JsonParsableConverter" Version="1.0.0" />
+    <PackageReference Include="ZeroBuffer" Version="1.1.4" />
   </ItemGroup>
 
   <ItemGroup>

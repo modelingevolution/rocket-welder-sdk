@@ -26,6 +26,7 @@ from zerobuffer.exceptions import WriterDeadException
 
 from .connection_string import ConnectionString, Protocol
 from .gst_caps import GstCaps
+from .gst_metadata import GstMetadata
 from .exceptions import RocketWelderException, ConnectionException
 
 
@@ -241,48 +242,24 @@ class RocketWelderClient:
         """Parse video format from metadata"""
         try:
             metadata_view = self._reader.get_metadata()
-            if metadata_view is None or len(metadata_view) <= 4:
+            if metadata_view is None or len(metadata_view) == 0:
                 return
             
-            # The Python GetMetadata returns the metadata INCLUDING the 8-byte size prefix
-            # We need to skip it to get to the GStreamer metadata
+            # Python's get_metadata() returns raw JSON without any prefixes
+            json_str = bytes(metadata_view).decode('utf-8')
             
-            # Skip first 8 bytes (uint64_t size prefix from ZeroBuffer Writer)
-            # This is already done in the Python API - get_metadata() returns the actual metadata
+            # Deserialize to strongly-typed GstMetadata
+            metadata = GstMetadata.from_json(json_str)
             
-            # Now read GStreamer's 4-byte size prefix (little-endian)
-            json_size = struct.unpack('<I', bytes(metadata_view[:4]))[0]
-            
-            # Validate size
-            if json_size == 0 or json_size > len(metadata_view) - 4:
-                self._logger.warning(
-                    "Invalid JSON size: %d (available: %d)",
-                    json_size, len(metadata_view) - 4
-                )
-                return
-            
-            # Parse JSON metadata (skip the 4-byte GStreamer size prefix)
-            json_bytes = bytes(metadata_view[4:4 + json_size])
-            json_str = json_bytes.decode('utf-8')
-            
-            metadata = json.loads(json_str)
-            
-            # Try to parse from caps string first (most complete)
-            if "caps" in metadata:
-                caps = metadata["caps"]
-                if caps:
-                    self._video_format = GstCaps.parse(caps)
-                    self._logger.info("Parsed video format from caps: %s", self._video_format)
-                    return
-            
-            # Fallback to individual properties
-            if "width" in metadata and "height" in metadata:
-                width = metadata["width"]
-                height = metadata["height"]
-                format_str = metadata.get("format", "RGB")
-                
-                self._video_format = GstCaps.from_simple(width, height, format_str)
-                self._logger.info("Parsed video format from properties: %s", self._video_format)
+            # Use the already-parsed GstCaps from metadata
+            self._video_format = metadata.caps
+            self._logger.info(
+                "Parsed metadata - Type: %s, Version: %s, Element: %s, Format: %s",
+                metadata.type,
+                metadata.version,
+                metadata.element_name,
+                self._video_format
+            )
             
         except Exception as e:
             self._logger.warning("Failed to parse metadata: %s", e)

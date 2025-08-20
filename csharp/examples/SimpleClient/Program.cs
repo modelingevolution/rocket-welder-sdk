@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Emgu.CV;
 using RocketWelder.SDK;
+using ZeroBuffer.DuplexChannel;
 
 class Program
 {
@@ -65,17 +66,25 @@ public class VideoProcessingService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Starting RocketWelder client..." + _client.Connection);
-        _logger.LogInformation($"Can be tested with: \n\n\tgst-launch-1.0 videotestsrc num-buffers={_exitAfter} pattern=ball ! video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! zerosink buffer-name={_client.Connection.BufferName} sync=false");
+        
+        // Check if we're in duplex mode or one-way mode
+        if (_client.Connection.Mode == ConnectionMode.Duplex)
+        {
+            _logger.LogInformation("Running in DUPLEX mode - will process frames and return results");
+            _logger.LogInformation($"Can be tested with: \n\n\tgst-launch-1.0 videotestsrc num-buffers={_exitAfter} pattern=ball ! video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! zerofilter channel-name={_client.Connection.BufferName} ! fakesink");
+           
+        }
+        else
+        {
+            _logger.LogInformation("Running in ONE-WAY mode - will receive and process frames in-place");
+            _logger.LogInformation($"Can be tested with: \n\n\tgst-launch-1.0 videotestsrc num-buffers={_exitAfter} pattern=ball ! video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! zerosink buffer-name={_client.Connection.BufferName} sync=false");
+            
+        }
+        _client.Start(ProcessFrameDuplex);
         if (_exitAfter > 0)
         {
             _logger.LogInformation("Will exit after {ExitAfter} frames", _exitAfter);
         }
-
-        // Set up frame processing callback
-        _client.OnFrame(ProcessFrame);
-
-        // Start processing
-        _client.Start();
 
         // Run until cancelled or frame limit reached
         try
@@ -92,25 +101,30 @@ public class VideoProcessingService : BackgroundService
         _client.Stop();
     }
 
-    private void ProcessFrame(Mat frame)
+    
+
+    private void ProcessFrameDuplex(Mat input, Mat output)
     {
         _frameCount++;
 
-        // Add overlay text using Emgu CV
-        CvInvoke.PutText(frame, "Processing", new System.Drawing.Point(10, 30),
-                   Emgu.CV.CvEnum.FontFace.HersheySimplex, 1.0, new Emgu.CV.Structure.MCvScalar(0, 255, 0), 2);
+        // Copy input to output first
+        input.CopyTo(output);
+
+        // Add overlay text to the output
+        CvInvoke.PutText(output, "DUPLEX", new System.Drawing.Point(10, 30),
+                   Emgu.CV.CvEnum.FontFace.HersheySimplex, 1.0, new Emgu.CV.Structure.MCvScalar(0, 0, 255), 2);
 
         // Add timestamp overlay
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-        CvInvoke.PutText(frame, timestamp, new System.Drawing.Point(10, 60),
+        CvInvoke.PutText(output, timestamp, new System.Drawing.Point(10, 60),
                    Emgu.CV.CvEnum.FontFace.HersheySimplex, 0.5, new Emgu.CV.Structure.MCvScalar(255, 255, 255), 1);
 
         // Add frame counter
-        CvInvoke.PutText(frame, $"Frame: {_frameCount}", new System.Drawing.Point(10, 90),
+        CvInvoke.PutText(output, $"Frame: {_frameCount}", new System.Drawing.Point(10, 90),
                    Emgu.CV.CvEnum.FontFace.HersheySimplex, 0.5, new Emgu.CV.Structure.MCvScalar(255, 255, 255), 1);
 
-        _logger.LogInformation("Processed frame {FrameCount} ({Width}x{Height})", 
-            _frameCount, frame.Width, frame.Height);
+        _logger.LogInformation("Processed frame {FrameCount} ({Width}x{Height}) in duplex mode", 
+            _frameCount, input.Width, input.Height);
 
         // Check if we should exit
         if (_exitAfter > 0 && _frameCount >= _exitAfter)

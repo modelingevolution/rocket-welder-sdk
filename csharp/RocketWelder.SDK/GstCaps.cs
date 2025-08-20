@@ -2,17 +2,20 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using ModelingEvolution.JsonParsableConverter;
 
 namespace RocketWelder.SDK
 {
     /// <summary>
     /// Represents GStreamer caps for video format information
     /// </summary>
+    [JsonConverter(typeof(JsonParsableConverter<GstCaps>))]
     public readonly record struct GstCaps(
         int Width,
         int Height,
@@ -204,6 +207,11 @@ namespace RocketWelder.SDK
         
         public override string ToString()
         {
+            // If we have the original caps string, return it for perfect round-tripping
+            if (!string.IsNullOrEmpty(CapsString))
+                return CapsString;
+            
+            // Otherwise build a simple display string
             var fps = FrameRate.HasValue ? $" @ {FrameRate:F2}fps" : "";
             return $"{Width}x{Height} {Format}{fps}";
         }
