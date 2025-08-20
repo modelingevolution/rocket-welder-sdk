@@ -78,16 +78,12 @@ namespace RocketWelder.SDK
             
             // Create GstCaps from video properties
             var caps = GstCaps.FromSimple(width, height, "RGB");
-            _metadata = new GstMetadata
-            {
-                Caps = caps,
-                StreamTime = 0,
-                RunningTime = 0,
-                Duration = 0,
-                Offset = 0,
-                OffsetEnd = 0,
-                Flags = 0
-            };
+            _metadata = new GstMetadata(
+                Type: "video",
+                Version: "1.0",
+                Caps: caps,
+                ElementName: "mjpeg-capture"
+            );
             
             _logger.LogInformation("MJPEG stream opened: {Width}x{Height} @ {Fps}fps", width, height, fps);
 

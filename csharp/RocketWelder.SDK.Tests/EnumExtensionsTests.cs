@@ -78,7 +78,7 @@ namespace RocketWelder.SDK.Tests
         public void GetDescription_Should_Work_With_Protocol_Enum()
         {
             // Arrange
-            var protocol = Protocol.ZeroBuffer;
+            var protocol = Protocol.Shm;
             
             // Act
             var description = protocol.GetDescription();
@@ -194,7 +194,7 @@ namespace RocketWelder.SDK.Tests
             // This test verifies the extension method is generic enough
             
             // Act & Assert for Protocol enum
-            var protocol = Protocol.MjpegHttp;
+            var protocol = Protocol.Mjpeg | Protocol.Http;
             var protocolDesc = protocol.GetDescription();
             Assert.NotNull(protocolDesc);
             

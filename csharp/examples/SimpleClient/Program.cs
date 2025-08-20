@@ -68,7 +68,7 @@ public class VideoProcessingService : BackgroundService
         _logger.LogInformation("Starting RocketWelder client..." + _client.Connection);
         
         // Check if we're in duplex mode or one-way mode
-        if (_client.Connection.Mode == ConnectionMode.Duplex)
+        if (_client.Connection.ConnectionMode == ConnectionMode.Duplex)
         {
             _logger.LogInformation("Running in DUPLEX mode - will process frames and return results");
             _logger.LogInformation($"Can be tested with: \n\n\tgst-launch-1.0 videotestsrc num-buffers={_exitAfter} pattern=ball ! video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! zerofilter channel-name={_client.Connection.BufferName} ! fakesink");

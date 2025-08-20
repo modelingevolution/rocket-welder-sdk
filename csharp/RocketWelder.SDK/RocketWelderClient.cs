@@ -37,10 +37,10 @@ namespace RocketWelder.SDK
         {
             return cs.Protocol switch
             {
-                Protocol.Shm when cs.Mode == Mode.Duplex => new DuplexShmController(cs, loggerFactory),
-                Protocol.Shm when cs.Mode == Mode.OneWay => new OneWayShmController(cs, loggerFactory),
+                Protocol.Shm when cs.ConnectionMode == ConnectionMode.Duplex => new DuplexShmController(cs, loggerFactory),
+                Protocol.Shm when cs.ConnectionMode == ConnectionMode.OneWay => new OneWayShmController(cs, loggerFactory),
                 var p when p.HasFlag(Protocol.Mjpeg) => new MjpegController(cs, loggerFactory),
-                _ => throw new NotSupportedException($"Protocol {cs.Protocol} with mode {cs.Mode} is not supported")
+                _ => throw new NotSupportedException($"Protocol {cs.Protocol} with mode {cs.ConnectionMode} is not supported")
             };
         }
     }

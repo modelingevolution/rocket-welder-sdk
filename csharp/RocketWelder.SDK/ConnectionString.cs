@@ -19,7 +19,7 @@ namespace RocketWelder.SDK
         Tcp = 1 << 3
     }
 
-    public enum Mode
+    public enum ConnectionMode
     {
         OneWay,
         Duplex
@@ -37,7 +37,7 @@ namespace RocketWelder.SDK
         public string? BufferName { get; }
         public Bytes BufferSize { get; }
         public Bytes MetadataSize { get; }
-        public Mode Mode { get; }
+        public ConnectionMode ConnectionMode { get; }
         public int TimeoutMs { get; } = 5000; // Default timeout for connections
 
         private ConnectionString(
@@ -47,7 +47,7 @@ namespace RocketWelder.SDK
             string? bufferName = null,
             Bytes bufferSize = default,
             Bytes metadataSize = default,
-            Mode mode = Mode.OneWay)
+            ConnectionMode connectionMode = ConnectionMode.OneWay)
         {
             Protocol = protocol;
             Host = host;
@@ -55,7 +55,7 @@ namespace RocketWelder.SDK
             BufferName = bufferName;
             BufferSize = bufferSize == default ? "256MB" : bufferSize;
             MetadataSize = metadataSize == default ? "4KB" : metadataSize;
-            Mode = mode;
+            ConnectionMode = connectionMode;
         }
 
         public static ConnectionString Parse(string s, IFormatProvider? provider = null)
@@ -100,7 +100,7 @@ namespace RocketWelder.SDK
             string? bufferName = null;
             Bytes bufferSize = default;
             Bytes metadataSize = default;
-            Mode mode = Mode.OneWay;
+            ConnectionMode connectionMode = ConnectionMode.OneWay;
 
             // Extract query parameters if present
             var queryIndex = remainder.IndexOf('?');
@@ -130,8 +130,8 @@ namespace RocketWelder.SDK
                                     metadataSize = metadata;
                                 break;
                             case "mode":
-                                if (Enum.TryParse<Mode>(value, true, out var m))
-                                    mode = m;
+                                if (Enum.TryParse<ConnectionMode>(value, true, out var m))
+                                    connectionMode = m;
                                 break;
                         }
                     }
@@ -175,7 +175,7 @@ namespace RocketWelder.SDK
                 bufferName,
                 bufferSize,
                 metadataSize,
-                mode);
+                connectionMode);
             return true;
         }
 
@@ -185,7 +185,7 @@ namespace RocketWelder.SDK
 
             if (Protocol == Protocol.Shm)
             {
-                return $"{protocolString}://{BufferName}?size={BufferSize}&metadata={MetadataSize}&mode={Mode}";
+                return $"{protocolString}://{BufferName}?size={BufferSize}&metadata={MetadataSize}&mode={ConnectionMode}";
             }
             else
             {
