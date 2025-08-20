@@ -24,6 +24,8 @@ namespace RocketWelder.SDK
     // NO BRANCHING IN THE MAIN LOOP! NO FUCKING CONDITIONAL BRANCHING CHECKS! (Action<Mat> or Action<Mat, Mat>)
     interface IController
     {
+        bool IsRunning { get; }
+        GstMetadata? GetMetadata();
         void Start(Action<Mat, Mat> onFrame, CancellationToken cancellationToken = default);
         void Start(Action<Mat> onFrame, CancellationToken cancellationToken = default);
         void Stop(CancellationToken cancellationToken = default);
@@ -31,9 +33,15 @@ namespace RocketWelder.SDK
     }
     internal static class ControllerFactory
     {
-        public static IController Create(in ConnectionString cs)
+        public static IController Create(in ConnectionString cs, ILoggerFactory? loggerFactory = null)
         {
-            // Only based on cs;
+            return cs.Protocol switch
+            {
+                Protocol.Shm when cs.Mode == Mode.Duplex => new DuplexShmController(cs, loggerFactory),
+                Protocol.Shm when cs.Mode == Mode.OneWay => new OneWayShmController(cs, loggerFactory),
+                var p when p.HasFlag(Protocol.Mjpeg) => new MjpegController(cs, loggerFactory),
+                _ => throw new NotSupportedException($"Protocol {cs.Protocol} with mode {cs.Mode} is not supported")
+            };
         }
     }
 
@@ -43,22 +51,32 @@ namespace RocketWelder.SDK
     /// </summary>
     public class RocketWelderClient : IDisposable
     {
+        private readonly IController _controller;
+        private readonly ILogger<RocketWelderClient> _logger;
+        
         /// <summary>
         /// Gets the connection configuration.
         /// </summary>
         public ConnectionString Connection { get; }
-        
+
         /// <summary>
         /// Gets whether the client is currently running.
         /// </summary>
-        public bool IsRunning { get; }
-        
-        
-        
+        public bool IsRunning => _controller?.IsRunning ?? false;
+
         /// <summary>
         /// Gets the metadata from the stream (if available).
         /// </summary>
-        public GstMetadata? Metadata { get; }
+        public GstMetadata? Metadata => _controller.GetMetadata();
+
+
+        private RocketWelderClient(ConnectionString connection, ILoggerFactory? loggerFactory = null)
+        {
+            Connection = connection;
+            var factory = loggerFactory ?? NullLoggerFactory.Instance;
+            _logger = factory.CreateLogger<RocketWelderClient>();
+            _controller = ControllerFactory.Create(connection, loggerFactory);
+        }
         
         
         
@@ -68,7 +86,25 @@ namespace RocketWelder.SDK
         /// </summary>
         public static RocketWelderClient From(string[] args)
         {
-            throw new NotImplementedException();
+            // Command-line arguments only, no environment variables
+            if (args == null || args.Length == 0)
+                throw new ArgumentException("No command line arguments provided");
+                
+            string? connectionString = null;
+            foreach (var arg in args)
+            {
+                if (arg.Contains("://"))
+                {
+                    connectionString = arg;
+                    break;
+                }
+            }
+            
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new ArgumentException("No connection string found in command line arguments");
+                
+            var connection = ConnectionString.Parse(connectionString);
+            return new RocketWelderClient(connection);
         }
         
         /// <summary>
@@ -77,16 +113,29 @@ namespace RocketWelder.SDK
         /// </summary>
         public static RocketWelderClient From(IConfiguration configuration)
         {
-            throw new NotImplementedException();
+            return From(configuration, null);
         }
         
         /// <summary>
-        /// Creates a client from IConfiguration with logger.
+        /// Creates a client from IConfiguration with logger factory.
         /// Looks for "RocketWelder:ConnectionString" in configuration.
         /// </summary>
-        public static RocketWelderClient From(IConfiguration configuration, ILogger<RocketWelderClient>? logger)
+        public static RocketWelderClient From(IConfiguration configuration, ILoggerFactory? loggerFactory)
         {
-            throw new NotImplementedException();
+            ArgumentNullException.ThrowIfNull(configuration);
+            
+            // Try to get connection string from configuration
+            string? connectionString = 
+                configuration["CONNECTION_STRING"] ??
+                configuration["RocketWelder:ConnectionString"] ??
+                configuration["ConnectionString"] ??
+                configuration.GetConnectionString("RocketWelder");
+                
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new ArgumentException("No connection string found in configuration");
+                
+            var connection = ConnectionString.Parse(connectionString);
+            return new RocketWelderClient(connection, loggerFactory);
         }
         
         /// <summary>
@@ -94,15 +143,20 @@ namespace RocketWelder.SDK
         /// </summary>
         public static RocketWelderClient FromEnvironment()
         {
-            throw new NotImplementedException();
+            return FromEnvironment(null);
         }
         
         /// <summary>
-        /// Creates a client from environment variable CONNECTION_STRING with logger.
+        /// Creates a client from environment variable CONNECTION_STRING with logger factory.
         /// </summary>
-        public static RocketWelderClient FromEnvironment(ILogger<RocketWelderClient> logger)
+        public static RocketWelderClient FromEnvironment(ILoggerFactory? loggerFactory)
         {
-            throw new NotImplementedException();
+            string? connectionString = Environment.GetEnvironmentVariable("CONNECTION_STRING");
+            if (string.IsNullOrWhiteSpace(connectionString))
+                throw new ArgumentException("CONNECTION_STRING environment variable not set");
+                
+            var connection = ConnectionString.Parse(connectionString);
+            return new RocketWelderClient(connection, loggerFactory);
         }
         
         /// <summary>
@@ -110,32 +164,42 @@ namespace RocketWelder.SDK
         /// </summary>
         public static RocketWelderClient FromConnectionString(string connectionString)
         {
-            throw new NotImplementedException();
+            return FromConnectionString(connectionString, null);
         }
         
         /// <summary>
-        /// Creates a client from a specific connection string with logger.
+        /// Creates a client from a specific connection string with logger factory.
         /// </summary>
-        public static RocketWelderClient FromConnectionString(string connectionString, ILogger<RocketWelderClient> logger)
+        public static RocketWelderClient FromConnectionString(string connectionString, ILoggerFactory? loggerFactory)
         {
-            throw new NotImplementedException();
+            ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+            var connection = ConnectionString.Parse(connectionString);
+            return new RocketWelderClient(connection, loggerFactory);
         }
 
 
         /// <summary>
         /// Starts receiving frames from the video stream.
         /// </summary>
-        public void Start(Action<Mat, Mat> OnFrame, CancellationToken cancellationToken = default)
+        public void Start(Action<Mat, Mat> onFrame, CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            if (IsRunning)
+                throw new InvalidOperationException("Client is already running");
+                
+            _logger.LogInformation("Starting RocketWelder client with connection: {Connection}", Connection);
+            _controller.Start(onFrame, cancellationToken);
         }
 
         /// <summary>
         /// Starts receiving frames from the video stream.
         /// </summary>
-        public void Start(Action<Mat> OnFrame, CancellationToken cancellationToken = default)
+        public void Start(Action<Mat> onFrame, CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            if (IsRunning)
+                throw new InvalidOperationException("Client is already running");
+                
+            _logger.LogInformation("Starting RocketWelder client with connection: {Connection}", Connection);
+            _controller.Start(onFrame, cancellationToken);
         }
         
         /// <summary>
@@ -143,14 +207,21 @@ namespace RocketWelder.SDK
         /// </summary>
         public void Stop(CancellationToken cancellationToken = default)
         {
-            throw new NotImplementedException();
+            if (!IsRunning)
+                return;
+                
+            _logger.LogInformation("Stopping RocketWelder client");
+            _controller.Stop(cancellationToken);
         }
-        
-        
         
         public void Dispose()
         {
-            throw new NotImplementedException();
+            if (IsRunning)
+            {
+                Stop();
+            }
+            _controller?.Dispose();
+            _logger.LogDebug("Disposed RocketWelder client");
         }
     }
 }

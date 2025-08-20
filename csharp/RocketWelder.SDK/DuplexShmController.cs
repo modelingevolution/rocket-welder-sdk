@@ -19,6 +19,10 @@ namespace RocketWelder.SDK
         private GstMetadata? _metadata;
         private volatile bool _isRunning;
         private Action<Mat, Mat>? _onFrame;
+        
+        public bool IsRunning => _isRunning;
+        
+        public GstMetadata? GetMetadata() => _metadata;
 
         public DuplexShmController(in ConnectionString connection, ILoggerFactory? loggerFactory = null)
         {

@@ -18,6 +18,10 @@ namespace RocketWelder.SDK
         private volatile bool _isRunning;
         private Thread? _worker;
         private GstMetadata? _metadata;
+        
+        public bool IsRunning => _isRunning;
+        
+        public GstMetadata? GetMetadata() => _metadata;
 
         public OneWayShmController(in ConnectionString connection, ILoggerFactory? loggerFactory = null)
         {
