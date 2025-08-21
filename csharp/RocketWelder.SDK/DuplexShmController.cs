@@ -23,6 +23,8 @@ namespace RocketWelder.SDK
         public bool IsRunning => _isRunning;
         
         public GstMetadata? GetMetadata() => _metadata;
+        
+        public event Action<IController, Exception>? OnError;
 
         public DuplexShmController(in ConnectionString connection, ILoggerFactory? loggerFactory = null)
         {
@@ -49,7 +51,10 @@ namespace RocketWelder.SDK
 
             // Create server using factory
             var factory = new DuplexChannelFactory(_loggerFactory);
-            _server = factory.CreateImmutableServer(_connection.BufferName!, config);
+            _server = factory.CreateImmutableServer(_connection.BufferName!, config, TimeSpan.FromMilliseconds(_connection.TimeoutMs));
+            
+            // Subscribe to error events
+            _server.OnError += OnServerError;
             
             _logger.LogInformation("Starting duplex server for channel '{ChannelName}' with size {BufferSize} and metadata {MetadataSize}", 
                 _connection.BufferName, _connection.BufferSize, _connection.MetadataSize);
@@ -97,11 +102,27 @@ namespace RocketWelder.SDK
             }
         }
 
+        private void OnServerError(object? sender, ErrorEventArgs e)
+        {
+            var ex = e.Exception;
+            
+            // Raise the IController.OnError event
+            OnError?.Invoke(this, ex);
+            
+            
+        }
+
         public void Stop(CancellationToken cancellationToken = default)
         {
             _logger.LogDebug("Stopping duplex controller for channel '{ChannelName}'", _connection.BufferName);
             _isRunning = false;
-            _server?.Stop();
+            
+            if (_server != null)
+            {
+                _server.OnError -= OnServerError;
+                _server.Stop();
+            }
+            
             _logger.LogInformation("Stopped duplex controller for channel '{ChannelName}'", _connection.BufferName);
         }
 
@@ -109,8 +130,14 @@ namespace RocketWelder.SDK
         {
             _logger.LogDebug("Disposing duplex controller for channel '{ChannelName}'", _connection.BufferName);
             _isRunning = false;
-            _server?.Dispose();
-            _server = null;
+            
+            if (_server != null)
+            {
+                _server.OnError -= OnServerError;
+                _server.Dispose();
+                _server = null;
+            }
+            
             _onFrame = null;
             _logger.LogInformation("Disposed duplex controller for channel '{ChannelName}'", _connection.BufferName);
         }

@@ -22,6 +22,8 @@ namespace RocketWelder.SDK
         public bool IsRunning => _isRunning;
         
         public GstMetadata? GetMetadata() => _metadata;
+        
+        public event Action<IController, Exception>? OnError;
 
         public OneWayShmController(in ConnectionString connection, ILoggerFactory? loggerFactory = null)
         {
@@ -105,17 +107,47 @@ namespace RocketWelder.SDK
                         onFrame(mat);
                     }
                 }
-                catch (ReaderDeadException)
+                catch (ReaderDeadException ex)
                 {
                     _logger.LogInformation("Writer disconnected from buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    _isRunning = false;
                     break;
+                }
+                catch (WriterDeadException ex)
+                {
+                    _logger.LogInformation("Writer disconnected from buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    _isRunning = false;
+                    break;
+                }
+                catch (BufferFullException ex)
+                {
+                    _logger.LogError(ex, "Buffer full on '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    if (!_isRunning) break;
+                }
+                catch (FrameTooLargeException ex)
+                {
+                    _logger.LogError(ex, "Frame too large on '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    if (!_isRunning) break;
+                }
+                catch (ZeroBufferException ex)
+                {
+                    _logger.LogError(ex, "ZeroBuffer error on '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    if (!_isRunning) break;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error processing frame from buffer '{BufferName}'", _connection.BufferName);
+                    _logger.LogError(ex, "Unexpected error processing frame from buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
                     if (!_isRunning) break;
                 }
             }
+
+            _isRunning = false;
         }
 
         private void ProcessFramesDuplex(Action<Mat, Mat> onFrame, CancellationToken cancellationToken)
@@ -146,17 +178,46 @@ namespace RocketWelder.SDK
                         // We ignore the output Mat in OneWay mode
                     }
                 }
-                catch (ReaderDeadException)
+                catch (ReaderDeadException ex)
                 {
                     _logger.LogInformation("Writer disconnected from buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    _isRunning = false;
                     break;
+                }
+                catch (WriterDeadException ex)
+                {
+                    _logger.LogInformation("Writer disconnected from buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    _isRunning = false;
+                    break;
+                }
+                catch (BufferFullException ex)
+                {
+                    _logger.LogError(ex, "Buffer full on '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    if (!_isRunning) break;
+                }
+                catch (FrameTooLargeException ex)
+                {
+                    _logger.LogError(ex, "Frame too large on '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    if (!_isRunning) break;
+                }
+                catch (ZeroBufferException ex)
+                {
+                    _logger.LogError(ex, "ZeroBuffer error on '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    if (!_isRunning) break;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error processing frame from buffer '{BufferName}'", _connection.BufferName);
+                    _logger.LogError(ex, "Unexpected error processing frame from buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
                     if (!_isRunning) break;
                 }
             }
+            _isRunning = false;
 
         }
 
@@ -189,15 +250,24 @@ namespace RocketWelder.SDK
 
                     return; // Successfully processed first frame
                 }
-                catch (ReaderDeadException)
+                catch (ReaderDeadException ex)
                 {
                     _isRunning = false;
                     _logger.LogInformation("Writer disconnected while waiting for first frame on buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
                     throw;
                 }
-                catch (Exception)
+                catch (WriterDeadException ex)
                 {
-                    // Log and continue
+                    _isRunning = false;
+                    _logger.LogInformation("Writer disconnected while waiting for first frame on buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error waiting for first frame on buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
                     if (!_isRunning) break;
                 }
             }
@@ -235,15 +305,24 @@ namespace RocketWelder.SDK
 
                     return; // Successfully processed first frame
                 }
-                catch (ReaderDeadException)
+                catch (ReaderDeadException ex)
                 {
                     _isRunning = false;
                     _logger.LogInformation("Writer disconnected while waiting for first frame on buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
                     throw;
                 }
-                catch (Exception)
+                catch (WriterDeadException ex)
                 {
-                    // Log and continue
+                    _isRunning = false;
+                    _logger.LogInformation("Writer disconnected while waiting for first frame on buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error waiting for first frame on buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
                     if (!_isRunning) break;
                 }
             }

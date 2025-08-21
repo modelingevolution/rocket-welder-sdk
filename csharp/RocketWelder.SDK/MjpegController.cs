@@ -18,6 +18,8 @@ namespace RocketWelder.SDK
         public bool IsRunning => _isRunning;
         
         public GstMetadata? GetMetadata() => _metadata;
+        
+        public event Action<IController, Exception>? OnError;
 
         public MjpegController(in ConnectionString connection, ILoggerFactory? loggerFactory = null)
         {
@@ -124,6 +126,7 @@ namespace RocketWelder.SDK
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Error processing MJPEG frame");
+                    OnError?.Invoke(this, ex);
                     if (!_isRunning) break;
                     Thread.Sleep(100); // Longer pause on error
                 }

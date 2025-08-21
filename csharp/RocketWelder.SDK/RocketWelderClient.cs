@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using System.Collections.Concurrent;
 using Emgu.CV;
 using ZeroBuffer;
+using ZeroBuffer.DuplexChannel;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -16,6 +17,7 @@ using System.Net.Sockets;
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Diagnostics;
+using ErrorEventArgs = ZeroBuffer.DuplexChannel.ErrorEventArgs;
 
 namespace RocketWelder.SDK
 {
@@ -26,6 +28,7 @@ namespace RocketWelder.SDK
     {
         bool IsRunning { get; }
         GstMetadata? GetMetadata();
+        event Action<IController, Exception>? OnError;
         void Start(Action<Mat, Mat> onFrame, CancellationToken cancellationToken = default);
         void Start(Action<Mat> onFrame, CancellationToken cancellationToken = default);
         void Stop(CancellationToken cancellationToken = default);
@@ -68,6 +71,21 @@ namespace RocketWelder.SDK
         /// Gets the metadata from the stream (if available).
         /// </summary>
         public GstMetadata? Metadata => _controller.GetMetadata();
+        
+        /// <summary>
+        /// Raised when the client has successfully started.
+        /// </summary>
+        public event EventHandler? Started;
+        
+        /// <summary>
+        /// Raised when the client has stopped.
+        /// </summary>
+        public event EventHandler? Stopped;
+        
+        /// <summary>
+        /// Raised when the client encounters an error.
+        /// </summary>
+        public event EventHandler<ErrorEventArgs>? OnError;
 
 
         private RocketWelderClient(ConnectionString connection, ILoggerFactory? loggerFactory = null)
@@ -76,6 +94,21 @@ namespace RocketWelder.SDK
             var factory = loggerFactory ?? NullLoggerFactory.Instance;
             _logger = factory.CreateLogger<RocketWelderClient>();
             _controller = ControllerFactory.Create(connection, loggerFactory);
+            
+            // Subscribe to controller errors
+            _controller.OnError += OnControllerError;
+        }
+        
+        private void OnControllerError(IController controller, Exception exception)
+        {
+            // All exceptions are terminal for streaming
+            OnError?.Invoke(this, new ErrorEventArgs(exception));
+            
+            // Raise Stopped event if controller is no longer running
+            if (!controller.IsRunning)
+            {
+                Stopped?.Invoke(this, EventArgs.Empty);
+            }
         }
         
         
@@ -186,8 +219,18 @@ namespace RocketWelder.SDK
             if (IsRunning)
                 throw new InvalidOperationException("Client is already running");
                 
-            _logger.LogInformation("Starting RocketWelder client with connection: {Connection}", Connection);
-            _controller.Start(onFrame, cancellationToken);
+            try
+            {
+                _logger.LogInformation("Starting RocketWelder client with connection: {Connection}", Connection);
+                _controller.Start(onFrame, cancellationToken);
+                Started?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to start RocketWelder client");
+                OnError?.Invoke(this, new ErrorEventArgs(ex));
+                throw;
+            }
         }
 
         /// <summary>
@@ -198,8 +241,18 @@ namespace RocketWelder.SDK
             if (IsRunning)
                 throw new InvalidOperationException("Client is already running");
                 
-            _logger.LogInformation("Starting RocketWelder client with connection: {Connection}", Connection);
-            _controller.Start(onFrame, cancellationToken);
+            try
+            {
+                _logger.LogInformation("Starting RocketWelder client with connection: {Connection}", Connection);
+                _controller.Start(onFrame, cancellationToken);
+                Started?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to start RocketWelder client");
+                OnError?.Invoke(this, new ErrorEventArgs(ex));
+                throw;
+            }
         }
         
         /// <summary>
@@ -210,8 +263,18 @@ namespace RocketWelder.SDK
             if (!IsRunning)
                 return;
                 
-            _logger.LogInformation("Stopping RocketWelder client");
-            _controller.Stop(cancellationToken);
+            try
+            {
+                _logger.LogInformation("Stopping RocketWelder client");
+                _controller.Stop(cancellationToken);
+                Stopped?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error stopping RocketWelder client");
+                OnError?.Invoke(this, new ErrorEventArgs(ex));
+                throw;
+            }
         }
         
         public void Dispose()
@@ -220,7 +283,13 @@ namespace RocketWelder.SDK
             {
                 Stop();
             }
-            _controller?.Dispose();
+            
+            if (_controller != null)
+            {
+                _controller.OnError -= OnControllerError;
+                _controller.Dispose();
+            }
+            
             _logger.LogDebug("Disposed RocketWelder client");
         }
     }
