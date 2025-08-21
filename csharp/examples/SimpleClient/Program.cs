@@ -15,7 +15,7 @@ class Program
     {
         // Print all arguments for debugging
         Console.WriteLine("========================================");
-        Console.WriteLine("RocketWelder SDK SimpleClient");
+        Console.WriteLine("RocketWelder SDK SimpleClient 2025");
         Console.WriteLine("========================================");
         Console.WriteLine($"Arguments received: {args.Length}");
         for (int i = 0; i < args.Length; i++)
@@ -32,7 +32,8 @@ class Program
                 services.AddSingleton<RocketWelderClient>(sp =>
                 {
                     var configuration = sp.GetRequiredService<IConfiguration>();
-                    return RocketWelderClient.From(configuration);
+                    var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
+                    return RocketWelderClient.From(configuration, loggerFactory);
                 });
             })
             .RunConsoleAsync();
@@ -66,19 +67,19 @@ public class VideoProcessingService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("Starting RocketWelder client..." + _client.Connection);
-        
+        _client.OnError += OnError;
         // Check if we're in duplex mode or one-way mode
         if (_client.Connection.ConnectionMode == ConnectionMode.Duplex)
         {
             _logger.LogInformation("Running in DUPLEX mode - will process frames and return results");
             _logger.LogInformation($"Can be tested with: \n\n\tgst-launch-1.0 videotestsrc num-buffers={_exitAfter} pattern=ball ! video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! zerofilter channel-name={_client.Connection.BufferName} ! fakesink");
-            _client.Start(ProcessFrameDuplex);
+            _client.Start(ProcessFrameDuplex, stoppingToken);
         }
         else
         {
             _logger.LogInformation("Running in ONE-WAY mode - will receive and process frames in-place");
             _logger.LogInformation($"Can be tested with: \n\n\tgst-launch-1.0 videotestsrc num-buffers={_exitAfter} pattern=ball ! video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! zerosink buffer-name={_client.Connection.BufferName} sync=false");
-            _client.Start(ProcessFrameOneWay);
+            _client.Start(ProcessFrameOneWay, stoppingToken);
         }
         if (_exitAfter > 0)
         {
@@ -100,7 +101,14 @@ public class VideoProcessingService : BackgroundService
         _client.Stop();
     }
 
-    
+    private void OnError(object? sender, ErrorEventArgs e)
+    {
+        _logger.LogError(e.Exception, "Client error occurred");
+        
+        // Stop the application on any error (all errors are terminal)
+        _lifetime.StopApplication();
+    }
+
 
     private void ProcessFrameOneWay(Mat input)
     {

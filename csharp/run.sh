@@ -14,6 +14,9 @@ if [ ! -f "$SCRIPT_DIR/examples/SimpleClient/publish/SimpleClient" ]; then
     "$SCRIPT_DIR/build_examples.sh"
 fi
 
+# Enable ZeroBuffer debug logging
+export ZEROBUFFER_LOG_LEVEL="DEBUG"
+
 # Convert parameters from --key=value to --key value format for .NET
 # Also map first positional argument to CONNECTION_STRING
 ARGS=()
@@ -34,6 +37,8 @@ for arg in "$@"; do
         FIRST_ARG=false
     fi
 done
+
+echo "ZeroBuffer logging enabled: ZEROBUFFER_LOG_LEVEL=DEBUG"
 
 # Run the example with converted arguments
 exec "$SCRIPT_DIR/examples/SimpleClient/publish/SimpleClient" "${ARGS[@]}"

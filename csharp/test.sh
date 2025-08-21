@@ -53,20 +53,20 @@ run_test() {
         GST_SINK=""
     fi
     
-    echo -e "${YELLOW}  Command:${NC} GST_PLUGIN_PATH=${PLUGIN_PATH} \\"
+    echo -e "${YELLOW}  Command:${NC} GST_DEBUG=\"zerosink:5,zerobuffer:5\" GST_PLUGIN_PATH=${PLUGIN_PATH} \\"
     echo "           gst-launch-1.0 videotestsrc num-buffers=${FRAME_COUNT} pattern=ball ! \\"
     echo "           video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! \\"
     echo "           ${GST_ELEMENT}${GST_SINK:+ ! ${GST_SINK}}"
     echo ""
     
     if [ "$MODE" = "duplex" ]; then
-        GST_PLUGIN_PATH=${PLUGIN_PATH} gst-launch-1.0 \
+        GST_DEBUG="zerofilter:5,zerobuffer:5" GST_PLUGIN_PATH=${PLUGIN_PATH} gst-launch-1.0 \
             videotestsrc num-buffers=${FRAME_COUNT} pattern=ball ! \
             video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! \
             zerofilter channel-name=${BUFFER_NAME} ! \
             fakesink &> gst_${MODE}.log &
     else
-        GST_PLUGIN_PATH=${PLUGIN_PATH} gst-launch-1.0 \
+        GST_DEBUG="zerosink:5,zerobuffer:5" GST_PLUGIN_PATH=${PLUGIN_PATH} gst-launch-1.0 \
             videotestsrc num-buffers=${FRAME_COUNT} pattern=ball ! \
             video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! \
             zerosink buffer-name=${BUFFER_NAME} sync=false &> gst_${MODE}.log &
