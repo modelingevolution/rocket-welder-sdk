@@ -44,7 +44,7 @@ jobs:
     - name: Update version in csproj
       run: |
         VERSION="${{ steps.version.outputs.version }}"
-        cd csharp
+        cd csharp/RocketWelder.SDK
         # Update version in .csproj file
         sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.SDK.csproj
         sed -i "s/<PackageVersion>.*<\/PackageVersion>/<PackageVersion>$VERSION<\/PackageVersion>/" RocketWelder.SDK.csproj
@@ -59,7 +59,7 @@ jobs:
     
     - name: Pack
       working-directory: ./csharp
-      run: dotnet pack --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
+      run: dotnet pack RocketWelder.SDK/RocketWelder.SDK.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
     
     - name: Push to NuGet
       working-directory: ./csharp

@@ -24,8 +24,8 @@ dotnet build --configuration Release
 
 # Build NuGet package
 echo "Creating NuGet package..."
-dotnet pack --configuration Release --no-build
+dotnet pack RocketWelder.SDK/RocketWelder.SDK.csproj --configuration Release --no-build
 
 echo "C# build completed successfully!"
-echo "Library: $SCRIPT_DIR/bin/Release/net9.0/RocketWelder.SDK.dll"
-echo "NuGet package: $SCRIPT_DIR/bin/Release/RocketWelder.SDK.*.nupkg"
+echo "Library: $SCRIPT_DIR/RocketWelder.SDK/bin/Release/net9.0/RocketWelder.SDK.dll"
+echo "NuGet package: $SCRIPT_DIR/RocketWelder.SDK/bin/Release/RocketWelder.SDK.*.nupkg"
