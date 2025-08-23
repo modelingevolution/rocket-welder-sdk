@@ -36,7 +36,7 @@ namespace RocketWelder.SDK.Tests
             // Assert
             Assert.Equal(Protocol.Shm, parsed.Protocol);
             Assert.Equal("testBuffer", parsed.BufferName);
-            Assert.Equal((Bytes)"2MB", parsed.BufferSize);
+            Assert.Equal((long)(Bytes)"2MB", parsed.BufferSize);
         }
 
         [Fact]
@@ -51,8 +51,8 @@ namespace RocketWelder.SDK.Tests
             // Assert
             Assert.Equal(Protocol.Shm, parsed.Protocol);
             Assert.Equal("testBuffer", parsed.BufferName);
-            Assert.Equal((Bytes)"2MB", parsed.BufferSize);
-            Assert.Equal((Bytes)"4KB", parsed.MetadataSize);
+            Assert.Equal((long)(Bytes)"2MB", parsed.BufferSize);
+            Assert.Equal((long)(Bytes)"4KB", parsed.MetadataSize);
         }
 
         [Fact]
@@ -67,7 +67,7 @@ namespace RocketWelder.SDK.Tests
             // Assert
             Assert.Equal(Protocol.Shm, parsed.Protocol);
             Assert.Equal("myBuffer", parsed.BufferName);
-            Assert.Equal((Bytes)"256MB", parsed.BufferSize); // Default 256MB
+            Assert.Equal((long)(Bytes)"256MB", parsed.BufferSize); // Default 256MB
         }
 
         [Fact]
@@ -75,13 +75,13 @@ namespace RocketWelder.SDK.Tests
         {
             // Arrange & Act & Assert
             var conn1 = ConnectionString.Parse("shm://buffer1?size=1MB");
-            Assert.Equal((Bytes)"1MB", conn1.BufferSize);
+            Assert.Equal((long)(Bytes)"1MB", conn1.BufferSize);
             
             var conn2 = ConnectionString.Parse("shm://buffer2?size=256MB");
-            Assert.Equal((Bytes)"256MB", conn2.BufferSize);
+            Assert.Equal((long)(Bytes)"256MB", conn2.BufferSize);
             
             var conn3 = ConnectionString.Parse("shm://buffer3?size=1GB");
-            Assert.Equal((Bytes)"1GB", conn3.BufferSize);
+            Assert.Equal((long)(Bytes)"1GB", conn3.BufferSize);
         }
 
         [Fact]
@@ -151,8 +151,8 @@ namespace RocketWelder.SDK.Tests
             
             // Assert
             Assert.Equal("myBuffer", parsed.BufferName);
-            Assert.Equal((Bytes)"1MB", parsed.BufferSize);
-            Assert.Equal((Bytes)"4KB", parsed.MetadataSize);
+            Assert.Equal((long)(Bytes)"1MB", parsed.BufferSize);
+            Assert.Equal((long)(Bytes)"4KB", parsed.MetadataSize);
         }
 
         [Fact]

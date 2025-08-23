@@ -7,7 +7,7 @@ using ModelingEvolution.JsonParsableConverter;
 namespace RocketWelder.SDK;
 
 [JsonConverter(typeof(JsonParsableConverter<Bytes>))]
-public struct Bytes : IComparable<Bytes>, IEquatable<Bytes>, IParsable<Bytes>
+internal struct Bytes : IComparable<Bytes>, IEquatable<Bytes>, IParsable<Bytes>
 {
     public static readonly Bytes Zero = new Bytes(0);
     private string? _text;

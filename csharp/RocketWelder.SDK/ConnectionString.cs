@@ -35,8 +35,8 @@ namespace RocketWelder.SDK
         public string? Host { get; }
         public int? Port { get; }
         public string? BufferName { get; }
-        public Bytes BufferSize { get; }
-        public Bytes MetadataSize { get; }
+        public long BufferSize { get; }
+        public long MetadataSize { get; }
         public ConnectionMode ConnectionMode { get; }
         public int TimeoutMs { get; } = 5000; // Default timeout for connections
 
@@ -45,16 +45,16 @@ namespace RocketWelder.SDK
             string? host = null,
             int? port = null,
             string? bufferName = null,
-            Bytes bufferSize = default,
-            Bytes metadataSize = default,
+            long bufferSize = default,
+            long metadataSize = default,
             ConnectionMode connectionMode = ConnectionMode.OneWay)
         {
             Protocol = protocol;
             Host = host;
             Port = port;
             BufferName = bufferName;
-            BufferSize = bufferSize == default ? "256MB" : bufferSize;
-            MetadataSize = metadataSize == default ? "4KB" : metadataSize;
+            BufferSize = bufferSize == default ? (Bytes)"256MB" : bufferSize;
+            MetadataSize = metadataSize == default ? (Bytes)"4KB" : metadataSize;
             ConnectionMode = connectionMode;
         }
 
@@ -68,8 +68,8 @@ namespace RocketWelder.SDK
         /// <returns>A ConnectionString configured for SHM</returns>
         public static ConnectionString CreateShm(
             string bufferName,
-            Bytes? bufferSize = null,
-            Bytes? metadataSize = null,
+            long? bufferSize = null,
+            long? metadataSize = null,
             ConnectionMode connectionMode = ConnectionMode.OneWay)
         {
             return new ConnectionString(
@@ -77,8 +77,8 @@ namespace RocketWelder.SDK
                 host: null,
                 port: null,
                 bufferName: bufferName,
-                bufferSize: bufferSize ?? "256MB",
-                metadataSize: metadataSize ?? "4KB",
+                bufferSize: bufferSize ?? (Bytes)"256MB",
+                metadataSize: metadataSize ?? (Bytes)"4KB",
                 connectionMode: connectionMode);
         }
 
@@ -235,7 +235,7 @@ namespace RocketWelder.SDK
         {
             var protocolString = Protocol.ToFlagsString("+").ToLowerInvariant();
 
-            return Protocol == Protocol.Shm ? $"{protocolString}://{BufferName}?size={BufferSize}&metadata={MetadataSize}&mode={ConnectionMode}" : $"{protocolString}://{Host}:{Port}";
+            return Protocol == Protocol.Shm ? $"{protocolString}://{BufferName}?size={(Bytes)BufferSize}&metadata={(Bytes)MetadataSize}&mode={ConnectionMode}" : $"{protocolString}://{Host}:{Port}";
         }
     }
 }
