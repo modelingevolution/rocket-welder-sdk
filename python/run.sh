@@ -1,18 +1,45 @@
 #!/bin/bash
 
-# Run script for Python RocketWelder SDK
-# Maps command line arguments to environment variables (mirrors C# run.sh)
+# Run script for Python Rocket Welder SDK example
+# Usage: ./run.sh <connection_string> [--exit-after=N]
 
 set -e
 
 # Get script directory
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Parse first positional argument as CONNECTION_STRING if it looks like a connection string
-if [[ $1 =~ ^(shm|mjpeg\+http|mjpeg\+tcp):// ]]; then
-    export CONNECTION_STRING="$1"
-    shift
+# Make sure virtual environment exists
+if [ ! -d "$SCRIPT_DIR/venv" ]; then
+    echo "Creating virtual environment..."
+    python3 -m venv "$SCRIPT_DIR/venv"
+    "$SCRIPT_DIR/venv/bin/pip" install --quiet --upgrade pip
+    "$SCRIPT_DIR/venv/bin/pip" install --quiet numpy opencv-python
 fi
 
-# Run the Python client with remaining arguments
-exec python3 "$SCRIPT_DIR/examples/simple_client.py" "$@"
+# Enable ZeroBuffer debug logging
+export ZEROBUFFER_LOG_LEVEL="DEBUG"
+
+# Convert parameters from --key=value to --key value format for Python argparse
+ARGS=()
+FIRST_ARG=true
+
+for arg in "$@"; do
+    if [[ "$arg" == --*=* ]]; then
+        # Split --key=value into --key value
+        key="${arg%%=*}"
+        value="${arg#*=}"
+        ARGS+=("$key" "$value")
+    elif $FIRST_ARG && [[ "$arg" != --* ]]; then
+        # First positional argument is the connection string
+        ARGS+=("$arg")
+        FIRST_ARG=false
+    else
+        ARGS+=("$arg")
+        FIRST_ARG=false
+    fi
+done
+
+echo "ZeroBuffer logging enabled: ZEROBUFFER_LOG_LEVEL=DEBUG"
+
+# Run the example with converted arguments
+exec "$SCRIPT_DIR/venv/bin/python" "$SCRIPT_DIR/examples/simple_client.py" "${ARGS[@]}"

@@ -1,0 +1,137 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rocket-welder-sdk"
+version = "1.1.0"
+description = "High-performance video streaming SDK for RocketWelder services using ZeroBuffer IPC"
+readme = "README.md"
+requires-python = ">=3.9"
+license = {text = "MIT"}
+authors = [
+    {name = "ModelingEvolution", email = "info@modelingevolution.com"}
+]
+maintainers = [
+    {name = "ModelingEvolution", email = "info@modelingevolution.com"}
+]
+keywords = ["video", "streaming", "gstreamer", "ipc", "shared-memory", "zerobuffer", "computer-vision"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Multimedia :: Video",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "numpy>=1.20.0",
+    "opencv-python>=4.5.0",
+    "zerobuffer-ipc>=1.1.10",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-asyncio>=0.21",
+    "black>=22.0",
+    "mypy>=1.0",
+    "ruff>=0.1.0",
+    "types-setuptools",
+]
+
+[project.urls]
+Homepage = "https://github.com/modelingevolution/rocket-welder-sdk"
+Repository = "https://github.com/modelingevolution/rocket-welder-sdk.git"
+Issues = "https://github.com/modelingevolution/rocket-welder-sdk/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["rocket_welder_sdk*"]
+
+[tool.setuptools.package-data]
+rocket_welder_sdk = ["py.typed"]
+
+[tool.mypy]
+python_version = "3.9"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+no_implicit_reexport = true
+namespace_packages = true
+show_error_codes = true
+show_column_numbers = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = [
+    "cv2",
+    "cv2.*",
+    "zerobuffer",
+    "zerobuffer.*",
+]
+ignore_missing_imports = true
+
+[tool.black]
+line-length = 100
+target-version = ['py39', 'py310', 'py311', 'py312']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "TID", # flake8-tidy-imports
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+    "RUF", # Ruff-specific rules
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+    "C901",  # too complex
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]  # imported but unused
+"tests/*" = ["S101"]  # use of assert
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "--cov=rocket_welder_sdk",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-fail-under=55",  # Adjusted due to ZeroBuffer dependency for controllers
+]
+
+[tool.coverage.run]
+source = ["rocket_welder_sdk"]
+branch = true
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false

@@ -1,0 +1,56 @@
+=========================================
+Python Rocket Welder SDK Integration Test
+=========================================
+[0;32m=== Testing Duplex Mode ===[0m
+
+[1;33mTesting mode: Duplex[0m
+Connection: shm://test_python?mode=Duplex
+Frames: 5
+
+[0;32mStep 1: Starting Python client (creates buffer)[0m
+[1;33m  Command:[0m ./run.sh "shm://test_python?mode=Duplex" --exit-after=5
+
+  Waiting for client to initialize...
+  ⚠ Buffer not found in /dev/shm/test_python
+[0;32mStep 2: Starting GStreamer pipeline (writes to buffer)[0m
+[1;33m  Command:[0m GST_DEBUG="zerosink:5,zerobuffer:5" GST_PLUGIN_PATH=/mnt/d/source/modelingevolution/streamer/src/gstreamer/zerobuffer/build \
+           gst-launch-1.0 videotestsrc num-buffers=5 pattern=ball ! \
+           video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! \
+           zerofilter channel-name=test_python ! fakesink
+
+[0;31m✗ Test failed[0m
+  - Client timed out
+  - Check output_Duplex.log for details
+
+[0;32m=== Testing OneWay Mode ===[0m
+
+[1;33mTesting mode: OneWay[0m
+Connection: shm://test_python?mode=OneWay
+Frames: 5
+
+[0;32mStep 1: Starting Python client (creates buffer)[0m
+[1;33m  Command:[0m ./run.sh "shm://test_python?mode=OneWay" --exit-after=5
+
+  Waiting for client to initialize...
+  ✓ Buffer created in /dev/shm/test_python
+[0;32mStep 2: Starting GStreamer pipeline (writes to buffer)[0m
+[1;33m  Command:[0m GST_DEBUG="zerosink:5,zerobuffer:5" GST_PLUGIN_PATH=/mnt/d/source/modelingevolution/streamer/src/gstreamer/zerobuffer/build \
+           gst-launch-1.0 videotestsrc num-buffers=5 pattern=ball ! \
+           video/x-raw,width=640,height=480,framerate=30/1,format=RGB ! \
+           zerosink buffer-name=test_python sync=false
+
+[0;31m✗ Test failed[0m
+  - Client timed out
+  - Check output_OneWay.log for details
+
+=========================================
+Test Summary
+=========================================
+Duplex mode:  FAIL
+OneWay mode:  FAIL
+
+Logs available:
+  - gst_Duplex.log, gst_OneWay.log (GStreamer output)
+  - output_Duplex.log, output_OneWay.log (Client output)
+
+[0;31mSome tests failed.[0m

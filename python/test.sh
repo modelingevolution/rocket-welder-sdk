@@ -1,10 +1,49 @@
 #!/bin/bash
 
 # Test script for Python RocketWelder SDK
-# Mirrors the C# test.sh functionality
+# Supports both unit testing and integration testing
 
 set -e
 
+# Configuration
+BUFFER_NAME="test_python"
+FRAME_COUNT=5
+PLUGIN_PATH="/mnt/d/source/modelingevolution/streamer/src/gstreamer/zerobuffer/build"
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+# Check if first argument is 'unit' for unit testing
+if [ "$1" = "unit" ]; then
+    echo "========================================="
+    echo "Running Unit Tests"
+    echo "========================================="
+    
+    # Ensure virtual environment exists
+    if [ ! -d "venv" ]; then
+        echo "Creating virtual environment..."
+        python3 -m venv venv
+    fi
+    
+    # Install dependencies
+    echo "Installing dependencies..."
+    venv/bin/pip install --quiet --upgrade pip
+    venv/bin/pip install --quiet pytest pytest-cov numpy opencv-python 2>/dev/null || {
+        echo "Installing packages..."
+        venv/bin/pip install pytest pytest-cov numpy opencv-python
+    }
+    
+    # Run unit tests
+    echo ""
+    echo "Running unit tests with pytest..."
+    venv/bin/python -m pytest tests/ -v --tb=short
+    exit $?
+fi
+
+# Integration test mode (original functionality)
 # Default values
 MODE="oneway"
 EXIT_AFTER=10

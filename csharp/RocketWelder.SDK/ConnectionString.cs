@@ -58,6 +58,58 @@ namespace RocketWelder.SDK
             ConnectionMode = connectionMode;
         }
 
+        /// <summary>
+        /// Creates a ConnectionString for shared memory (SHM) protocol.
+        /// </summary>
+        /// <param name="bufferName">Name of the shared memory buffer</param>
+        /// <param name="bufferSize">Size of the buffer (default: 256MB)</param>
+        /// <param name="metadataSize">Size of metadata (default: 4KB)</param>
+        /// <param name="connectionMode">Connection mode (default: OneWay)</param>
+        /// <returns>A ConnectionString configured for SHM</returns>
+        public static ConnectionString CreateShm(
+            string bufferName,
+            Bytes? bufferSize = null,
+            Bytes? metadataSize = null,
+            ConnectionMode connectionMode = ConnectionMode.OneWay)
+        {
+            return new ConnectionString(
+                Protocol.Shm,
+                host: null,
+                port: null,
+                bufferName: bufferName,
+                bufferSize: bufferSize ?? "256MB",
+                metadataSize: metadataSize ?? "4KB",
+                connectionMode: connectionMode);
+        }
+
+        /// <summary>
+        /// Creates a ConnectionString for MJPEG streaming over TCP or HTTP.
+        /// </summary>
+        /// <param name="host">Host address</param>
+        /// <param name="port">Port number</param>
+        /// <param name="withHttp">If true, uses HTTP+MJPEG; if false, uses TCP+MJPEG (default: false)</param>
+        /// <param name="connectionMode">Connection mode (default: OneWay)</param>
+        /// <returns>A ConnectionString configured for MJPEG streaming</returns>
+        public static ConnectionString CreateMjpeg(
+            string host,
+            int port,
+            bool withHttp = false,
+            ConnectionMode connectionMode = ConnectionMode.OneWay)
+        {
+            var protocol = withHttp 
+                ? Protocol.Http | Protocol.Mjpeg 
+                : Protocol.Tcp | Protocol.Mjpeg;
+            
+            return new ConnectionString(
+                protocol,
+                host: host,
+                port: port,
+                bufferName: null,
+                bufferSize: default,
+                metadataSize: default,
+                connectionMode: connectionMode);
+        }
+
         public static ConnectionString Parse(string s, IFormatProvider? provider = null)
         {
             if (TryParse(s, provider, out var result))
@@ -183,14 +235,7 @@ namespace RocketWelder.SDK
         {
             var protocolString = Protocol.ToFlagsString("+").ToLowerInvariant();
 
-            if (Protocol == Protocol.Shm)
-            {
-                return $"{protocolString}://{BufferName}?size={BufferSize}&metadata={MetadataSize}&mode={ConnectionMode}";
-            }
-            else
-            {
-                return $"{protocolString}://{Host}:{Port}";
-            }
+            return Protocol == Protocol.Shm ? $"{protocolString}://{BufferName}?size={BufferSize}&metadata={MetadataSize}&mode={ConnectionMode}" : $"{protocolString}://{Host}:{Port}";
         }
     }
 }
