@@ -160,7 +160,7 @@ namespace RocketWelder.SDK.Tests
         {
             // Arrange
             // ConnectionString is readonly struct, test ToString from Parse
-            var conn = ConnectionString.Parse("shm://testBuffer?size=1MB&metadata=4KB");
+            var conn = ConnectionString.Parse("shm://testBuffer?size=1MB&metadata=4KB&timeout=6969");
             
             // Act
             var str = conn.ToString();
@@ -169,6 +169,8 @@ namespace RocketWelder.SDK.Tests
             Assert.Contains("shm://testBuffer", str);
             Assert.Contains("size=1MB", str);
             Assert.Contains("metadata=4KB", str);
+            Assert.Contains("timeout=6969", str);
+
         }
     }
 }

@@ -47,7 +47,8 @@ namespace RocketWelder.SDK
             string? bufferName = null,
             long bufferSize = default,
             long metadataSize = default,
-            ConnectionMode connectionMode = ConnectionMode.OneWay)
+            ConnectionMode connectionMode = ConnectionMode.OneWay, 
+            TimeSpan? timeout = null)
         {
             Protocol = protocol;
             Host = host;
@@ -56,6 +57,7 @@ namespace RocketWelder.SDK
             BufferSize = bufferSize == default ? (Bytes)"256MB" : bufferSize;
             MetadataSize = metadataSize == default ? (Bytes)"4KB" : metadataSize;
             ConnectionMode = connectionMode;
+            TimeoutMs = timeout.HasValue ? (int)timeout.Value.TotalMilliseconds : 5000;
         }
 
         /// <summary>
@@ -70,7 +72,7 @@ namespace RocketWelder.SDK
             string bufferName,
             long? bufferSize = null,
             long? metadataSize = null,
-            ConnectionMode connectionMode = ConnectionMode.OneWay)
+            ConnectionMode connectionMode = ConnectionMode.OneWay, TimeSpan? timeout=null)
         {
             return new ConnectionString(
                 Protocol.Shm,
@@ -79,7 +81,7 @@ namespace RocketWelder.SDK
                 bufferName: bufferName,
                 bufferSize: bufferSize ?? (Bytes)"256MB",
                 metadataSize: metadataSize ?? (Bytes)"4KB",
-                connectionMode: connectionMode);
+                connectionMode: connectionMode, timeout);
         }
 
         /// <summary>
@@ -94,7 +96,7 @@ namespace RocketWelder.SDK
             string host,
             int port,
             bool withHttp = false,
-            ConnectionMode connectionMode = ConnectionMode.OneWay)
+            ConnectionMode connectionMode = ConnectionMode.OneWay, TimeSpan? timeout = null)
         {
             var protocol = withHttp 
                 ? Protocol.Http | Protocol.Mjpeg 
@@ -107,7 +109,7 @@ namespace RocketWelder.SDK
                 bufferName: null,
                 bufferSize: default,
                 metadataSize: default,
-                connectionMode: connectionMode);
+                connectionMode: connectionMode, timeout);
         }
 
         public static ConnectionString Parse(string s, IFormatProvider? provider = null)
@@ -152,6 +154,7 @@ namespace RocketWelder.SDK
             string? bufferName = null;
             Bytes bufferSize = default;
             Bytes metadataSize = default;
+            TimeSpan timeout = TimeSpan.FromMilliseconds(5000);
             ConnectionMode connectionMode = ConnectionMode.OneWay;
 
             // Extract query parameters if present
@@ -184,6 +187,10 @@ namespace RocketWelder.SDK
                             case "mode":
                                 if (Enum.TryParse<ConnectionMode>(value, true, out var m))
                                     connectionMode = m;
+                                break;
+                            case "timeout":
+                                if (int.TryParse(value, out var timeout_ms))
+                                    timeout = TimeSpan.FromMilliseconds(timeout_ms);
                                 break;
                         }
                     }
@@ -227,7 +234,7 @@ namespace RocketWelder.SDK
                 bufferName,
                 bufferSize,
                 metadataSize,
-                connectionMode);
+                connectionMode, timeout);
             return true;
         }
 
@@ -235,7 +242,7 @@ namespace RocketWelder.SDK
         {
             var protocolString = Protocol.ToFlagsString("+").ToLowerInvariant();
 
-            return Protocol == Protocol.Shm ? $"{protocolString}://{BufferName}?size={(Bytes)BufferSize}&metadata={(Bytes)MetadataSize}&mode={ConnectionMode}" : $"{protocolString}://{Host}:{Port}";
+            return Protocol == Protocol.Shm ? $"{protocolString}://{BufferName}?size={(Bytes)BufferSize}&metadata={(Bytes)MetadataSize}&mode={ConnectionMode}&timeout={TimeoutMs}" : $"{protocolString}://{Host}:{Port}";
         }
     }
 }
