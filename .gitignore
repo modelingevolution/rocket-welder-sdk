@@ -121,3 +121,4 @@ Desktop.ini
 *.local.*
 local_settings.*
 .env.local
+/python/test_venv
