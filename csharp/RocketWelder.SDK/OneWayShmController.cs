@@ -73,8 +73,8 @@ namespace RocketWelder.SDK
                 MetadataSize = (int)(long)_connection.MetadataSize
             };
             _reader = new Reader(_connection.BufferName!, config, _readerLogger);
-            _logger.LogInformation("Created shared memory buffer '{BufferName}' with size {BufferSize} and metadata {MetadataSize}", 
-                _connection.BufferName, _connection.BufferSize, _connection.MetadataSize);
+            _logger.LogInformation("Created shared memory buffer '{BufferName}' with size {BufferSize} and metadata {MetadataSize}, timeout {Timeout} ms", 
+                _connection.BufferName, _connection.BufferSize, _connection.MetadataSize, _connection.TimeoutMs);
 
             // Start processing on worker thread
             _worker = new Thread(() => ProcessFrames(onFrame, cancellationToken))
@@ -295,7 +295,8 @@ namespace RocketWelder.SDK
                     var metadataBytes = _reader.GetMetadata();
                     _metadata = JsonSerializer.Deserialize<GstMetadata>(metadataBytes);
                     _gstCaps = _metadata!.Caps;
-                    _logger.LogInformation("Received metadata from buffer '{BufferName}': {Caps}", _connection.BufferName, _gstCaps);
+                    _logger.LogInformation("Received metadata from buffer '{BufferName}': {Caps}",
+                        _connection.BufferName, _gstCaps);
 
                     unsafe
                     {
@@ -308,14 +309,26 @@ namespace RocketWelder.SDK
                 catch (ReaderDeadException ex)
                 {
                     _isRunning = false;
-                    _logger.LogInformation("Writer disconnected while waiting for first frame on buffer '{BufferName}'", _connection.BufferName);
+                    _logger.LogInformation("Writer disconnected while waiting for first frame on buffer '{BufferName}'",
+                        _connection.BufferName);
                     OnError?.Invoke(this, ex);
                     throw;
                 }
                 catch (WriterDeadException ex)
                 {
                     _isRunning = false;
-                    _logger.LogInformation("Writer disconnected while waiting for first frame on buffer '{BufferName}'", _connection.BufferName);
+                    _logger.LogInformation("Writer disconnected while waiting for first frame on buffer '{BufferName}'",
+                        _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    throw;
+                }
+                catch (System.Text.Json.JsonException ex)
+                {
+                    _isRunning = false;
+                    var metadataBytes = _reader.GetMetadata();
+                    var json = System.Text.Encoding.UTF8.GetString(metadataBytes);
+                    _logger.LogInformation("Error deserializing gstMetadata '{json}'",
+                        json);
                     OnError?.Invoke(this, ex);
                     throw;
                 }

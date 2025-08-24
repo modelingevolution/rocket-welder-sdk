@@ -1,4 +1,5 @@
 using System;
+using System.Drawing;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -6,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Emgu.CV;
+using Emgu.CV.CvEnum;
 using RocketWelder.SDK;
 using ZeroBuffer.DuplexChannel;
 
@@ -18,6 +20,8 @@ class Program
         Console.WriteLine("RocketWelder SDK SimpleClient 2025");
         Console.WriteLine("========================================");
         Console.WriteLine($"Arguments received: {args.Length}");
+        Console.WriteLine($"OpenCV: {typeof(Mat).Assembly.FullName}");
+        using var m = new Mat(new Size(640, 640), DepthType.Cv8U, 1);
         for (int i = 0; i < args.Length; i++)
         {
             Console.WriteLine($"  [{i}]: {args[i]}");

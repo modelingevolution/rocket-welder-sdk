@@ -8,7 +8,7 @@ set -e
 # Configuration
 BUFFER_NAME="test_python"
 FRAME_COUNT=5
-PLUGIN_PATH="/mnt/d/source/modelingevolution/streamer/src/gstreamer/zerobuffer/build"
+PLUGIN_PATH="/mnt/d/source/modelingevolution/streamer/src/out/build/Linux-WSL-Debug/app/plugins"
 
 # Colors for output
 RED='\033[0;31m'
