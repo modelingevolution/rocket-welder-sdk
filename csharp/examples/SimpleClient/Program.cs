@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
 using RocketWelder.SDK;
+using ZeroBuffer;
 using ZeroBuffer.DuplexChannel;
 
 class Program

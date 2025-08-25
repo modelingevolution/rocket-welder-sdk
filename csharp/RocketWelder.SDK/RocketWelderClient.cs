@@ -17,7 +17,8 @@ using System.Net.Sockets;
 using System.Buffers;
 using System.Runtime.CompilerServices;
 using System.Diagnostics;
-using ErrorEventArgs = ZeroBuffer.DuplexChannel.ErrorEventArgs;
+using ErrorEventArgs = ZeroBuffer.ErrorEventArgs;
+
 
 namespace RocketWelder.SDK
 {
