@@ -29,16 +29,16 @@ namespace RocketWelder.SDK
     /// Connection string representation.
     /// </summary>
     [JsonConverter(typeof(JsonParsableConverter<ConnectionString>))]
-    public readonly struct ConnectionString : IParsable<ConnectionString>
+    public readonly record struct ConnectionString : IParsable<ConnectionString>
     {
-        public Protocol Protocol { get; }
+        public Protocol Protocol { get;  }
         public string? Host { get; }
         public int? Port { get; }
-        public string? BufferName { get; }
-        public long BufferSize { get; }
-        public long MetadataSize { get; }
-        public ConnectionMode ConnectionMode { get; }
-        public int TimeoutMs { get; } = 5000; // Default timeout for connections
+        public string? BufferName { get; init; }
+        public long BufferSize { get; init; }
+        public long MetadataSize { get; init; }
+        public ConnectionMode ConnectionMode { get; init; }
+        public int TimeoutMs { get; init; } = 5000; // Default timeout for connections
 
         private ConnectionString(
             Protocol protocol,
