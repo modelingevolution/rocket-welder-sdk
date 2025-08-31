@@ -20,6 +20,9 @@ if TYPE_CHECKING:
 # Type alias for OpenCV Mat
 Mat = np.ndarray[Any, Any]
 
+# Module logger
+logger = logging.getLogger(__name__)
+
 
 class RocketWelderClient:
     """
@@ -28,20 +31,18 @@ class RocketWelderClient:
     Provides a unified interface for different connection types and protocols.
     """
 
-    def __init__(self, connection: str | ConnectionString, logger: logging.Logger | None = None):
+    def __init__(self, connection: str | ConnectionString):
         """
         Initialize the RocketWelder client.
 
         Args:
             connection: Connection string or ConnectionString object
-            logger: Optional logger instance
         """
         if isinstance(connection, str):
             self._connection = ConnectionString.parse(connection)
         else:
             self._connection = connection
 
-        self._logger = logger or logging.getLogger(__name__)
         self._controller: IController | None = None
         self._lock = threading.Lock()
 
@@ -93,15 +94,15 @@ class RocketWelderClient:
             # Create appropriate controller based on connection
             if self._connection.protocol == Protocol.SHM:
                 if self._connection.connection_mode == ConnectionMode.DUPLEX:
-                    self._controller = DuplexShmController(self._connection, self._logger)
+                    self._controller = DuplexShmController(self._connection)
                 else:
-                    self._controller = OneWayShmController(self._connection, self._logger)
+                    self._controller = OneWayShmController(self._connection)
             else:
                 raise ValueError(f"Unsupported protocol: {self._connection.protocol}")
 
             # Start the controller
             self._controller.start(on_frame, cancellation_token)  # type: ignore[arg-type]
-            self._logger.info("RocketWelder client started with %s", self._connection)
+            logger.info("RocketWelder client started with %s", self._connection)
 
     def stop(self) -> None:
         """Stop the client and clean up resources."""
@@ -109,7 +110,7 @@ class RocketWelderClient:
             if self._controller:
                 self._controller.stop()
                 self._controller = None
-                self._logger.info("RocketWelder client stopped")
+                logger.info("RocketWelder client stopped")
 
     def __enter__(self) -> RocketWelderClient:
         """Context manager entry."""
@@ -125,7 +126,6 @@ class RocketWelderClient:
         buffer_name: str,
         buffer_size: str = "256MB",
         metadata_size: str = "4KB",
-        logger: logging.Logger | None = None,
     ) -> RocketWelderClient:
         """
         Create a one-way shared memory client.
@@ -134,7 +134,6 @@ class RocketWelderClient:
             buffer_name: Name of the shared memory buffer
             buffer_size: Size of the buffer (e.g., "256MB")
             metadata_size: Size of metadata buffer (e.g., "4KB")
-            logger: Optional logger
 
         Returns:
             Configured RocketWelderClient instance
@@ -142,7 +141,7 @@ class RocketWelderClient:
         connection_str = (
             f"shm://{buffer_name}?size={buffer_size}&metadata={metadata_size}&mode=OneWay"
         )
-        return cls(connection_str, logger)
+        return cls(connection_str)
 
     @classmethod
     def create_duplex_shm(
@@ -150,7 +149,6 @@ class RocketWelderClient:
         buffer_name: str,
         buffer_size: str = "256MB",
         metadata_size: str = "4KB",
-        logger: logging.Logger | None = None,
     ) -> RocketWelderClient:
         """
         Create a duplex shared memory client.
@@ -159,7 +157,6 @@ class RocketWelderClient:
             buffer_name: Name of the shared memory buffer
             buffer_size: Size of the buffer (e.g., "256MB")
             metadata_size: Size of metadata buffer (e.g., "4KB")
-            logger: Optional logger
 
         Returns:
             Configured RocketWelderClient instance
@@ -167,4 +164,4 @@ class RocketWelderClient:
         connection_str = (
             f"shm://{buffer_name}?size={buffer_size}&metadata={metadata_size}&mode=Duplex"
         )
-        return cls(connection_str, logger)
+        return cls(connection_str)

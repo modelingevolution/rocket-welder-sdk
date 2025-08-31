@@ -39,7 +39,7 @@ setup(
     install_requires=[
         "numpy>=1.20.0",
         "opencv-python>=4.5.0",
-        "zerobuffer-ipc>=1.1.10",
+        "zerobuffer-ipc>=1.1.16",
     ],
     extras_require={
         "dev": [

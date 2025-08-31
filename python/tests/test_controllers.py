@@ -39,7 +39,7 @@ class TestOneWayShmController:
     @pytest.fixture
     def controller(self, connection_string):
         """Create a test controller."""
-        return OneWayShmController(connection_string, logger=None)
+        return OneWayShmController(connection_string)
 
     def test_init(self, controller, connection_string):
         """Test controller initialization."""
@@ -76,7 +76,7 @@ class TestOneWayShmController:
 
         # Verify Reader was created with correct parameters
         mock_reader_class.assert_called_once_with(
-            "test_buffer", mock_config, logger=controller._reader_logger
+            "test_buffer", mock_config
         )
         assert controller._reader == mock_reader
 
@@ -91,7 +91,7 @@ class TestOneWayShmController:
     def test_process_oneway_frame(self, controller):
         """Test processing frame with callback."""
         # Set up caps and callback
-        controller._gst_caps = GstCaps(width=2, height=2, format="RGB")
+        controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="RGB")
         on_frame = Mock()
 
         # Create mock frame with correct data
@@ -133,7 +133,7 @@ class TestOneWayShmController:
     def test_create_mat_from_frame_with_caps(self, controller):
         """Test _create_mat_from_frame with valid caps."""
         # Set up GstCaps
-        controller._gst_caps = GstCaps(width=2, height=2, format="RGB")
+        controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="RGB")
 
         # Create frame with correct data size (2x2x3 = 12 bytes)
         frame = MagicMock()
@@ -145,7 +145,7 @@ class TestOneWayShmController:
 
     def test_create_mat_from_frame_grayscale(self, controller):
         """Test _create_mat_from_frame with grayscale format."""
-        controller._gst_caps = GstCaps(width=2, height=2, format="GRAY8")
+        controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="GRAY8")
 
         # Create frame with correct data size (2x2x1 = 4 bytes)
         frame = MagicMock()
@@ -157,7 +157,7 @@ class TestOneWayShmController:
 
     def test_create_mat_from_frame_rgba(self, controller):
         """Test _create_mat_from_frame with RGBA format."""
-        controller._gst_caps = GstCaps(width=2, height=2, format="RGBA")
+        controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="RGBA")
 
         # Create frame with correct data size (2x2x4 = 16 bytes)
         frame = MagicMock()
@@ -169,7 +169,7 @@ class TestOneWayShmController:
 
     def test_create_mat_from_frame_size_mismatch(self, controller):
         """Test _create_mat_from_frame with data size mismatch."""
-        controller._gst_caps = GstCaps(width=2, height=2, format="RGB")
+        controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="RGB")
 
         # Create frame with wrong data size
         frame = MagicMock()
@@ -190,7 +190,7 @@ class TestDuplexShmController:
     @pytest.fixture
     def controller(self, connection_string):
         """Create a test controller."""
-        return DuplexShmController(connection_string, logger=None)
+        return DuplexShmController(connection_string)
 
     def test_init(self, controller, connection_string):
         """Test controller initialization."""
@@ -272,7 +272,7 @@ class TestDuplexShmController:
     def test_process_duplex_frame(self, controller):
         """Test _process_duplex_frame method."""
         # Set up caps and callback
-        controller._gst_caps = GstCaps(width=2, height=2, format="RGB")
+        controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="RGB")
         controller._on_frame_callback = Mock()
 
         # Create mock request frame with correct data
@@ -286,9 +286,11 @@ class TestDuplexShmController:
         mock_output_buffer = np.zeros((12,), dtype=np.uint8)
         # Create a context manager that returns the buffer
         from contextlib import contextmanager
+
         @contextmanager
         def mock_get_buffer(size):
             yield mock_output_buffer
+
         mock_response_writer.get_frame_buffer = mock_get_buffer
 
         # Call the method

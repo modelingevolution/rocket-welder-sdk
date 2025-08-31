@@ -46,15 +46,14 @@ RUN pip install --no-cache-dir .
 # Copy the example application
 COPY examples/simple_client.py .
 
-# Set up logging
-ENV ZEROBUFFER_LOG_LEVEL=INFO
+# Set up logging - SDK will propagate to ZEROBUFFER_LOG_LEVEL
+ENV ROCKET_WELDER_LOG_LEVEL=INFO
 
 # Health check (optional)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD pgrep -f simple_client.py || exit 1
 
-# Entry point
+# Entry point - runs the client with CONNECTION_STRING env var
 ENTRYPOINT ["python", "simple_client.py"]
 
-# Default command (can be overridden)
-CMD ["--help"]
+# No default CMD - will use CONNECTION_STRING from environment

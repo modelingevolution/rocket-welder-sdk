@@ -30,6 +30,14 @@ run_test() {
     echo "Frames: ${FRAME_COUNT}"
     echo ""
     
+    # Clean up any existing shared memory resources
+    echo "  Cleaning up existing resources..."
+    rm -f /dev/shm/${BUFFER_NAME} 2>/dev/null || true
+    rm -f /dev/shm/${BUFFER_NAME}_request 2>/dev/null || true
+    rm -f /dev/shm/${BUFFER_NAME}_response 2>/dev/null || true
+    rm -f /dev/shm/sem.${BUFFER_NAME}* 2>/dev/null || true
+    rm -f /dev/shm/sem.sem-*${BUFFER_NAME}* 2>/dev/null || true
+    
     # Start Python client FIRST (it creates the shared memory buffer)
     echo -e "${GREEN}Step 1: Starting Python client (creates buffer)${NC}"
     echo -e "${YELLOW}  Command:${NC} ./run.sh \"${CONNECTION_STRING}\" --exit-after=${FRAME_COUNT}"

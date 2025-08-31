@@ -45,7 +45,7 @@ fi
 
 # Integration test mode (original functionality)
 # Default values
-MODE="oneway"
+MODE="OneWay"
 EXIT_AFTER=10
 BUFFER_NAME="test"
 CONNECTION_STRING=""
@@ -85,16 +85,34 @@ echo "Exit after: $EXIT_AFTER frames"
 echo "Connection: $CONNECTION_STRING"
 echo "========================================="
 
+# Clean up any existing resources before starting
+echo "Cleaning up existing resources..."
+rm -f /dev/shm/${BUFFER_NAME}* 2>/dev/null || true
+rm -f /tmp/zerobuffer/${BUFFER_NAME}.lock 2>/dev/null || true
+
 # Export connection string for the client
 export CONNECTION_STRING="$CONNECTION_STRING"
 
-# Start the Python client (reader) in background
+# Ensure virtual environment exists and has dependencies
+if [ ! -d "venv" ]; then
+    echo "Creating virtual environment..."
+    python3 -m venv venv
+    venv/bin/pip install --quiet --upgrade pip
+    venv/bin/pip install --quiet -e . 2>/dev/null || venv/bin/pip install -e .
+fi
+
+# Start the Python client (reader) in background using venv
 echo "Starting Python client (reader)..."
-python3 examples/simple_client.py --exit-after "$EXIT_AFTER" &
+venv/bin/python examples/simple_client.py --exit-after "$EXIT_AFTER" &
 CLIENT_PID=$!
 
 # Give client time to create the buffer
-sleep 2
+echo "Waiting for buffer creation..."
+sleep 3
+
+# Set GStreamer plugin path
+GST_PLUGIN_PATH="/mnt/d/source/modelingevolution/streamer/src/out/build/Linux-WSL-Debug/app/plugins"
+export GST_PLUGIN_PATH
 
 # Start GStreamer (writer)
 echo "Starting GStreamer (writer)..."

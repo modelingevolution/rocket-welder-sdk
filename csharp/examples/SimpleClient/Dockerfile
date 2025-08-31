@@ -82,8 +82,7 @@ ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD pgrep -f SimpleClient || exit 1
 
-# Entry point - allows passing connection string and other args
+# Entry point - runs the client with CONNECTION_STRING env var
 ENTRYPOINT ["dotnet", "SimpleClient.dll"]
 
-# Default command (can be overridden)
-CMD ["--help"]
+# No default CMD - will use CONNECTION_STRING from environment

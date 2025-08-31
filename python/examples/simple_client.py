@@ -44,10 +44,14 @@ class VideoProcessingService:
         self.logger = logger or logging.getLogger(__name__)
         self.frame_count = 0
         self.stop_event = asyncio.Event()
+        self._loop: Optional[asyncio.AbstractEventLoop] = None
 
     async def run(self) -> None:
         """Run the video processing service."""
         self.logger.info(f"Starting RocketWelder client... {self.client.connection}")
+        
+        # Store the event loop for use in callbacks
+        self._loop = asyncio.get_running_loop()
 
         # Check if we're in duplex mode or one-way mode
         if self.client.connection.connection_mode == ConnectionMode.DUPLEX:
@@ -102,7 +106,12 @@ class VideoProcessingService:
         # Check if we should exit
         if self.exit_after > 0 and self.frame_count >= self.exit_after:
             self.logger.info(f"Reached {self.exit_after} frames, exiting...")
-            self.stop_event.set()
+            # Schedule stop_event.set() on the main event loop to avoid deadlock
+            # In duplex mode, this callback runs in server thread, not main thread
+            if self._loop and self._loop.is_running():
+                self._loop.call_soon_threadsafe(self.stop_event.set)
+            else:
+                self.stop_event.set()
 
     def process_frame_duplex(self, input_frame: np.ndarray, output_frame: np.ndarray) -> None:
         """
@@ -159,7 +168,12 @@ class VideoProcessingService:
         # Check if we should exit
         if self.exit_after > 0 and self.frame_count >= self.exit_after:
             self.logger.info(f"Reached {self.exit_after} frames, exiting...")
-            self.stop_event.set()
+            # Schedule stop_event.set() on the main event loop to avoid deadlock
+            # In duplex mode, this callback runs in server thread, not main thread
+            if self._loop and self._loop.is_running():
+                self._loop.call_soon_threadsafe(self.stop_event.set)
+            else:
+                self.stop_event.set()
 
 
 async def main():
@@ -206,12 +220,24 @@ Examples:
     if not connection_string:
         parser.error("Connection string must be provided as argument or CONNECTION_STRING environment variable")
 
-    # Configure logging
+    # Configure logging - respect ROCKET_WELDER_LOG_LEVEL env var
+    # Priority: CLI arg > ROCKET_WELDER_LOG_LEVEL > default
+    log_level = args.log_level
+    if log_level == "INFO":  # Default value
+        env_log_level = os.environ.get('ROCKET_WELDER_LOG_LEVEL')
+        if env_log_level:
+            log_level = env_log_level.upper()
+    
+    # Set up logging
     logging.basicConfig(
-        level=getattr(logging, args.log_level),
+        level=getattr(logging, log_level),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
     logger = logging.getLogger("SimpleClient")
+    
+    # Ensure ROCKET_WELDER_LOG_LEVEL is set for SDK initialization
+    if not os.environ.get('ROCKET_WELDER_LOG_LEVEL'):
+        os.environ['ROCKET_WELDER_LOG_LEVEL'] = log_level
 
     # Print startup information
     print("=" * 40)
@@ -225,7 +251,7 @@ Examples:
 
     # Create client and service
     try:
-        client = RocketWelderClient(connection_string, logger)
+        client = RocketWelderClient(connection_string)
         service = VideoProcessingService(client, args.exit_after, logger)
 
         # Handle signals for graceful shutdown

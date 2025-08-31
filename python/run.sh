@@ -16,8 +16,12 @@ if [ ! -d "$SCRIPT_DIR/venv" ]; then
     "$SCRIPT_DIR/venv/bin/pip" install --quiet numpy opencv-python
 fi
 
-# Enable ZeroBuffer debug logging
-export ZEROBUFFER_LOG_LEVEL="DEBUG"
+# Configure logging - use ROCKET_WELDER_LOG_LEVEL if set, otherwise default to DEBUG
+if [ -z "$ROCKET_WELDER_LOG_LEVEL" ]; then
+    export ROCKET_WELDER_LOG_LEVEL="DEBUG"
+fi
+
+# The SDK will propagate ROCKET_WELDER_LOG_LEVEL to ZEROBUFFER_LOG_LEVEL automatically
 
 # Convert parameters from --key=value to --key value format for Python argparse
 ARGS=()
@@ -39,7 +43,7 @@ for arg in "$@"; do
     fi
 done
 
-echo "ZeroBuffer logging enabled: ZEROBUFFER_LOG_LEVEL=DEBUG"
+echo "Logging enabled: ROCKET_WELDER_LOG_LEVEL=$ROCKET_WELDER_LOG_LEVEL"
 
 # Run the example with converted arguments
 exec "$SCRIPT_DIR/venv/bin/python" "$SCRIPT_DIR/examples/simple_client.py" "${ARGS[@]}"

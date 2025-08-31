@@ -14,12 +14,16 @@ from typing import Any, Callable
 import numpy as np
 from zerobuffer import BufferConfig, Frame, Reader, Writer
 from zerobuffer.duplex import DuplexChannelFactory, IImmutableDuplexServer
+from zerobuffer.exceptions import WriterDeadException
 
 from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .gst_metadata import GstCaps, GstMetadata
 
 # Type alias for OpenCV Mat
 Mat = np.ndarray[Any, Any]
+
+# Module logger
+logger = logging.getLogger(__name__)
 
 
 class IController(ABC):
@@ -63,13 +67,12 @@ class OneWayShmController(IController):
     as a zerosink, allowing zero-copy frame reception.
     """
 
-    def __init__(self, connection: ConnectionString, logger: logging.Logger | None = None):
+    def __init__(self, connection: ConnectionString):
         """
         Initialize the one-way controller.
 
         Args:
             connection: Connection string configuration
-            logger: Optional logger instance
         """
         if connection.protocol != Protocol.SHM:
             raise ValueError(
@@ -77,8 +80,6 @@ class OneWayShmController(IController):
             )
 
         self._connection = connection
-        self._logger = logger or logging.getLogger(__name__)
-        self._reader_logger = logging.getLogger(f"{__name__}.Reader")
         self._reader: Reader | None = None
         self._gst_caps: GstCaps | None = None
         self._metadata: GstMetadata | None = None
@@ -108,7 +109,7 @@ class OneWayShmController(IController):
         if self._is_running:
             raise RuntimeError("Controller is already running")
 
-        self._logger.debug(
+        logger.debug(
             "Starting OneWayShmController for buffer '%s'", self._connection.buffer_name
         )
         self._is_running = True
@@ -124,9 +125,9 @@ class OneWayShmController(IController):
         # Pass logger to Reader for better debugging
         if not self._connection.buffer_name:
             raise ValueError("Buffer name is required for shared memory connection")
-        self._reader = Reader(self._connection.buffer_name, config, logger=self._reader_logger)
+        self._reader = Reader(self._connection.buffer_name, config)
 
-        self._logger.info(
+        logger.info(
             "Created shared memory buffer '%s' with size %s and metadata %s",
             self._connection.buffer_name,
             self._connection.buffer_size,
@@ -146,7 +147,7 @@ class OneWayShmController(IController):
         if not self._is_running:
             return
 
-        self._logger.debug("Stopping controller for buffer '%s'", self._connection.buffer_name)
+        logger.debug("Stopping controller for buffer '%s'", self._connection.buffer_name)
         self._is_running = False
 
         # Wait for worker thread to finish
@@ -160,7 +161,7 @@ class OneWayShmController(IController):
             self._reader = None
 
         self._worker_thread = None
-        self._logger.info("Stopped controller for buffer '%s'", self._connection.buffer_name)
+        logger.info("Stopped controller for buffer '%s'", self._connection.buffer_name)
 
     def _process_frames(self, on_frame: Callable[[Mat], None]) -> None:
         """
@@ -193,35 +194,43 @@ class OneWayShmController(IController):
                         if mat is not None:
                             on_frame(mat)
 
+                except WriterDeadException:
+                    # Writer has disconnected gracefully
+                    logger.info(
+                        "Writer disconnected gracefully from buffer '%s'",
+                        self._connection.buffer_name,
+                    )
+                    self._is_running = False
+                    break
                 except Exception as e:
                     # Log specific error types like C#
                     error_type = type(e).__name__
-                    if "ReaderDead" in error_type or "WriterDead" in error_type:
-                        self._logger.info(
-                            "Writer disconnected from buffer '%s'", self._connection.buffer_name
+                    if "ReaderDead" in error_type:
+                        logger.info(
+                            "Reader disconnected from buffer '%s'", self._connection.buffer_name
                         )
                         self._is_running = False
                         break
                     elif "BufferFull" in error_type:
-                        self._logger.error(
+                        logger.error(
                             "Buffer full on '%s': %s", self._connection.buffer_name, e
                         )
                         if not self._is_running:
                             break
                     elif "FrameTooLarge" in error_type:
-                        self._logger.error(
+                        logger.error(
                             "Frame too large on '%s': %s", self._connection.buffer_name, e
                         )
                         if not self._is_running:
                             break
                     elif "ZeroBuffer" in error_type:
-                        self._logger.error(
+                        logger.error(
                             "ZeroBuffer error on '%s': %s", self._connection.buffer_name, e
                         )
                         if not self._is_running:
                             break
                     else:
-                        self._logger.error(
+                        logger.error(
                             "Unexpected error processing frame from buffer '%s': %s",
                             self._connection.buffer_name,
                             e,
@@ -230,7 +239,7 @@ class OneWayShmController(IController):
                             break
 
         except Exception as e:
-            self._logger.error("Fatal error in frame processing loop: %s", e)
+            logger.error("Fatal error in frame processing loop: %s", e)
             self._is_running = False
 
     def _on_first_frame(self, on_frame: Callable[[Mat], None]) -> None:
@@ -258,53 +267,55 @@ class OneWayShmController(IController):
                     if metadata_bytes:
                         try:
                             # Log raw metadata for debugging
-                            self._logger.debug(
+                            logger.debug(
                                 "Raw metadata: %d bytes, type=%s, first 100 bytes: %s",
                                 len(metadata_bytes),
                                 type(metadata_bytes),
-                                bytes(metadata_bytes[:min(100, len(metadata_bytes))]),
+                                bytes(metadata_bytes[: min(100, len(metadata_bytes))]),
                             )
-                            
+
                             # Convert memoryview to bytes if needed
                             if isinstance(metadata_bytes, memoryview):
                                 metadata_bytes = bytes(metadata_bytes)
-                            
+
                             # Decode UTF-8
                             metadata_str = metadata_bytes.decode("utf-8")
-                            
+
                             # Check if metadata is empty or all zeros
-                            if not metadata_str or metadata_str == '\x00' * len(metadata_str):
-                                self._logger.warning("Metadata is empty or all zeros, skipping")
+                            if not metadata_str or metadata_str == "\x00" * len(metadata_str):
+                                logger.warning("Metadata is empty or all zeros, skipping")
                                 continue
-                            
+
                             # Find the start of JSON (skip any null bytes at the beginning)
-                            json_start = metadata_str.find('{')
+                            json_start = metadata_str.find("{")
                             if json_start == -1:
-                                self._logger.warning("No JSON found in metadata: %r", metadata_str[:100])
+                                logger.warning(
+                                    "No JSON found in metadata: %r", metadata_str[:100]
+                                )
                                 continue
-                            
+
                             if json_start > 0:
-                                self._logger.debug("Skipping %d bytes before JSON", json_start)
+                                logger.debug("Skipping %d bytes before JSON", json_start)
                                 metadata_str = metadata_str[json_start:]
-                            
+
                             # Find the end of JSON (handle null padding)
-                            json_end = metadata_str.rfind('}')
+                            json_end = metadata_str.rfind("}")
                             if json_end != -1 and json_end < len(metadata_str) - 1:
-                                metadata_str = metadata_str[:json_end + 1]
-                            
+                                metadata_str = metadata_str[: json_end + 1]
+
                             metadata_json = json.loads(metadata_str)
                             self._metadata = GstMetadata.from_json(metadata_json)
                             self._gst_caps = self._metadata.caps
-                            self._logger.info(
+                            logger.info(
                                 "Received metadata from buffer '%s': %s",
                                 self._connection.buffer_name,
                                 self._gst_caps,
                             )
                         except Exception as e:
-                            self._logger.error("Failed to parse metadata: %s", e)
+                            logger.error("Failed to parse metadata: %s", e)
                             # Log the actual metadata content for debugging
                             if metadata_bytes:
-                                self._logger.debug("Metadata content: %r", metadata_bytes[:200])
+                                logger.debug("Metadata content: %r", metadata_bytes[:200])
                             # Don't continue without metadata
                             continue
 
@@ -314,17 +325,24 @@ class OneWayShmController(IController):
                         on_frame(mat)
                         return  # Successfully processed first frame
 
+            except WriterDeadException:
+                self._is_running = False
+                logger.info(
+                    "Writer disconnected gracefully while waiting for first frame on buffer '%s'",
+                    self._connection.buffer_name,
+                )
+                raise
             except Exception as e:
                 error_type = type(e).__name__
-                if "ReaderDead" in error_type or "WriterDead" in error_type:
+                if "ReaderDead" in error_type:
                     self._is_running = False
-                    self._logger.info(
-                        "Writer disconnected while waiting for first frame on buffer '%s'",
+                    logger.info(
+                        "Reader disconnected while waiting for first frame on buffer '%s'",
                         self._connection.buffer_name,
                     )
                     raise
                 else:
-                    self._logger.error(
+                    logger.error(
                         "Error waiting for first frame on buffer '%s': %s",
                         self._connection.buffer_name,
                         e,
@@ -367,7 +385,7 @@ class OneWayShmController(IController):
                 # Check data size matches expected
                 expected_size = height * width * channels
                 if len(data) != expected_size:
-                    self._logger.error(
+                    logger.error(
                         "Data size mismatch. Expected %d bytes for %dx%d with %d channels, got %d",
                         expected_size,
                         width,
@@ -386,17 +404,46 @@ class OneWayShmController(IController):
                 elif channels == 4:
                     mat = data.reshape((height, width, 4))
                 else:
-                    self._logger.error("Unsupported channel count: %d", channels)
+                    logger.error("Unsupported channel count: %d", channels)
                     return None
 
                 return mat  # type: ignore[no-any-return]
 
-            # No caps available
-            self._logger.error("No GstCaps available for frame conversion")
+            # No caps available - try to infer from frame size
+            logger.warning("No GstCaps available, attempting to infer from frame size")
+            
+            # Try common resolutions
+            frame_size = len(frame.data)
+            common_resolutions = [
+                (640, 480, 3),   # VGA RGB
+                (640, 480, 4),   # VGA RGBA
+                (1280, 720, 3),  # 720p RGB
+                (1920, 1080, 3), # 1080p RGB
+                (640, 480, 1),   # VGA Grayscale
+            ]
+            
+            for width, height, channels in common_resolutions:
+                if frame_size == width * height * channels:
+                    logger.info(f"Inferred resolution: {width}x{height} with {channels} channels")
+                    
+                    # Create caps for future use
+                    format_str = "RGB" if channels == 3 else "RGBA" if channels == 4 else "GRAY8"
+                    self._gst_caps = GstCaps.from_simple(width=width, height=height, format=format_str)
+                    
+                    # Create Mat
+                    data = np.frombuffer(frame.data, dtype=np.uint8)
+                    if channels == 3:
+                        return data.reshape((height, width, 3))  # type: ignore[no-any-return]
+                    elif channels == 1:
+                        return data.reshape((height, width))  # type: ignore[no-any-return]
+                    elif channels == 4:
+                        return data.reshape((height, width, 4))  # type: ignore[no-any-return]
+            
+            logger.error(f"Could not infer resolution for frame size {frame_size}")
             return None
 
         except Exception as e:
-            self._logger.error("Failed to convert frame to Mat: %s", e)
+            logger.error("Failed to convert frame to Mat: %s", e)
             return None
 
     def _infer_caps_from_frame(self, mat: Mat) -> None:
@@ -412,12 +459,12 @@ class OneWayShmController(IController):
         shape = mat.shape
         if len(shape) == 2:
             # Grayscale
-            self._gst_caps = GstCaps(format="GRAY8", width=shape[1], height=shape[0])
+            self._gst_caps = GstCaps.from_simple(width=shape[1], height=shape[0], format="GRAY8")
         elif len(shape) == 3:
             # Color image
-            self._gst_caps = GstCaps(format="BGR", width=shape[1], height=shape[0])
+            self._gst_caps = GstCaps.from_simple(width=shape[1], height=shape[0], format="BGR")
 
-        self._logger.info("Inferred caps from frame: %s", self._gst_caps)
+        logger.info("Inferred caps from frame: %s", self._gst_caps)
 
 
 class DuplexShmController(IController):
@@ -428,13 +475,12 @@ class DuplexShmController(IController):
     sending processed frames to another buffer.
     """
 
-    def __init__(self, connection: ConnectionString, logger: logging.Logger | None = None):
+    def __init__(self, connection: ConnectionString):
         """
         Initialize the duplex controller.
 
         Args:
             connection: Connection string configuration
-            logger: Optional logger instance
         """
         if connection.protocol != Protocol.SHM:
             raise ValueError(
@@ -447,7 +493,6 @@ class DuplexShmController(IController):
             )
 
         self._connection = connection
-        self._logger = logger or logging.getLogger(__name__)
         self._duplex_server: IImmutableDuplexServer | None = None
         self._gst_caps: GstCaps | None = None
         self._metadata: GstMetadata | None = None
@@ -498,7 +543,7 @@ class DuplexShmController(IController):
             self._connection.buffer_name, config, timeout_seconds
         )
 
-        self._logger.info(
+        logger.info(
             "Starting duplex server for channel '%s' with size %s and metadata %s",
             self._connection.buffer_name,
             self._connection.buffer_size,
@@ -514,7 +559,7 @@ class DuplexShmController(IController):
         if not self._is_running:
             return
 
-        self._logger.info("Stopping DuplexShmController")
+        logger.info("Stopping DuplexShmController")
         self._is_running = False
 
         # Stop the duplex server
@@ -522,7 +567,7 @@ class DuplexShmController(IController):
             self._duplex_server.stop()
             self._duplex_server = None
 
-        self._logger.info("DuplexShmController stopped")
+        logger.info("DuplexShmController stopped")
 
     def _on_metadata(self, metadata_bytes: bytes | memoryview) -> None:
         """
@@ -531,18 +576,31 @@ class DuplexShmController(IController):
         Args:
             metadata_bytes: Raw metadata bytes or memoryview
         """
+        logger.debug(
+            "_on_metadata called with %d bytes", len(metadata_bytes) if metadata_bytes else 0
+        )
         try:
             # Convert memoryview to bytes if needed
             if isinstance(metadata_bytes, memoryview):
                 metadata_bytes = bytes(metadata_bytes)
-            
+
+            # Log raw bytes for debugging
+            logger.debug(
+                "Raw metadata bytes (first 100): %r",
+                metadata_bytes[: min(100, len(metadata_bytes))],
+            )
+
             metadata_str = metadata_bytes.decode("utf-8")
+            logger.debug(
+                "Decoded metadata string: %r", metadata_str[: min(200, len(metadata_str))]
+            )
+
             metadata_json = json.loads(metadata_str)
             self._metadata = GstMetadata.from_json(metadata_json)
             self._gst_caps = self._metadata.caps
-            self._logger.info("Received metadata: %s", self._metadata)
+            logger.info("Received metadata: %s", self._metadata)
         except Exception as e:
-            self._logger.warning("Failed to parse metadata: %s", e)
+            logger.error("Failed to parse metadata: %s", e, exc_info=True)
 
     def _process_duplex_frame(self, request_frame: Frame, response_writer: Writer) -> None:
         """
@@ -552,8 +610,14 @@ class DuplexShmController(IController):
             request_frame: Input frame from the request
             response_writer: Writer for the response frame
         """
+        logger.debug(
+            "_process_duplex_frame called, frame_count=%d, has_gst_caps=%s",
+            self._frame_count,
+            self._gst_caps is not None,
+        )
         try:
             if not self._on_frame_callback:
+                logger.warning("No frame callback set")
                 return
 
             self._frame_count += 1
@@ -561,6 +625,7 @@ class DuplexShmController(IController):
             # Convert input frame to Mat
             input_mat = self._frame_to_mat(request_frame)
             if input_mat is None:
+                logger.error("Failed to convert frame to Mat, gst_caps=%s", self._gst_caps)
                 return
 
             # Get buffer for output frame - use context manager for RAII
@@ -585,7 +650,9 @@ class DuplexShmController(IController):
                         )
                 else:
                     # Use same shape as input
-                    output_mat = np.frombuffer(output_buffer, dtype=np.uint8).reshape(input_mat.shape)
+                    output_mat = np.frombuffer(output_buffer, dtype=np.uint8).reshape(
+                        input_mat.shape
+                    )
 
                 # Call user's processing function
                 self._on_frame_callback(input_mat, output_mat)
@@ -593,7 +660,7 @@ class DuplexShmController(IController):
             # Commit the response frame after buffer is released
             response_writer.commit_frame()
 
-            self._logger.debug(
+            logger.debug(
                 "Processed duplex frame %d (%dx%d)",
                 self._frame_count,
                 input_mat.shape[1],
@@ -601,7 +668,7 @@ class DuplexShmController(IController):
             )
 
         except Exception as e:
-            self._logger.error("Error processing duplex frame: %s", e)
+            logger.error("Error processing duplex frame: %s", e)
 
     def _frame_to_mat(self, frame: Frame) -> Mat | None:
         """Convert frame to OpenCV Mat (reuse from OneWayShmController)."""
