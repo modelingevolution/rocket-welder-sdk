@@ -25,7 +25,6 @@ docker run -d \
     --name rocket-welder-test-duplex \
     --privileged \
     --ipc=host \
-    --pid=host \
     --cap-add=IPC_OWNER \
     -v /dev/shm:/dev/shm \
     -v /mnt/d/source/modelingevolution/rocket-welder-sdk/python/check_buffer.py:/check_buffer.py:ro \
