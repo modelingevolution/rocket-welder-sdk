@@ -10,6 +10,7 @@ import logging
 import os
 import signal
 import sys
+import time
 from datetime import datetime
 from typing import Optional
 
@@ -20,6 +21,85 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from rocket_welder_sdk import ConnectionMode, RocketWelderClient
+
+
+class FpsCalculator:
+    """Calculates FPS based on a rolling window of frame timestamps."""
+    
+    def __init__(self, window_size: int = 5):
+        """
+        Initialize FPS calculator.
+        
+        Args:
+            window_size: Number of frames to use for FPS calculation
+        """
+        self.window_size = window_size
+        self.frame_times = []
+        self.fps = 0.0
+    
+    def update(self) -> None:
+        """Update FPS calculation with a new frame."""
+        current_time = time.time()
+        self.frame_times.append(current_time)
+        
+        # Keep only last N frame times
+        if len(self.frame_times) > self.window_size:
+            self.frame_times.pop(0)
+        
+        # Calculate FPS from frame window
+        if len(self.frame_times) >= 2:
+            time_span = self.frame_times[-1] - self.frame_times[0]
+            if time_span > 0:
+                self.fps = (len(self.frame_times) - 1) / time_span
+    
+    def get_fps(self) -> float:
+        """Get current FPS value."""
+        return self.fps
+
+
+class FrameOverlay:
+    """Handles rendering of overlays on video frames."""
+    
+    @staticmethod
+    def draw_text(frame: np.ndarray, text: str, position: tuple, 
+                  font_scale: float = 0.5, color: tuple = (255, 255, 255), 
+                  thickness: int = 1) -> None:
+        """
+        Draw text on a frame.
+        
+        Args:
+            frame: Frame to draw on
+            text: Text to draw
+            position: (x, y) position for text
+            font_scale: Font size scale
+            color: BGR color tuple
+            thickness: Text thickness
+        """
+        cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX,
+                   font_scale, color, thickness)
+    
+    @staticmethod
+    def draw_duplex_overlay(frame: np.ndarray, frame_count: int, fps: float) -> None:
+        """
+        Draw duplex mode overlay on frame.
+        
+        Args:
+            frame: Frame to draw on
+            frame_count: Current frame number
+            fps: Current FPS value
+        """
+        # Draw "DUPLEX" label
+        FrameOverlay.draw_text(frame, "DUPLEX", (10, 30), 1.0, (0, 0, 255), 2)
+        
+        # Draw timestamp
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        FrameOverlay.draw_text(frame, timestamp, (10, 60))
+        
+        # Draw frame counter
+        FrameOverlay.draw_text(frame, f"Frame: {frame_count}", (10, 90))
+        
+        # Draw FPS
+        FrameOverlay.draw_text(frame, f"FPS: {fps:.1f}", (10, 120), color=(0, 255, 0))
 
 
 class VideoProcessingService:
@@ -45,7 +125,10 @@ class VideoProcessingService:
         self.frame_count = 0
         self.stop_event = asyncio.Event()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
-
+        
+        # Separate concerns - FPS calculation
+        self.fps_calculator = FpsCalculator(window_size=5)
+    
     async def run(self) -> None:
         """Run the video processing service."""
         self.logger.info(f"Starting RocketWelder client... {self.client.connection}")
@@ -122,42 +205,16 @@ class VideoProcessingService:
             output_frame: Output frame to fill with processed data
         """
         self.frame_count += 1
+        self.fps_calculator.update()
 
         # Copy input to output first
         np.copyto(output_frame, input_frame)
 
-        # Add overlay text to the output
-        cv2.putText(
-            output_frame,
-            "DUPLEX",
-            (10, 30),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            1.0,
-            (0, 0, 255),  # Red in BGR
-            2,
-        )
-
-        # Add timestamp overlay
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        cv2.putText(
-            output_frame,
-            timestamp,
-            (10, 60),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (255, 255, 255),  # White
-            1,
-        )
-
-        # Add frame counter
-        cv2.putText(
-            output_frame,
-            f"Frame: {self.frame_count}",
-            (10, 90),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (255, 255, 255),  # White
-            1,
+        # Use FrameOverlay to draw all overlays
+        FrameOverlay.draw_duplex_overlay(
+            output_frame, 
+            self.frame_count, 
+            self.fps_calculator.get_fps()
         )
 
         height, width = input_frame.shape[:2]

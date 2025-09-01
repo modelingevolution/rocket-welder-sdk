@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
@@ -8,9 +11,85 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
+using Emgu.CV.Structure;
 using RocketWelder.SDK;
 using ZeroBuffer;
 using ZeroBuffer.DuplexChannel;
+
+/// <summary>
+/// Calculates FPS based on a rolling window of frame timestamps.
+/// </summary>
+public class FpsCalculator
+{
+    private readonly int _windowSize;
+    private readonly Queue<DateTime> _frameTimes = new Queue<DateTime>();
+    private double _fps = 0.0;
+
+    public FpsCalculator(int windowSize = 5)
+    {
+        _windowSize = windowSize;
+    }
+
+    public void Update()
+    {
+        var now = DateTime.Now;
+        _frameTimes.Enqueue(now);
+        
+        // Keep only last N frame times
+        while (_frameTimes.Count > _windowSize)
+        {
+            _frameTimes.Dequeue();
+        }
+        
+        // Calculate FPS from frame window
+        if (_frameTimes.Count >= 2)
+        {
+            var first = _frameTimes.First();
+            var last = _frameTimes.Last();
+            var timeSpan = (last - first).TotalSeconds;
+            if (timeSpan > 0)
+            {
+                _fps = (_frameTimes.Count - 1) / timeSpan;
+            }
+        }
+    }
+
+    public double GetFps() => _fps;
+}
+
+/// <summary>
+/// Handles rendering of overlays on video frames.
+/// </summary>
+public static class FrameOverlay
+{
+    public static void DrawText(Mat frame, string text, Point position, 
+                                FontFace font = FontFace.HersheySimplex,
+                                double fontScale = 0.5, 
+                                MCvScalar? color = null, 
+                                int thickness = 1)
+    {
+        var textColor = color ?? new MCvScalar(255, 255, 255);
+        CvInvoke.PutText(frame, text, position, font, fontScale, textColor, thickness);
+    }
+
+    public static void DrawDuplexOverlay(Mat frame, int frameCount, double fps)
+    {
+        // Draw "DUPLEX" label
+        DrawText(frame, "DUPLEX", new Point(10, 30), 
+                fontScale: 1.0, color: new MCvScalar(0, 0, 255), thickness: 2);
+        
+        // Draw timestamp
+        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+        DrawText(frame, timestamp, new Point(10, 60));
+        
+        // Draw frame counter
+        DrawText(frame, $"Frame: {frameCount}", new Point(10, 90));
+        
+        // Draw FPS
+        DrawText(frame, $"FPS: {fps:F1}", new Point(10, 120), 
+                color: new MCvScalar(0, 255, 0));
+    }
+}
 
 class Program
 {
@@ -53,6 +132,9 @@ public class VideoProcessingService : BackgroundService
     private readonly IHostApplicationLifetime _lifetime;
     private int _frameCount = 0;
     private int _exitAfter = -1;
+    
+    // Separate concerns - FPS calculation
+    private readonly FpsCalculator _fpsCalculator = new FpsCalculator(windowSize: 5);
 
     public VideoProcessingService(
         RocketWelderClient client,
@@ -133,22 +215,13 @@ public class VideoProcessingService : BackgroundService
     private void ProcessFrameDuplex(Mat input, Mat output)
     {
         _frameCount++;
+        _fpsCalculator.Update();
 
         // Copy input to output first
         input.CopyTo(output);
 
-        // Add overlay text to the output
-        CvInvoke.PutText(output, "DUPLEX", new System.Drawing.Point(10, 30),
-                   Emgu.CV.CvEnum.FontFace.HersheySimplex, 1.0, new Emgu.CV.Structure.MCvScalar(0, 0, 255), 2);
-
-        // Add timestamp overlay
-        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-        CvInvoke.PutText(output, timestamp, new System.Drawing.Point(10, 60),
-                   Emgu.CV.CvEnum.FontFace.HersheySimplex, 0.5, new Emgu.CV.Structure.MCvScalar(255, 255, 255), 1);
-
-        // Add frame counter
-        CvInvoke.PutText(output, $"Frame: {_frameCount}", new System.Drawing.Point(10, 90),
-                   Emgu.CV.CvEnum.FontFace.HersheySimplex, 0.5, new Emgu.CV.Structure.MCvScalar(255, 255, 255), 1);
+        // Use FrameOverlay to draw all overlays
+        FrameOverlay.DrawDuplexOverlay(output, _frameCount, _fpsCalculator.GetFps());
 
         _logger.LogInformation("Processed frame {FrameCount} ({Width}x{Height}) in duplex mode", 
             _frameCount, input.Width, input.Height);
