@@ -15,15 +15,15 @@ namespace RocketWelder.SDK.Ui.Internals
         public Guid Id { get; init; } = Guid.NewGuid();
         public ControlType Type { get; init; }
         public ControlId ControlId { get; init; }
-        public Dictionary<string, string> Properties { get; init; }
-        public string RegionName { get; init; }
+        public Dictionary<string, string> Properties { get; init; } = new();
+        public RegionName RegionName { get; init; }
     }
 
     [OutputStream("Ui.Commands")]
-    public record DeleteControl
+    public record DeleteControls
     {
         public Guid Id { get; init; } = Guid.NewGuid();
-        public ControlId ControlId { get; init; }
+        public ImmutableHashSet<ControlId> ControlIds { get; init; } = ImmutableHashSet<ControlId>.Empty;
     }
 
     [OutputStream("Ui.Commands")]
@@ -66,6 +66,18 @@ namespace RocketWelder.SDK.Ui.Internals
     {
         
         public KeyCode Code { get; init; }
+    }
+
+    [OutputStream("Ui.Events")]
+    public record ArrowDown : EventBase
+    {
+        public ArrowDirection Direction { get; init; }
+    }
+
+    [OutputStream("Ui.Events")]
+    public record ArrowUp : EventBase
+    {
+        public ArrowDirection Direction { get; init; }
     }
 
     public enum ControlType

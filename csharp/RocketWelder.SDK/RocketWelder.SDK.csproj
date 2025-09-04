@@ -24,6 +24,7 @@
     <PackageReference Include="Emgu.CV" Version="4.11.0.5746" />
     <PackageReference Include="Emgu.CV.runtime.ubuntu-x64" Version="4.11.0.5746" />
     <PackageReference Include="MicroPlumberd" Version="1.0.114.150" />
+    <PackageReference Include="MicroPlumberd.Services" Version="1.0.114.150" />
     <PackageReference Include="MicroPlumberd.SourceGenerators" Version="1.0.114.150" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="9.0.8" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.8" />

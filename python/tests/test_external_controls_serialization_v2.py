@@ -14,7 +14,7 @@ from rocketwelder.external_controls.contracts import (
     ButtonUp,
     ChangeControls,
     DefineControl,
-    DeleteControl,
+    DeleteControls,
     RocketWelderControlType,
 )
 
@@ -42,13 +42,13 @@ class TestExternalControlsSerialization:
         )
         self._test_round_trip(define_control, "DefineControl")
     
-    def test_delete_control_round_trip(self):
-        """Test DeleteControl serialization and deserialization."""
-        delete_control = DeleteControl(
+    def test_delete_controls_round_trip(self):
+        """Test DeleteControls serialization and deserialization."""
+        delete_controls = DeleteControls(
             id=UUID("23456789-2345-2345-2345-234567890123"),
-            control_id="test-button",
+            control_ids=["test-button", "test-label"],
         )
-        self._test_round_trip(delete_control, "DeleteControl")
+        self._test_round_trip(delete_controls, "DeleteControls")
     
     def test_change_controls_round_trip(self):
         """Test ChangeControls serialization and deserialization."""
@@ -117,6 +117,8 @@ class TestExternalControlsSerialization:
         assert deserialized.id == original.id
         if hasattr(original, "control_id"):
             assert deserialized.control_id == original.control_id
+        if hasattr(original, "control_ids"):
+            assert deserialized.control_ids == original.control_ids
         if hasattr(original, "direction"):
             assert deserialized.direction == original.direction
         

@@ -1,7 +1,10 @@
 using System;
+using System.Text.Json.Serialization;
+using ModelingEvolution.JsonParsableConverter;
 
 namespace RocketWelder.SDK.Ui;
 
+[JsonConverter(typeof(JsonParsableConverter<KeyCode>))]
 public readonly record struct KeyCode : IParsable<KeyCode>
 {
     private readonly string _value;

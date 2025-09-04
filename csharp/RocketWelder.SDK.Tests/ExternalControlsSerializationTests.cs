@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -41,20 +42,22 @@ namespace RocketWelder.SDK.Tests
                     ["color"] = "Primary",
                     ["size"] = "Medium"
                 },
-                RegionName = "preview-top-right"
+                RegionName = (RegionName)"preview-top-right"
             };
             TestRoundTrip(defineControl, "DefineControl");
         }
 
         [Fact]
-        public void DeleteControl_RoundTrip()
+        public void DeleteControls_RoundTrip()
         {
-            var deleteControl = new DeleteControl
+            var deleteControls = new DeleteControls
             {
                 Id = Guid.Parse("23456789-2345-2345-2345-234567890123"),
-                ControlId = "test-button"
+                ControlIds = ImmutableHashSet<ControlId>.Empty
+                    .Add((ControlId)"test-button")
+                    .Add((ControlId)"test-label")
             };
-            TestRoundTrip(deleteControl, "DeleteControl");
+            TestRoundTrip(deleteControls, "DeleteControls");
         }
 
         [Fact]
@@ -63,18 +66,12 @@ namespace RocketWelder.SDK.Tests
             var changeControls = new ChangeControls
             {
                 Id = Guid.Parse("34567890-3456-3456-3456-345678901234"),
-                Updates = new Dictionary<ControlId, Dictionary<string, string>>
-                {
-                    [(ControlId)"test-button"] = new Dictionary<string, string>
-                    {
-                        ["text"] = "Clicked!",
-                        ["color"] = "Success"
-                    },
-                    [(ControlId)"test-label"] = new Dictionary<string, string>
-                    {
-                        ["text"] = "Status: Running"
-                    }
-                }
+                Updates = ImmutableDictionary<ControlId, ImmutableDictionary<string, string>>.Empty
+                    .Add((ControlId)"test-button", ImmutableDictionary<string, string>.Empty
+                        .Add("text", "Clicked!")
+                        .Add("color", "Success"))
+                    .Add((ControlId)"test-label", ImmutableDictionary<string, string>.Empty
+                        .Add("text", "Status: Running"))
             };
             TestRoundTrip(changeControls, "ChangeControls");
         }

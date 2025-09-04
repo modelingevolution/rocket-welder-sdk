@@ -6,7 +6,7 @@ proper serialization with PascalCase support.
 """
 
 from enum import Enum
-from typing import Annotated, Dict
+from typing import Annotated, Dict, List
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, ConfigDict, field_serializer
@@ -63,10 +63,10 @@ class DefineControl(BaseContract):
     region_name: str
 
 
-class DeleteControl(BaseContract):
-    """Command to delete a control from the UI."""
+class DeleteControls(BaseContract):
+    """Command to delete multiple controls from the UI."""
     
-    control_id: str
+    control_ids: List[str]
 
 
 class ChangeControls(BaseContract):
