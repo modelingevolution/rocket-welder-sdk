@@ -116,5 +116,269 @@ namespace RocketWelder.SDK.Tests
                 fireAndForget: true
             );
         }
+        
+        [Fact]
+        public async Task ArrowGridControl_KeyboardNavigation_ShouldTranslateEventsCorrectly()
+        {
+            // Arrange
+            var commandBus = Substitute.For<ICommandBus>();
+            var plumber = Substitute.For<IPlumberInstance>();
+            var sessionId = Guid.NewGuid();
+            var uiService = new UiService(sessionId);
+            
+            await uiService.InitializeWith(plumber, commandBus);
+            
+            // Act 1: Create and add ArrowGrid control
+            var controlId = (ControlId)"nav-grid";
+            var arrowGrid = uiService.Factory.DefineArrowGrid(
+                controlId,
+                new() { ["size"] = "Large", ["color"] = "Secondary" }
+            );
+            
+            uiService[RegionName.Bottom].Add(arrowGrid);
+            
+            // Process definition
+            await uiService.Do();
+            
+            // Assert 1: DefineControl was sent
+            await commandBus.Received(1).SendAsync(
+                sessionId,
+                Arg.Is<DefineControl>(cmd =>
+                    cmd.ControlId == controlId &&
+                    cmd.Type == ControlType.ArrowGrid &&
+                    cmd.RegionName.ToString() == "Bottom"
+                ),
+                fireAndForget: true
+            );
+            
+            // Act 2: Setup event handlers
+            var capturedEvents = new List<(string eventType, ArrowDirection direction)>();
+            arrowGrid.ArrowDown += (sender, direction) => capturedEvents.Add(("down", direction));
+            arrowGrid.ArrowUp += (sender, direction) => capturedEvents.Add(("up", direction));
+            
+            // Act 3: Simulate arrow key events
+            var directions = new[]
+            {
+                (KeyCode.ArrowUp, ArrowDirection.Up),
+                (KeyCode.ArrowDown, ArrowDirection.Down),
+                (KeyCode.ArrowLeft, ArrowDirection.Left),
+                (KeyCode.ArrowRight, ArrowDirection.Right)
+            };
+            
+            foreach (var (keyCode, expectedDirection) in directions)
+            {
+                // Simulate key down
+                await uiService.EnqueueEvent(new KeyDown
+                {
+                    Id = Guid.NewGuid(),
+                    ControlId = controlId,
+                    Code = keyCode
+                });
+                
+                // Simulate key up
+                await uiService.EnqueueEvent(new KeyUp
+                {
+                    Id = Guid.NewGuid(),
+                    ControlId = controlId,
+                    Code = keyCode
+                });
+            }
+            
+            // Process all events
+            await uiService.Do();
+            
+            // Assert 2: All events were translated correctly
+            Assert.Equal(8, capturedEvents.Count); // 4 key downs + 4 key ups
+            Assert.Contains(("down", ArrowDirection.Up), capturedEvents);
+            Assert.Contains(("up", ArrowDirection.Up), capturedEvents);
+            Assert.Contains(("down", ArrowDirection.Down), capturedEvents);
+            Assert.Contains(("up", ArrowDirection.Down), capturedEvents);
+            Assert.Contains(("down", ArrowDirection.Left), capturedEvents);
+            Assert.Contains(("up", ArrowDirection.Left), capturedEvents);
+            Assert.Contains(("down", ArrowDirection.Right), capturedEvents);
+            Assert.Contains(("up", ArrowDirection.Right), capturedEvents);
+            
+            // Act 4: Test non-arrow keys (should be ignored)
+            capturedEvents.Clear();
+            
+            await uiService.EnqueueEvent(new KeyDown
+            {
+                Id = Guid.NewGuid(),
+                ControlId = controlId,
+                Code = KeyCode.Enter
+            });
+            
+            await uiService.Do();
+            
+            // Assert 3: Non-arrow keys are ignored
+            Assert.Empty(capturedEvents);
+            
+            // Act 5: Update properties and dispose
+            arrowGrid.Color = Color.Warning;
+            arrowGrid.Size = Size.ExtraLarge;
+            
+            await uiService.Do();
+            
+            // Assert 4: Property changes sent
+            await commandBus.Received(1).SendAsync(
+                sessionId,
+                Arg.Is<ChangeControls>(cmd =>
+                    cmd.Updates.ContainsKey(controlId) &&
+                    cmd.Updates[controlId].ContainsKey("color") &&
+                    cmd.Updates[controlId]["color"] == "Warning" &&
+                    cmd.Updates[controlId].ContainsKey("size") &&
+                    cmd.Updates[controlId]["size"] == "ExtraLarge"
+                ),
+                fireAndForget: true
+            );
+        }
+        
+        [Fact]
+        public async Task LabelControl_BatchedUpdates_ShouldOptimizeCommands()
+        {
+            // Arrange
+            var commandBus = Substitute.For<ICommandBus>();
+            var plumber = Substitute.For<IPlumberInstance>();
+            var sessionId = Guid.NewGuid();
+            var uiService = new UiService(sessionId);
+            
+            await uiService.InitializeWith(plumber, commandBus);
+            
+            // Act 1: Create multiple labels
+            var labels = new List<LabelControl>();
+            var labelIds = new List<ControlId>();
+            
+            for (int i = 0; i < 5; i++)
+            {
+                var labelId = (ControlId)$"label-{i}";
+                labelIds.Add(labelId);
+                
+                var label = uiService.Factory.DefineLabel(
+                    labelId,
+                    $"Initial Text {i}",
+                    new() { ["typo"] = "body1", ["color"] = "TextPrimary" }
+                );
+                labels.Add(label);
+            }
+            
+            // Add to different regions
+            uiService[RegionName.Top].Add(labels[0]);
+            uiService[RegionName.TopLeft].Add(labels[1]);
+            uiService[RegionName.TopRight].Add(labels[2]);
+            uiService[RegionName.Bottom].Add(labels[3]);
+            uiService[RegionName.BottomLeft].Add(labels[4]);
+            
+            // Process all definitions
+            await uiService.Do();
+            
+            // Assert 1: All labels defined
+            await commandBus.Received(5).SendAsync(
+                sessionId,
+                Arg.Is<DefineControl>(cmd =>
+                    cmd.Type == ControlType.Label &&
+                    labelIds.Contains(cmd.ControlId)
+                ),
+                fireAndForget: true
+            );
+            
+            commandBus.ClearReceivedCalls();
+            
+            // Act 2: Update all labels at once
+            labels[0].Text = "Status: Running";
+            labels[0].Typography = Typography.H6;
+            labels[0].Color = Color.Success;
+            
+            labels[1].Text = "Warning Message";
+            labels[1].Typography = Typography.Subtitle1;
+            labels[1].Color = Color.Warning;
+            
+            labels[2].Text = "Error Occurred";
+            labels[2].Typography = Typography.Caption;
+            labels[2].Color = Color.Error;
+            
+            labels[3].Text = "Info Panel";
+            labels[3].Color = Color.Info;
+            
+            labels[4].Text = "Debug Output";
+            labels[4].Typography = Typography.Overline;
+            
+            // Process all updates in one batch
+            await uiService.Do();
+            
+            // Assert 2: Single ChangeControls command with all updates
+            await commandBus.Received(1).SendAsync(
+                sessionId,
+                Arg.Is<ChangeControls>(cmd =>
+                    cmd.Updates.Count == 5 &&
+                    // Label 0
+                    cmd.Updates[labelIds[0]]["text"] == "Status: Running" &&
+                    cmd.Updates[labelIds[0]]["typo"] == "h6" &&
+                    cmd.Updates[labelIds[0]]["color"] == "Success" &&
+                    // Label 1
+                    cmd.Updates[labelIds[1]]["text"] == "Warning Message" &&
+                    cmd.Updates[labelIds[1]]["typo"] == "subtitle1" &&
+                    cmd.Updates[labelIds[1]]["color"] == "Warning" &&
+                    // Label 2
+                    cmd.Updates[labelIds[2]]["text"] == "Error Occurred" &&
+                    cmd.Updates[labelIds[2]]["typo"] == "caption" &&
+                    cmd.Updates[labelIds[2]]["color"] == "Error" &&
+                    // Label 3
+                    cmd.Updates[labelIds[3]]["text"] == "Info Panel" &&
+                    cmd.Updates[labelIds[3]]["color"] == "Info" &&
+                    // Label 4
+                    cmd.Updates[labelIds[4]]["text"] == "Debug Output" &&
+                    cmd.Updates[labelIds[4]]["typo"] == "overline"
+                ),
+                fireAndForget: true
+            );
+            
+            // Act 3: No changes, no command should be sent
+            commandBus.ClearReceivedCalls();
+            await uiService.Do();
+            
+            // Assert 3: No commands sent when nothing changed
+            await commandBus.DidNotReceive().SendAsync(
+                Arg.Any<Guid>(),
+                Arg.Any<object>(),
+                fireAndForget: Arg.Any<bool>()
+            );
+            
+            // Act 4: Dispose some labels
+            labels[0].Dispose();
+            labels[2].Dispose();
+            labels[4].Dispose();
+            
+            await uiService.Do();
+            
+            // Assert 4: Batch delete command sent
+            await commandBus.Received(1).SendAsync(
+                sessionId,
+                Arg.Is<DeleteControls>(cmd =>
+                    cmd.ControlIds.Count == 3 &&
+                    cmd.ControlIds.Contains(labelIds[0]) &&
+                    cmd.ControlIds.Contains(labelIds[2]) &&
+                    cmd.ControlIds.Contains(labelIds[4])
+                ),
+                fireAndForget: true
+            );
+            
+            // Act 5: Update remaining labels
+            commandBus.ClearReceivedCalls();
+            labels[1].Text = "Still Active";
+            labels[3].Text = "Also Active";
+            
+            await uiService.Do();
+            
+            // Assert 5: Only active controls are updated
+            await commandBus.Received(1).SendAsync(
+                sessionId,
+                Arg.Is<ChangeControls>(cmd =>
+                    cmd.Updates.Count == 2 &&
+                    cmd.Updates[labelIds[1]]["text"] == "Still Active" &&
+                    cmd.Updates[labelIds[3]]["text"] == "Also Active"
+                ),
+                fireAndForget: true
+            );
+        }
     }
 }
