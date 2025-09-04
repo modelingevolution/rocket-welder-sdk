@@ -69,6 +69,10 @@ class DeleteControls(BaseContract):
     control_ids: List[str]
 
 
+# Legacy alias for backward compatibility (will be removed)
+DeleteControl = DeleteControls
+
+
 class ChangeControls(BaseContract):
     """Command to update properties of multiple controls."""
     

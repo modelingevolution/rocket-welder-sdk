@@ -15,7 +15,7 @@ from rocketwelder.external_controls import (
     ButtonUp,
     ChangeControls,
     DefineControl,
-    DeleteControl,
+    DeleteControls,
     RocketWelderControlType,
 )
 
@@ -44,13 +44,13 @@ class TestExternalControlsSerialization:
         )
         self._test_round_trip(define_control, "DefineControl")
 
-    def test_delete_control_round_trip(self):
-        """Test DeleteControl serialization and deserialization."""
-        delete_control = DeleteControl(
+    def test_delete_controls_round_trip(self):
+        """Test DeleteControls serialization and deserialization."""
+        delete_controls = DeleteControls(
             id=UUID("23456789-2345-2345-2345-234567890123"),
-            control_id="test-button",
+            control_ids=["test-label", "test-button"],
         )
-        self._test_round_trip(delete_control, "DeleteControl")
+        self._test_round_trip(delete_controls, "DeleteControls")
 
     def test_change_controls_round_trip(self):
         """Test ChangeControls serialization and deserialization."""
@@ -104,26 +104,28 @@ class TestExternalControlsSerialization:
 
     def _test_round_trip(self, original, type_name: str):
         """Test serialization and deserialization of a single object."""
-        # Serialize using to_dict (already returns PascalCase for EventStore)
-        data = original.to_dict()
+        # Serialize using model_dump with by_alias=True (returns PascalCase for EventStore)
+        data = original.model_dump(by_alias=True, mode='json')
         
         # Write to file (no conversion needed - EventStore expects PascalCase)
         file_path = self.output_path / f"{type_name}_python.json"
         with open(file_path, "w") as f:
             json.dump(data, f, indent=2)
         
-        # For types with from_dict, test deserialization
-        if hasattr(original.__class__, "from_dict"):
-            # No conversion needed - data is already in PascalCase
-            deserialized = original.__class__.from_dict(data)
-            
-            # Verify round-trip
+        # Test deserialization using model_validate
+        # No conversion needed - data is already in PascalCase
+        deserialized = original.__class__.model_validate(data)
+        
+        # Verify round-trip
+        if hasattr(original, "control_id"):
             assert deserialized.control_id == original.control_id
-            assert deserialized.id == original.id
-            if hasattr(original, "direction"):
-                assert deserialized.direction == original.direction
+        if hasattr(original, "control_ids"):
+            assert deserialized.control_ids == original.control_ids
+        assert deserialized.id == original.id
+        if hasattr(original, "direction"):
+            assert deserialized.direction == original.direction
         
         # Verify we can serialize again
-        data2 = original.to_dict()
+        data2 = original.model_dump(by_alias=True, mode='json')
         assert data == data2
 

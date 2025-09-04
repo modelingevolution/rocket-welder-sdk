@@ -6,7 +6,8 @@ from .contracts import (
     ArrowDirection,
     # Commands (Container → UI)
     DefineControl,
-    DeleteControl,
+    DeleteControls,
+    DeleteControl,  # Legacy alias - deprecated
     ChangeControls,
     # Events (UI → Container)
     ButtonDown,
@@ -19,7 +20,8 @@ __all__ = [
     "RocketWelderControlType",
     "ArrowDirection",
     "DefineControl",
-    "DeleteControl",
+    "DeleteControls",
+    "DeleteControl",  # Legacy - deprecated
     "ChangeControls",
     "ButtonDown",
     "ButtonUp",
