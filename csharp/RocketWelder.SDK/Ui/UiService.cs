@@ -1,13 +1,14 @@
-﻿using System;
+﻿using MicroPlumberd;
+using MicroPlumberd.Services;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using RocketWelder.SDK.Ui.Internals;
+using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using MicroPlumberd;
-using MicroPlumberd.Services;
-using Microsoft.Extensions.DependencyInjection;
-using RocketWelder.SDK.Ui.Internals;
 
 namespace RocketWelder.SDK.Ui;
 
@@ -21,9 +22,13 @@ public class UiService : IUiService
     private ImmutableHashSet<ControlId> _scheduledDeletions = ImmutableHashSet<ControlId>.Empty;
     private ImmutableList<(ControlBase control, RegionName region, ControlType type)> _scheduledDefinitions = ImmutableList<(ControlBase, RegionName, ControlType)>.Empty;
     private readonly Dictionary<RegionName, ItemsControl> _regions = new();
-    private ServiceProvider? _sp;
+    private IServiceProvider? _sp;
     internal Task EnqueueEvent(object evt)=> _eventQueue.Given(new Metadata(), evt);
-    public UiService(Guid sessionId)
+
+    public static UiService FromSessionId(Guid sessionId) => new UiService(sessionId);
+    public static UiService From(IConfiguration configuration) => new UiService(Guid.Parse(configuration["SessionId"] ?? throw new ArgumentNullException("SessionId")));
+
+    internal UiService(Guid sessionId)
     {
         _sessionId = sessionId;
             
@@ -64,11 +69,14 @@ public class UiService : IUiService
             // Send DefineControl commands
             foreach (var (control, region, type) in toDefine)
             {
+                // Add to index when actually defining the control
+                _index[control.Id] = control;
+                
                 var defineCommand = new DefineControl
                 {
                     ControlId = control.Id,
                     Type = type,
-                    Properties = control.Changed.ToDictionary(kvp => kvp.Key, kvp => kvp.Value),
+                    Properties = control.Changed,
                     RegionName = region
                 };
                 
@@ -91,16 +99,9 @@ public class UiService : IUiService
             // Remove from local index and regions
             foreach (var controlId in toDelete)
             {
-                if (_index.Remove(controlId, out var control))
-                {
-                    foreach (var region in _regions.Values)
-                    {
-                        if (region.Contains(control))
-                        {
-                            region.Remove(control);
-                        }
-                    }
-                }
+                if (!_index.Remove(controlId, out var control)) continue;
+
+                foreach (var region in _regions.Values.Where(region => region.Contains(control))) region.Remove(control);
             }
         }
     }
@@ -134,9 +135,14 @@ public class UiService : IUiService
     {
         ServiceCollection sc = new ServiceCollection();
         sc.AddPlumberd();
-        _sp = sc.BuildServiceProvider();
-        var p = _sp.GetRequiredService<IPlumberInstance>();
-        var b  = _sp.GetRequiredService<ICommandBus>();
+        await Initialize(sc.BuildServiceProvider());
+    }
+
+    public async Task Initialize(IServiceProvider sp)
+    {
+        _sp = sp;
+        var p = sp.GetRequiredService<IPlumberInstance>();
+        var b  = sp.GetRequiredService<ICommandBus>();
         await InitializeWith(p, b);
     }
 
@@ -146,14 +152,6 @@ public class UiService : IUiService
         _bus = bus;
         await _plumber.SubscribeEventHandler(_eventQueue, $"Ui.Events-{_sessionId}");
     }
-    internal void RegisterControl(ControlBase control)
-    {
-        if (control == null)
-            throw new ArgumentNullException(nameof(control));
-                
-        _index[control.Id] = control;
-    }
-        
     internal void ScheduleDelete(ControlId controlId)
     {
         // Thread-safe addition using immutable collection

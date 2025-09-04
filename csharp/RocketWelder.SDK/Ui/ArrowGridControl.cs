@@ -4,6 +4,7 @@ using RocketWelder.SDK.Ui.Internals;
 
 namespace RocketWelder.SDK.Ui;
 
+[ControlType(ControlType.ArrowGrid)]
 public sealed class ArrowGridControl : ControlBase
 {
     public event EventHandler<ArrowDirection>? ArrowDown;

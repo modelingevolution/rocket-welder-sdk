@@ -4,6 +4,7 @@ using RocketWelder.SDK.Ui.Internals;
 
 namespace RocketWelder.SDK.Ui;
 
+[ControlType(ControlType.IconButton)]
 public sealed class IconButtonControl : ControlBase
 {
     public event EventHandler? ButtonDown;

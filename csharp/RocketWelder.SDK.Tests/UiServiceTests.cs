@@ -93,20 +93,6 @@ namespace RocketWelder.SDK.Tests
             Assert.True(true); // Placeholder - actual assertion would depend on implementation
         }
 
-        [Fact]
-        public void RegisterControl_WithValidControl_ShouldAddToIndex()
-        {
-            // Arrange
-            var controlId = (ControlId)"test-control";
-            var control = new LabelControl(controlId, _uiService, null);
-
-            // Act
-            _uiService.RegisterControl(control);
-
-            // Assert - control should be registered
-            // Note: Would need to verify through index or by testing event dispatch
-            Assert.True(true); // Placeholder
-        }
 
         [Fact]
         public void ScheduleDelete_CanBeCalledFromMultipleThreadsConcurrently()

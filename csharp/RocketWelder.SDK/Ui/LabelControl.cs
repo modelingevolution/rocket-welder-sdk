@@ -3,6 +3,7 @@ using RocketWelder.SDK.Ui.Internals;
 
 namespace RocketWelder.SDK.Ui;
 
+[ControlType(ControlType.Label)]
 public sealed class LabelControl : ControlBase
 {
     internal LabelControl(ControlId id, UiService ui, Dictionary<string, string>? properties = null) 
