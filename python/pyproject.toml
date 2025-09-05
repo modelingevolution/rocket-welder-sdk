@@ -54,6 +54,9 @@ Homepage = "https://github.com/modelingevolution/rocket-welder-sdk"
 Repository = "https://github.com/modelingevolution/rocket-welder-sdk.git"
 Issues = "https://github.com/modelingevolution/rocket-welder-sdk/issues"
 
+[tool.setuptools.dynamic]
+version = {file = "VERSION"}
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["rocket_welder_sdk*"]
