@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "rocket-welder-sdk"
-version = "1.1.0"
+dynamic = ["version"]
 description = "High-performance video streaming SDK for RocketWelder services using ZeroBuffer IPC"
 readme = "README.md"
 requires-python = ">=3.9"
