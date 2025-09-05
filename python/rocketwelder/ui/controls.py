@@ -1,126 +1,70 @@
-"""UI Control classes for RocketWelder SDK."""
+"""UI Control base classes and implementations."""
+
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from enum import Enum
-from typing import Any, Dict, Optional
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any, Callable, ClassVar
 
-from ..external_controls.contracts import (
+from ..external_controls import (
     ArrowDirection,
     ButtonDown,
     ButtonUp,
     KeyDown,
     KeyUp,
-    RocketWelderControlType,
 )
+from .value_types import Color, ControlType, Size, Typography
 
-
-class ControlType(str, Enum):
-    """Control types matching C# ControlType enum."""
-    
-    ICON_BUTTON = "IconButton"
-    ARROW_GRID = "ArrowGrid"
-    LABEL = "Label"
-
-
-class RegionName(str, Enum):
-    """Region names for control placement."""
-    
-    TOP = "Top"
-    TOP_LEFT = "TopLeft"
-    TOP_RIGHT = "TopRight"
-    BOTTOM = "Bottom"
-    BOTTOM_LEFT = "BottomLeft"
-    BOTTOM_RIGHT = "BottomRight"
-
-
-class Color(str, Enum):
-    """Color values for controls."""
-    
-    PRIMARY = "Primary"
-    SECONDARY = "Secondary"
-    SUCCESS = "Success"
-    INFO = "Info"
-    WARNING = "Warning"
-    ERROR = "Error"
-    TEXT_PRIMARY = "TextPrimary"
-    TEXT_SECONDARY = "TextSecondary"
-    DEFAULT = "Default"
-
-
-class Size(str, Enum):
-    """Size values for controls."""
-    
-    SMALL = "Small"
-    MEDIUM = "Medium"
-    LARGE = "Large"
-    EXTRA_LARGE = "ExtraLarge"
-
-
-class Typography(str, Enum):
-    """Typography values for text controls."""
-    
-    H1 = "h1"
-    H2 = "h2"
-    H3 = "h3"
-    H4 = "h4"
-    H5 = "h5"
-    H6 = "h6"
-    SUBTITLE1 = "subtitle1"
-    SUBTITLE2 = "subtitle2"
-    BODY1 = "body1"
-    BODY2 = "body2"
-    CAPTION = "caption"
-    OVERLINE = "overline"
+if TYPE_CHECKING:
+    from .ui_service import UiService
 
 
 class ControlBase(ABC):
     """Base class for all UI controls."""
-    
+
     def __init__(
         self,
         control_id: str,
         control_type: ControlType,
-        ui_service: 'UiService',
-        properties: Optional[Dict[str, str]] = None
-    ):
+        ui_service: UiService,
+        properties: dict[str, str] | None = None,
+    ) -> None:
         """
         Initialize base control.
-        
+
         Args:
             control_id: Unique identifier for the control
             control_type: Type of the control
             ui_service: Reference to parent UiService
             properties: Initial properties
         """
-        self.id = control_id
-        self.control_type = control_type
-        self._ui_service = ui_service
-        self._properties = properties or {}
-        self._changed = {}
-        self._is_disposed = False
-    
+        self.id: str = control_id
+        self.control_type: ControlType = control_type
+        self._ui_service: UiService = ui_service
+        self._properties: dict[str, str] = properties or {}
+        self._changed: dict[str, str] = {}
+        self._is_disposed: bool = False
+
     @property
     def is_dirty(self) -> bool:
         """Check if control has uncommitted changes."""
         return bool(self._changed)
-    
+
     @property
-    def changed(self) -> Dict[str, str]:
+    def changed(self) -> dict[str, str]:
         """Get pending changes."""
         return self._changed.copy()
-    
+
     @property
-    def properties(self) -> Dict[str, str]:
+    def properties(self) -> dict[str, str]:
         """Get current properties including changes."""
         props = self._properties.copy()
         props.update(self._changed)
         return props
-    
+
     def set_property(self, name: str, value: Any) -> None:
         """
         Set a property value.
-        
+
         Args:
             name: Property name
             value: Property value (will be converted to string)
@@ -128,22 +72,22 @@ class ControlBase(ABC):
         str_value = str(value) if value is not None else ""
         if self._properties.get(name) != str_value:
             self._changed[name] = str_value
-    
+
     def commit_changes(self) -> None:
         """Commit pending changes to properties."""
         self._properties.update(self._changed)
         self._changed.clear()
-    
+
     @abstractmethod
     def handle_event(self, event: Any) -> None:
         """
         Handle an event for this control.
-        
+
         Args:
             event: Event to handle
         """
         pass
-    
+
     def dispose(self) -> None:
         """Dispose of the control."""
         if not self._is_disposed:
@@ -153,17 +97,17 @@ class ControlBase(ABC):
 
 class IconButtonControl(ControlBase):
     """Icon button control with click events."""
-    
+
     def __init__(
         self,
         control_id: str,
-        ui_service: 'UiService',
+        ui_service: UiService,
         icon: str,
-        properties: Optional[Dict[str, str]] = None
-    ):
+        properties: dict[str, str] | None = None,
+    ) -> None:
         """
         Initialize icon button control.
-        
+
         Args:
             control_id: Unique identifier
             ui_service: Parent UiService
@@ -173,52 +117,76 @@ class IconButtonControl(ControlBase):
         props = properties or {}
         props["icon"] = icon
         super().__init__(control_id, ControlType.ICON_BUTTON, ui_service, props)
-        
+
         # Event handlers
-        self.on_button_down = None
-        self.on_button_up = None
-    
+        self.on_button_down: Callable[[IconButtonControl], None] | None = None
+        self.on_button_up: Callable[[IconButtonControl], None] | None = None
+
     @property
     def icon(self) -> str:
         """Get icon SVG path."""
         return self.properties.get("icon", "")
-    
+
     @icon.setter
     def icon(self, value: str) -> None:
         """Set icon SVG path."""
         self.set_property("icon", value)
-    
+
     @property
-    def text(self) -> Optional[str]:
+    def text(self) -> str | None:
         """Get button text."""
         return self.properties.get("text")
-    
+
     @text.setter
-    def text(self, value: Optional[str]) -> None:
+    def text(self, value: str | None) -> None:
         """Set button text."""
         if value is not None:
             self.set_property("text", value)
-    
+
     @property
     def color(self) -> Color:
         """Get button color."""
-        return Color(self.properties.get("color", Color.PRIMARY.value))
-    
+        color_str = self.properties.get("color", Color.PRIMARY.value)
+        try:
+            return Color(color_str)
+        except ValueError:
+            return Color.PRIMARY
+
     @color.setter
-    def color(self, value: Color) -> None:
+    def color(self, value: Color | str) -> None:
         """Set button color."""
-        self.set_property("color", value.value)
-    
+        if isinstance(value, Color):
+            self.set_property("color", value.value)
+        else:
+            # Try to find matching enum
+            for color in Color:
+                if color.value == value:
+                    self.set_property("color", value)
+                    return
+            raise ValueError(f"Invalid color value: {value}")
+
     @property
     def size(self) -> Size:
         """Get button size."""
-        return Size(self.properties.get("size", Size.MEDIUM.value))
-    
+        size_str = self.properties.get("size", Size.MEDIUM.value)
+        try:
+            return Size(size_str)
+        except ValueError:
+            return Size.MEDIUM
+
     @size.setter
-    def size(self, value: Size) -> None:
+    def size(self, value: Size | str) -> None:
         """Set button size."""
-        self.set_property("size", value.value)
-    
+        if isinstance(value, Size):
+            self.set_property("size", value.value)
+        else:
+            # Try to find matching enum
+            for size in Size:
+                if size.value == value:
+                    self.set_property("size", value)
+                    return
+            raise ValueError(f"Invalid size value: {value}")
+
     def handle_event(self, event: Any) -> None:
         """Handle button events."""
         if isinstance(event, ButtonDown) and self.on_button_down:
@@ -229,55 +197,76 @@ class IconButtonControl(ControlBase):
 
 class ArrowGridControl(ControlBase):
     """Arrow grid control for directional input."""
-    
+
     # Mapping from key codes to arrow directions
-    KEY_TO_DIRECTION = {
+    KEY_TO_DIRECTION: ClassVar[dict[str, ArrowDirection]] = {
         "ArrowUp": ArrowDirection.UP,
         "ArrowDown": ArrowDirection.DOWN,
         "ArrowLeft": ArrowDirection.LEFT,
         "ArrowRight": ArrowDirection.RIGHT,
     }
-    
+
     def __init__(
-        self,
-        control_id: str,
-        ui_service: 'UiService',
-        properties: Optional[Dict[str, str]] = None
-    ):
+        self, control_id: str, ui_service: UiService, properties: dict[str, str] | None = None
+    ) -> None:
         """
         Initialize arrow grid control.
-        
+
         Args:
             control_id: Unique identifier
             ui_service: Parent UiService
             properties: Additional properties
         """
         super().__init__(control_id, ControlType.ARROW_GRID, ui_service, properties)
-        
+
         # Event handlers
-        self.on_arrow_down = None
-        self.on_arrow_up = None
-    
+        self.on_arrow_down: Callable[[ArrowGridControl, ArrowDirection], None] | None = None
+        self.on_arrow_up: Callable[[ArrowGridControl, ArrowDirection], None] | None = None
+
     @property
     def size(self) -> Size:
         """Get grid size."""
-        return Size(self.properties.get("size", Size.MEDIUM.value))
-    
+        size_str = self.properties.get("size", Size.MEDIUM.value)
+        try:
+            return Size(size_str)
+        except ValueError:
+            return Size.MEDIUM
+
     @size.setter
-    def size(self, value: Size) -> None:
+    def size(self, value: Size | str) -> None:
         """Set grid size."""
-        self.set_property("size", value.value)
-    
+        if isinstance(value, Size):
+            self.set_property("size", value.value)
+        else:
+            # Try to find matching enum
+            for size in Size:
+                if size.value == value:
+                    self.set_property("size", value)
+                    return
+            raise ValueError(f"Invalid size value: {value}")
+
     @property
     def color(self) -> Color:
         """Get grid color."""
-        return Color(self.properties.get("color", Color.PRIMARY.value))
-    
+        color_str = self.properties.get("color", Color.PRIMARY.value)
+        try:
+            return Color(color_str)
+        except ValueError:
+            return Color.PRIMARY
+
     @color.setter
-    def color(self, value: Color) -> None:
+    def color(self, value: Color | str) -> None:
         """Set grid color."""
-        self.set_property("color", value.value)
-    
+        if isinstance(value, Color):
+            self.set_property("color", value.value)
+        else:
+            # Try to find matching enum
+            for color in Color:
+                if color.value == value:
+                    self.set_property("color", value)
+                    return
+            raise ValueError(f"Invalid color value: {value}")
+
     def handle_event(self, event: Any) -> None:
         """Handle keyboard events and translate to arrow events."""
         if isinstance(event, KeyDown):
@@ -292,17 +281,17 @@ class ArrowGridControl(ControlBase):
 
 class LabelControl(ControlBase):
     """Label control for displaying text."""
-    
+
     def __init__(
         self,
         control_id: str,
-        ui_service: 'UiService',
+        ui_service: UiService,
         text: str,
-        properties: Optional[Dict[str, str]] = None
-    ):
+        properties: dict[str, str] | None = None,
+    ) -> None:
         """
         Initialize label control.
-        
+
         Args:
             control_id: Unique identifier
             ui_service: Parent UiService
@@ -312,37 +301,61 @@ class LabelControl(ControlBase):
         props = properties or {}
         props["text"] = text
         super().__init__(control_id, ControlType.LABEL, ui_service, props)
-    
+
     @property
     def text(self) -> str:
         """Get label text."""
         return self.properties.get("text", "")
-    
+
     @text.setter
     def text(self, value: str) -> None:
         """Set label text."""
         self.set_property("text", value)
-    
+
     @property
     def typography(self) -> Typography:
         """Get label typography."""
-        return Typography(self.properties.get("typo", Typography.BODY1.value))
-    
+        typo_str = self.properties.get("typo", Typography.BODY1.value)
+        try:
+            return Typography(typo_str)
+        except ValueError:
+            return Typography.BODY1
+
     @typography.setter
-    def typography(self, value: Typography) -> None:
+    def typography(self, value: Typography | str) -> None:
         """Set label typography."""
-        self.set_property("typo", value.value)
-    
+        if isinstance(value, Typography):
+            self.set_property("typo", value.value)
+        else:
+            # Try to find matching enum
+            for typo in Typography:
+                if typo.value == value:
+                    self.set_property("typo", value)
+                    return
+            raise ValueError(f"Invalid typography value: {value}")
+
     @property
     def color(self) -> Color:
         """Get label color."""
-        return Color(self.properties.get("color", Color.TEXT_PRIMARY.value))
-    
+        color_str = self.properties.get("color", Color.TEXT_PRIMARY.value)
+        try:
+            return Color(color_str)
+        except ValueError:
+            return Color.TEXT_PRIMARY
+
     @color.setter
-    def color(self, value: Color) -> None:
+    def color(self, value: Color | str) -> None:
         """Set label color."""
-        self.set_property("color", value.value)
-    
+        if isinstance(value, Color):
+            self.set_property("color", value.value)
+        else:
+            # Try to find matching enum
+            for color in Color:
+                if color.value == value:
+                    self.set_property("color", value)
+                    return
+            raise ValueError(f"Invalid color value: {value}")
+
     def handle_event(self, event: Any) -> None:
         """Labels typically don't handle events."""
         pass

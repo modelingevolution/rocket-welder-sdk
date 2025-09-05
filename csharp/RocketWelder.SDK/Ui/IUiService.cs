@@ -7,6 +7,7 @@ public interface IUiService
 {
     IUiControlFactory Factory { get; }
     IItemsControl this[RegionName r] { get; }
-    Task Initialize();
-    Task Initialize(IServiceProvider serviceProvider);
+    Task<IUiService> Initialize();
+    Task<IUiService> Initialize(IServiceProvider serviceProvider);
+    Task Do();
 }

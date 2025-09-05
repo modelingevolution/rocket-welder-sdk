@@ -25,8 +25,8 @@ public class UiService : IUiService
     private IServiceProvider? _sp;
     internal Task EnqueueEvent(object evt)=> _eventQueue.Given(new Metadata(), evt);
 
-    public static UiService FromSessionId(Guid sessionId) => new UiService(sessionId);
-    public static UiService From(IConfiguration configuration) => new UiService(Guid.Parse(configuration["SessionId"] ?? throw new ArgumentNullException("SessionId")));
+    public static IUiService FromSessionId(Guid sessionId) => new UiService(sessionId);
+    public static IUiService From(IConfiguration configuration) => new UiService(Guid.Parse(configuration["SessionId"] ?? throw new ArgumentNullException("SessionId")));
 
     internal UiService(Guid sessionId)
     {
@@ -51,7 +51,7 @@ public class UiService : IUiService
     /// Send commands in single thread loop.
     /// </summary>
     /// <returns></returns>
-    internal async Task Do()
+    public async Task Do()
     {
         DispatchEvents();
         await ProcessScheduledDefinitions();
@@ -131,19 +131,21 @@ public class UiService : IUiService
     public IUiControlFactory Factory { get; }
         
     public IItemsControl this[RegionName r] => _regions[r];
-    public async Task Initialize()
+    public async Task<IUiService> Initialize()
     {
         ServiceCollection sc = new ServiceCollection();
         sc.AddPlumberd();
         await Initialize(sc.BuildServiceProvider());
+        return this;
     }
 
-    public async Task Initialize(IServiceProvider sp)
+    public async Task<IUiService> Initialize(IServiceProvider sp)
     {
         _sp = sp;
         var p = sp.GetRequiredService<IPlumberInstance>();
         var b  = sp.GetRequiredService<ICommandBus>();
         await InitializeWith(p, b);
+        return this;
     }
 
     internal async Task InitializeWith(IPlumberInstance plumberd, ICommandBus bus)

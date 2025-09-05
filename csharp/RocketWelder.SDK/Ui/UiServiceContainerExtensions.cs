@@ -15,8 +15,8 @@ public static class UiServiceContainerExtensions {
             di.AddPlumberd();
         }
         
-        di.AddSingleton<IUiService>(x => x.GetRequiredService<UiService>());
-        di.AddSingleton<UiService>(sp =>
+        
+        di.AddSingleton<IUiService>(sp =>
         {
             var c = sp.GetRequiredService<IConfiguration>();
             return UiService.From(c);

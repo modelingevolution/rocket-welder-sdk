@@ -4,8 +4,6 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-import pytest
-
 from rocketwelder.external_controls.contracts import (
     ArrowDirection,
     ArrowDown,
@@ -21,12 +19,12 @@ from rocketwelder.external_controls.contracts import (
 
 class TestExternalControlsSerialization:
     """Test serialization compatibility between C# and Python using Pydantic v2."""
-    
+
     def setup_method(self):
         """Set up test output directory."""
         self.output_path = Path("test_output")
         self.output_path.mkdir(exist_ok=True)
-    
+
     def test_define_control_round_trip(self):
         """Test DefineControl serialization and deserialization."""
         define_control = DefineControl(
@@ -41,7 +39,7 @@ class TestExternalControlsSerialization:
             region_name="preview-top-right",
         )
         self._test_round_trip(define_control, "DefineControl")
-    
+
     def test_delete_controls_round_trip(self):
         """Test DeleteControls serialization and deserialization."""
         delete_controls = DeleteControls(
@@ -49,7 +47,7 @@ class TestExternalControlsSerialization:
             control_ids=["test-button", "test-label"],
         )
         self._test_round_trip(delete_controls, "DeleteControls")
-    
+
     def test_change_controls_round_trip(self):
         """Test ChangeControls serialization and deserialization."""
         change_controls = ChangeControls(
@@ -65,7 +63,7 @@ class TestExternalControlsSerialization:
             },
         )
         self._test_round_trip(change_controls, "ChangeControls")
-    
+
     def test_button_down_round_trip(self):
         """Test ButtonDown serialization and deserialization."""
         button_down = ButtonDown(
@@ -73,7 +71,7 @@ class TestExternalControlsSerialization:
             control_id="test-button",
         )
         self._test_round_trip(button_down, "ButtonDown")
-    
+
     def test_button_up_round_trip(self):
         """Test ButtonUp serialization and deserialization."""
         button_up = ButtonUp(
@@ -81,7 +79,7 @@ class TestExternalControlsSerialization:
             control_id="test-button",
         )
         self._test_round_trip(button_up, "ButtonUp")
-    
+
     def test_arrow_down_round_trip(self):
         """Test ArrowDown serialization and deserialization."""
         arrow_down = ArrowDown(
@@ -90,7 +88,7 @@ class TestExternalControlsSerialization:
             direction=ArrowDirection.UP,
         )
         self._test_round_trip(arrow_down, "ArrowDown")
-    
+
     def test_arrow_up_round_trip(self):
         """Test ArrowUp serialization and deserialization."""
         arrow_up = ArrowUp(
@@ -99,20 +97,20 @@ class TestExternalControlsSerialization:
             direction=ArrowDirection.DOWN,
         )
         self._test_round_trip(arrow_up, "ArrowUp")
-    
+
     def _test_round_trip(self, original, type_name: str):
         """Test serialization and deserialization of a single object."""
         # Serialize to PascalCase for EventStore
         data = original.model_dump(by_alias=True)
-        
+
         # Write to file
         file_path = self.output_path / f"{type_name}_python.json"
         with open(file_path, "w") as f:
             json.dump(data, f, indent=2)
-        
+
         # Test deserialization
         deserialized = original.__class__.model_validate(data)
-        
+
         # Verify round-trip using Pythonic snake_case
         assert deserialized.id == original.id
         if hasattr(original, "control_id"):
@@ -121,7 +119,7 @@ class TestExternalControlsSerialization:
             assert deserialized.control_ids == original.control_ids
         if hasattr(original, "direction"):
             assert deserialized.direction == original.direction
-        
+
         # Verify we can serialize again
         data2 = deserialized.model_dump(by_alias=True)
         assert data == data2

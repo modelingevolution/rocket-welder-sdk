@@ -1,7 +1,6 @@
 """Cross-platform serialization tests for External Controls contracts."""
 
 import json
-import os
 from pathlib import Path
 from uuid import UUID
 
@@ -105,17 +104,17 @@ class TestExternalControlsSerialization:
     def _test_round_trip(self, original, type_name: str):
         """Test serialization and deserialization of a single object."""
         # Serialize using model_dump with by_alias=True (returns PascalCase for EventStore)
-        data = original.model_dump(by_alias=True, mode='json')
-        
+        data = original.model_dump(by_alias=True, mode="json")
+
         # Write to file (no conversion needed - EventStore expects PascalCase)
         file_path = self.output_path / f"{type_name}_python.json"
         with open(file_path, "w") as f:
             json.dump(data, f, indent=2)
-        
+
         # Test deserialization using model_validate
         # No conversion needed - data is already in PascalCase
         deserialized = original.__class__.model_validate(data)
-        
+
         # Verify round-trip
         if hasattr(original, "control_id"):
             assert deserialized.control_id == original.control_id
@@ -124,8 +123,7 @@ class TestExternalControlsSerialization:
         assert deserialized.id == original.id
         if hasattr(original, "direction"):
             assert deserialized.direction == original.direction
-        
-        # Verify we can serialize again
-        data2 = original.model_dump(by_alias=True, mode='json')
-        assert data == data2
 
+        # Verify we can serialize again
+        data2 = original.model_dump(by_alias=True, mode="json")
+        assert data == data2

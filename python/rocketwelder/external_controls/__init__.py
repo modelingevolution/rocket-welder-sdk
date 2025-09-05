@@ -1,30 +1,34 @@
 """External Controls module for RocketWelder SDK."""
 
 from .contracts import (
-    # Enums
-    RocketWelderControlType,
     ArrowDirection,
-    # Commands (Container → UI)
-    DefineControl,
-    DeleteControls,
-    DeleteControl,  # Legacy alias - deprecated
-    ChangeControls,
+    ArrowDown,
+    ArrowUp,
     # Events (UI → Container)
     ButtonDown,
     ButtonUp,
-    ArrowDown,
-    ArrowUp,
+    ChangeControls,
+    # Commands (Container → UI)
+    DefineControl,
+    DeleteControl,  # Legacy alias - deprecated
+    DeleteControls,
+    KeyDown,
+    KeyUp,
+    # Enums
+    RocketWelderControlType,
 )
 
 __all__ = [
-    "RocketWelderControlType",
     "ArrowDirection",
-    "DefineControl",
-    "DeleteControls",
-    "DeleteControl",  # Legacy - deprecated
-    "ChangeControls",
-    "ButtonDown",
-    "ButtonUp",
     "ArrowDown",
     "ArrowUp",
+    "ButtonDown",
+    "ButtonUp",
+    "ChangeControls",
+    "DefineControl",
+    "DeleteControl",  # Legacy - deprecated
+    "DeleteControls",
+    "KeyDown",
+    "KeyUp",
+    "RocketWelderControlType",
 ]

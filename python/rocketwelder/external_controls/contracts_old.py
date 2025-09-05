@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict
 from uuid import UUID, uuid4
 
 
@@ -32,11 +31,11 @@ class DefineControl:
 
     control_id: str
     type: RocketWelderControlType
-    properties: Dict[str, str]
+    properties: dict[str, str]
     region_name: str
     id: UUID = field(default_factory=uuid4)
 
-    def to_dict(self) -> Dict[str, object]:
+    def to_dict(self) -> dict[str, object]:
         """Convert to dictionary for EventStore."""
         return {
             "Id": str(self.id),
@@ -54,7 +53,7 @@ class DeleteControl:
     control_id: str
     id: UUID = field(default_factory=uuid4)
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dictionary for EventStore."""
         return {"Id": str(self.id), "ControlId": self.control_id}
 
@@ -63,10 +62,10 @@ class DeleteControl:
 class ChangeControls:
     """Command to update properties of multiple controls."""
 
-    updates: Dict[str, Dict[str, str]]  # ControlId -> { PropertyId -> Value }
+    updates: dict[str, dict[str, str]]  # ControlId -> { PropertyId -> Value }
     id: UUID = field(default_factory=uuid4)
 
-    def to_dict(self) -> Dict[str, object]:
+    def to_dict(self) -> dict[str, object]:
         """Convert to dictionary for EventStore."""
         return {"Id": str(self.id), "Updates": self.updates}
 
@@ -81,14 +80,16 @@ class ButtonDown:
     control_id: str
     id: UUID = field(default_factory=uuid4)
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dictionary for EventStore."""
         return {"Id": str(self.id), "ControlId": self.control_id}
 
     @classmethod
-    def from_dict(cls, data: Dict[str, object]) -> "ButtonDown":
+    def from_dict(cls, data: dict[str, object]) -> "ButtonDown":
         """Create from EventStore data."""
-        return cls(control_id=str(data["ControlId"]), id=UUID(str(data["Id"])) if "Id" in data else uuid4())
+        return cls(
+            control_id=str(data["ControlId"]), id=UUID(str(data["Id"])) if "Id" in data else uuid4()
+        )
 
 
 @dataclass
@@ -98,14 +99,16 @@ class ButtonUp:
     control_id: str
     id: UUID = field(default_factory=uuid4)
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dictionary for EventStore."""
         return {"Id": str(self.id), "ControlId": self.control_id}
 
     @classmethod
-    def from_dict(cls, data: Dict[str, object]) -> "ButtonUp":
+    def from_dict(cls, data: dict[str, object]) -> "ButtonUp":
         """Create from EventStore data."""
-        return cls(control_id=str(data["ControlId"]), id=UUID(str(data["Id"])) if "Id" in data else uuid4())
+        return cls(
+            control_id=str(data["ControlId"]), id=UUID(str(data["Id"])) if "Id" in data else uuid4()
+        )
 
 
 @dataclass
@@ -116,12 +119,12 @@ class ArrowDown:
     direction: ArrowDirection
     id: UUID = field(default_factory=uuid4)
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dictionary for EventStore."""
         return {"Id": str(self.id), "ControlId": self.control_id, "Direction": self.direction.value}
 
     @classmethod
-    def from_dict(cls, data: Dict[str, object]) -> "ArrowDown":
+    def from_dict(cls, data: dict[str, object]) -> "ArrowDown":
         """Create from EventStore data."""
         return cls(
             control_id=str(data["ControlId"]),
@@ -138,12 +141,12 @@ class ArrowUp:
     direction: ArrowDirection
     id: UUID = field(default_factory=uuid4)
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         """Convert to dictionary for EventStore."""
         return {"Id": str(self.id), "ControlId": self.control_id, "Direction": self.direction.value}
 
     @classmethod
-    def from_dict(cls, data: Dict[str, object]) -> "ArrowUp":
+    def from_dict(cls, data: dict[str, object]) -> "ArrowUp":
         """Create from EventStore data."""
         return cls(
             control_id=str(data["ControlId"]),
