@@ -24,6 +24,7 @@ public class UiService : IUiService
     private ImmutableList<(ControlBase control, RegionName region, ControlType type)> _scheduledDefinitions = ImmutableList<(ControlBase, RegionName, ControlType)>.Empty;
     private readonly Dictionary<RegionName, ItemsControl> _regions = new();
     private IServiceProvider? _sp;
+    private IAsyncDisposable _token;
     internal Task EnqueueEvent(object evt)=> _eventQueue.Given(new Metadata(), evt);
 
     public static IUiService FromSessionId(Guid sessionId) => new UiService(sessionId);
@@ -158,7 +159,7 @@ public class UiService : IUiService
     {
         _plumber = plumberd;
         _bus = bus;
-        await _plumber.SubscribeEventHandler(_eventQueue, $"Ui.Events-{_sessionId}");
+        _token = await _plumber.SubscribeEventHandler(_eventQueue, $"Ui.Events-{_sessionId}");
     }
     internal void ScheduleDelete(ControlId controlId)
     {
@@ -187,5 +188,9 @@ public class UiService : IUiService
             updated = original.Add((control, region, type));
         } while (Interlocked.CompareExchange(ref _scheduledDefinitions, updated, original) != original);
     }
-        
+
+    public async ValueTask DisposeAsync()
+    {
+        await _token.DisposeAsync();
+    }
 }

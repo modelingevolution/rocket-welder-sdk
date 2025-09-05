@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace RocketWelder.SDK.Ui;
 
-public interface IUiService 
+public interface IUiService  
 {
     Guid SessionId { get; }
     IUiControlFactory Factory { get; }
