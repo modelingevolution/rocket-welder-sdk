@@ -17,26 +17,26 @@ public sealed class IconButtonControl : ControlBase
         
     public string? Icon 
     { 
-        get => GetPropertyString("icon");
-        set => SetProperty("icon", value);
+        get => GetPropertyString(nameof(Icon));
+        set => SetProperty(nameof(Icon), value);
     }
         
     public string? Text 
     { 
-        get => GetPropertyString("text");
-        set => SetProperty("text", value);
+        get => GetPropertyString(nameof(Text));
+        set => SetProperty(nameof(Text), value);
     }
         
     public Color? Color
     {
-        get => GetProperty<Color>("color");
-        set => SetProperty("color", value ?? Ui.Color.Primary);
+        get => GetProperty<Color>(nameof(Color));
+        set => SetProperty(nameof(Color), value ?? Ui.Color.Primary);
     }
         
     public Size? Size
     {
-        get => GetProperty<Size>("size");
-        set => SetProperty("size", value ?? Ui.Size.Medium);
+        get => GetProperty<Size>(nameof(Size));
+        set => SetProperty(nameof(Size), value ?? Ui.Size.Medium);
     }
         
     internal override void HandleEvent(EventBase evt)

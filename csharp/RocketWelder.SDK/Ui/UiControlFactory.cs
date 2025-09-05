@@ -17,7 +17,7 @@ internal sealed class UiControlFactory : IUiControlFactory
         if (string.IsNullOrWhiteSpace(icon))
             throw new ArgumentException("Icon cannot be null or whitespace", nameof(icon));
             
-        var mergedProperties = CreatePropertiesWithDefaults(properties, ("icon", icon));
+        var mergedProperties = CreatePropertiesWithDefaults(properties, ("Icon", icon));
         var control = new IconButtonControl(controlId, _uiService, mergedProperties);
         return control;
     }
@@ -34,7 +34,7 @@ internal sealed class UiControlFactory : IUiControlFactory
         if (text == null)
             throw new ArgumentNullException(nameof(text));
             
-        var mergedProperties = CreatePropertiesWithDefaults(properties, ("text", text));
+        var mergedProperties = CreatePropertiesWithDefaults(properties, ("Text", text));
         var control = new LabelControl(controlId, _uiService, mergedProperties);
         return control;
     }

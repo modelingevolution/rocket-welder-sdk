@@ -38,9 +38,9 @@ namespace RocketWelder.SDK.Tests
                 Type = ControlType.IconButton,
                 Properties = new Dictionary<string, string>
                 {
-                    ["icon"] = "M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z",
-                    ["color"] = "Primary",
-                    ["size"] = "Medium"
+                    ["Icon"] = "M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z",
+                    ["Color"] = "Primary",
+                    ["Size"] = "Medium"
                 }.ToImmutableDictionary(),
                 RegionName = (RegionName)"preview-top-right"
             };
@@ -68,10 +68,10 @@ namespace RocketWelder.SDK.Tests
                 Id = Guid.Parse("34567890-3456-3456-3456-345678901234"),
                 Updates = ImmutableDictionary<ControlId, ImmutableDictionary<string, string>>.Empty
                     .Add((ControlId)"test-button", ImmutableDictionary<string, string>.Empty
-                        .Add("text", "Clicked!")
-                        .Add("color", "Success"))
+                        .Add("Text", "Clicked!")
+                        .Add("Color", "Success"))
                     .Add((ControlId)"test-label", ImmutableDictionary<string, string>.Empty
-                        .Add("text", "Status: Running"))
+                        .Add("Text", "Status: Running"))
             };
             TestRoundTrip(changeControls, "ChangeControls");
         }

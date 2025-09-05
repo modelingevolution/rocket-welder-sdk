@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Immutable;
+using System.Linq;
 using System.Threading.Tasks;
 using NSubstitute;
 using RocketWelder.SDK.Ui;
@@ -27,7 +28,7 @@ namespace RocketWelder.SDK.Tests
             // Verify subscription was set up
             await plumber.Received(1).SubscribeEventHandler(
                 Arg.Any<EventProjection>(), 
-                $"Ui.Events-{sessionId}"
+                $"Ui.Events-{sessionId}",null,false
             );
             
             // Act 1: Create and add an IconButton to a region
@@ -35,7 +36,7 @@ namespace RocketWelder.SDK.Tests
             var iconButton = uiService.Factory.DefineIconButton(
                 controlId, 
                 "M12,2A10,10", 
-                new() { ["color"] = "Primary", ["size"] = "Medium" }
+                new() { ["Color"] = "Primary", ["Size"] = "Medium" }
             );
             
             // Add to region - this should schedule DefineControl
@@ -45,16 +46,24 @@ namespace RocketWelder.SDK.Tests
             await uiService.Do();
             
             // Assert 1: DefineControl command should have been sent
+            var defineControlCalls = commandBus.ReceivedCalls()
+                .Where(call => call.GetMethodInfo().Name == "SendAsync")
+                .Select(call => call.GetArguments())
+                .Where(args => args.Length >= 2 && args[1] is DefineControl)
+                .Select(args => (DefineControl)args[1])
+                .FirstOrDefault(cmd => cmd.ControlId == controlId);
+            
+            Assert.NotNull(defineControlCalls);
+            Assert.Equal(controlId, defineControlCalls.ControlId);
+            Assert.Equal(ControlType.IconButton, defineControlCalls.Type);
+            Assert.Equal("TopRight", defineControlCalls.RegionName.ToString());
+            Assert.True(defineControlCalls.Properties.ContainsKey("Icon") && defineControlCalls.Properties["Icon"] == "M12,2A10,10");
+            Assert.True(defineControlCalls.Properties.ContainsKey("Color") && defineControlCalls.Properties["Color"] == "Primary");
+            Assert.True(defineControlCalls.Properties.ContainsKey("Size") && defineControlCalls.Properties["Size"] == "Medium");
+            
             await commandBus.Received(1).SendAsync(
                 sessionId,
-                Arg.Is<DefineControl>(cmd => 
-                    cmd.ControlId == controlId &&
-                    cmd.Type == ControlType.IconButton &&
-                    cmd.RegionName.ToString() == "TopRight" &&
-                    cmd.Properties.ContainsKey("icon") && cmd.Properties["icon"] == "M12,2A10,10" &&
-                    cmd.Properties.ContainsKey("color") && cmd.Properties["color"] == "Primary" &&
-                    cmd.Properties.ContainsKey("size") && cmd.Properties["size"] == "Medium"
-                ),
+                Arg.Any<DefineControl>(),
                 fireAndForget: true
             );
             
@@ -87,8 +96,8 @@ namespace RocketWelder.SDK.Tests
                 sessionId,
                 Arg.Is<ChangeControls>(cmd =>
                     cmd.Updates.ContainsKey(controlId) &&
-                    cmd.Updates[controlId]["color"] == "Success" &&
-                    cmd.Updates[controlId]["text"] == "Clicked!"
+                    cmd.Updates[controlId]["Color"] == "Success" &&
+                    cmd.Updates[controlId]["Text"] == "Clicked!"
                 ),
                 fireAndForget: true
             );
@@ -132,7 +141,7 @@ namespace RocketWelder.SDK.Tests
             var controlId = (ControlId)"nav-grid";
             var arrowGrid = uiService.Factory.DefineArrowGrid(
                 controlId,
-                new() { ["size"] = "Large", ["color"] = "Secondary" }
+                new() { ["Size"] = "Large", ["Color"] = "Secondary" }
             );
             
             uiService[RegionName.Bottom].Add(arrowGrid);
@@ -224,10 +233,10 @@ namespace RocketWelder.SDK.Tests
                 sessionId,
                 Arg.Is<ChangeControls>(cmd =>
                     cmd.Updates.ContainsKey(controlId) &&
-                    cmd.Updates[controlId].ContainsKey("color") &&
-                    cmd.Updates[controlId]["color"] == "Warning" &&
-                    cmd.Updates[controlId].ContainsKey("size") &&
-                    cmd.Updates[controlId]["size"] == "ExtraLarge"
+                    cmd.Updates[controlId].ContainsKey("Color") &&
+                    cmd.Updates[controlId]["Color"] == "Warning" &&
+                    cmd.Updates[controlId].ContainsKey("Size") &&
+                    cmd.Updates[controlId]["Size"] == "ExtraLarge"
                 ),
                 fireAndForget: true
             );
@@ -256,7 +265,7 @@ namespace RocketWelder.SDK.Tests
                 var label = uiService.Factory.DefineLabel(
                     labelId,
                     $"Initial Text {i}",
-                    new() { ["typo"] = "body1", ["color"] = "TextPrimary" }
+                    new() { ["Typography"] = "body1", ["Color"] = "TextPrimary" }
                 );
                 labels.Add(label);
             }
@@ -311,23 +320,23 @@ namespace RocketWelder.SDK.Tests
                 Arg.Is<ChangeControls>(cmd =>
                     cmd.Updates.Count == 5 &&
                     // Label 0
-                    cmd.Updates[labelIds[0]]["text"] == "Status: Running" &&
-                    cmd.Updates[labelIds[0]]["typo"] == "h6" &&
-                    cmd.Updates[labelIds[0]]["color"] == "Success" &&
+                    cmd.Updates[labelIds[0]]["Text"] == "Status: Running" &&
+                    cmd.Updates[labelIds[0]]["Typography"] == "h6" &&
+                    cmd.Updates[labelIds[0]]["Color"] == "Success" &&
                     // Label 1
-                    cmd.Updates[labelIds[1]]["text"] == "Warning Message" &&
-                    cmd.Updates[labelIds[1]]["typo"] == "subtitle1" &&
-                    cmd.Updates[labelIds[1]]["color"] == "Warning" &&
+                    cmd.Updates[labelIds[1]]["Text"] == "Warning Message" &&
+                    cmd.Updates[labelIds[1]]["Typography"] == "subtitle1" &&
+                    cmd.Updates[labelIds[1]]["Color"] == "Warning" &&
                     // Label 2
-                    cmd.Updates[labelIds[2]]["text"] == "Error Occurred" &&
-                    cmd.Updates[labelIds[2]]["typo"] == "caption" &&
-                    cmd.Updates[labelIds[2]]["color"] == "Error" &&
+                    cmd.Updates[labelIds[2]]["Text"] == "Error Occurred" &&
+                    cmd.Updates[labelIds[2]]["Typography"] == "caption" &&
+                    cmd.Updates[labelIds[2]]["Color"] == "Error" &&
                     // Label 3
-                    cmd.Updates[labelIds[3]]["text"] == "Info Panel" &&
-                    cmd.Updates[labelIds[3]]["color"] == "Info" &&
+                    cmd.Updates[labelIds[3]]["Text"] == "Info Panel" &&
+                    cmd.Updates[labelIds[3]]["Color"] == "Info" &&
                     // Label 4
-                    cmd.Updates[labelIds[4]]["text"] == "Debug Output" &&
-                    cmd.Updates[labelIds[4]]["typo"] == "overline"
+                    cmd.Updates[labelIds[4]]["Text"] == "Debug Output" &&
+                    cmd.Updates[labelIds[4]]["Typography"] == "overline"
                 ),
                 fireAndForget: true
             );
@@ -374,8 +383,8 @@ namespace RocketWelder.SDK.Tests
                 sessionId,
                 Arg.Is<ChangeControls>(cmd =>
                     cmd.Updates.Count == 2 &&
-                    cmd.Updates[labelIds[1]]["text"] == "Still Active" &&
-                    cmd.Updates[labelIds[3]]["text"] == "Also Active"
+                    cmd.Updates[labelIds[1]]["Text"] == "Still Active" &&
+                    cmd.Updates[labelIds[3]]["Text"] == "Also Active"
                 ),
                 fireAndForget: true
             );

@@ -25,14 +25,14 @@ public sealed class ArrowGridControl : ControlBase
         
     public Size? Size
     {
-        get => GetProperty<Size>("size");
-        set => SetProperty("size", value ?? Ui.Size.Medium);
+        get => GetProperty<Size>(nameof(Size));
+        set => SetProperty(nameof(Size), value ?? Ui.Size.Medium);
     }
         
     public Color? Color
     {
-        get => GetProperty<Color>("color");
-        set => SetProperty("color", value ?? Ui.Color.Primary);
+        get => GetProperty<Color>(nameof(Color));
+        set => SetProperty(nameof(Color), value ?? Ui.Color.Primary);
     }
         
     internal override void HandleEvent(EventBase evt)

@@ -13,20 +13,20 @@ public sealed class LabelControl : ControlBase
         
     public string Text 
     { 
-        get => GetPropertyString("text") ?? string.Empty; 
-        set => SetProperty("text", value ?? string.Empty); 
+        get => GetPropertyString(nameof(Text)) ?? string.Empty; 
+        set => SetProperty(nameof(Text), value ?? string.Empty); 
     }
         
     public Typography? Typography
     {
-        get => GetProperty<Typography>("typo");
-        set => SetProperty("typo", value ?? Ui.Typography.Body1);
+        get => GetProperty<Typography>(nameof(Typography));
+        set => SetProperty(nameof(Typography), value ?? Ui.Typography.Body1);
     }
         
     public Color? Color
     {
-        get => GetProperty<Color>("color");
-        set => SetProperty("color", value ?? Ui.Color.Default);
+        get => GetProperty<Color>(nameof(Color));
+        set => SetProperty(nameof(Color), value ?? Ui.Color.Default);
     }
         
     internal override void HandleEvent(EventBase evt)
