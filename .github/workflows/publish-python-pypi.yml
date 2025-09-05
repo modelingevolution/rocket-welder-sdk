@@ -41,12 +41,12 @@ jobs:
         echo "VERSION=$VERSION" >> $GITHUB_ENV
         echo "version=$VERSION" >> $GITHUB_OUTPUT
     
-    - name: Update version in setup.py
+    - name: Create VERSION file
       run: |
         VERSION="${{ steps.version.outputs.version }}"
         cd python
-        # Update version in setup.py
-        sed -i "s/version=\"[^\"]*\"/version=\"$VERSION\"/" setup.py
+        # Create VERSION file for setup.py to read
+        echo "$VERSION" > VERSION
     
     - name: Install build dependencies
       run: |

@@ -70,6 +70,7 @@ htmlcov/
 .dmypy.json
 dmypy.json
 *.pyo
+python/VERSION
 
 # IDE specific
 .vscode/
