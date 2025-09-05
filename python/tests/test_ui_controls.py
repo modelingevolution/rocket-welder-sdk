@@ -40,7 +40,7 @@ class TestIconButtonControl:
             control_id="test-btn",
             ui_service=mock_ui_service,
             icon="M12,2A10,10",
-            properties={"color": "Primary", "size": "Medium"},
+            properties={"Color": "Primary", "Size": "Medium"},
         )
 
         assert button.id == "test-btn"
@@ -66,14 +66,14 @@ class TestIconButtonControl:
 
         # Should be dirty now
         assert button.is_dirty
-        assert button.changed == {"color": "Success", "text": "Click me", "size": "Large"}
+        assert button.changed == {"Color": "Success", "Text": "Click me", "Size": "Large"}
 
         # Commit changes
         button.commit_changes()
         assert not button.is_dirty
-        assert button.properties["color"] == "Success"
-        assert button.properties["text"] == "Click me"
-        assert button.properties["size"] == "Large"
+        assert button.properties["Color"] == "Success"
+        assert button.properties["Text"] == "Click me"
+        assert button.properties["Size"] == "Large"
 
     def test_icon_button_event_handling(self, mock_ui_service: Mock) -> None:
         """Test icon button event handling."""
@@ -111,7 +111,7 @@ class TestIconButtonControl:
             control_id="test-btn",
             ui_service=mock_ui_service,
             icon="M12,2A10,10",
-            properties={"color": "Primary"},
+            properties={"Color": "Primary"},
         )
 
         # Test string to enum conversion
@@ -120,7 +120,7 @@ class TestIconButtonControl:
         # Test setting color with enum
         button.color = Color.ERROR
         assert button.color == Color.ERROR
-        assert button.changed["color"] == "Error"
+        assert button.changed["Color"] == "Error"
 
         # Test that icon is required
         assert button.icon == "M12,2A10,10"
@@ -140,10 +140,10 @@ class TestIconButtonControl:
         # Check all changes are tracked
         assert button.is_dirty
         changes = button.changed
-        assert changes["color"] == "Error"
-        assert changes["size"] == "Small"
-        assert changes["text"] == "Error State"
-        assert changes["icon"] == "M10,10A5,5"
+        assert changes["Color"] == "Error"
+        assert changes["Size"] == "Small"
+        assert changes["Text"] == "Error State"
+        assert changes["Icon"] == "M10,10A5,5"
 
         # Commit and verify clean state
         button.commit_changes()
@@ -182,7 +182,7 @@ class TestArrowGridControl:
         grid: ArrowGridControl = ArrowGridControl(
             control_id="test-grid",
             ui_service=mock_ui_service,
-            properties={"size": "Large", "color": "Secondary"},
+            properties={"Size": "Large", "Color": "Secondary"},
         )
 
         assert grid.id == "test-grid"
@@ -290,7 +290,7 @@ class TestLabelControl:
             control_id="test-label",
             ui_service=mock_ui_service,
             text="Hello World",
-            properties={"typo": "h6", "color": "TextPrimary"},
+            properties={"Typography": "h6", "Color": "TextPrimary"},
         )
 
         assert label.id == "test-label"
@@ -313,7 +313,7 @@ class TestLabelControl:
         label.color = Color.ERROR
 
         assert label.is_dirty
-        assert label.changed == {"text": "Updated Text", "typo": "caption", "color": "Error"}
+        assert label.changed == {"Text": "Updated Text", "Typography": "caption", "Color": "Error"}
 
     def test_label_no_event_handling(self, mock_ui_service: Mock) -> None:
         """Test that labels don't handle events."""
@@ -333,7 +333,7 @@ class TestLabelControl:
             control_id="test-label",
             ui_service=mock_ui_service,
             text="Test",
-            properties={"typo": "h1"},
+            properties={"Typography": "h1"},
         )
 
         assert label.typography == Typography.H1
@@ -343,7 +343,7 @@ class TestLabelControl:
             label.typography = typo
             assert label.typography == typo
             if label.is_dirty:  # Only check changes if property actually changed
-                assert label.changed["typo"] == typo.value
+                assert label.changed["Typography"] == typo.value
 
     def test_label_text_updates(self, mock_ui_service: Mock) -> None:
         """Test label text can be updated multiple times."""
@@ -354,10 +354,10 @@ class TestLabelControl:
         # Update text multiple times
         label.text = "First Update"
         assert label.is_dirty
-        assert label.changed["text"] == "First Update"
+        assert label.changed["Text"] == "First Update"
 
         label.text = "Second Update"
-        assert label.changed["text"] == "Second Update"
+        assert label.changed["Text"] == "Second Update"
 
         # Commit changes
         label.commit_changes()

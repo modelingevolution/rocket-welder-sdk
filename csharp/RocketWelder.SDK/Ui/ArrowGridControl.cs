@@ -9,7 +9,8 @@ public sealed class ArrowGridControl : ControlBase
 {
     public event EventHandler<ArrowDirection>? ArrowDown;
     public event EventHandler<ArrowDirection>? ArrowUp;
-        
+    public event EventHandler CenterButtonDown;
+    public event EventHandler CenterButtonUp;
     private static readonly Dictionary<KeyCode, ArrowDirection> KeyToDirectionMap = new()
     {
         [KeyCode.ArrowUp] = ArrowDirection.Up,
@@ -44,6 +45,12 @@ public sealed class ArrowGridControl : ControlBase
                 break;
             case Internals.KeyUp keyUp when TryGetDirection(keyUp.Code, out var directionUp):
                 ArrowUp?.Invoke(this, directionUp);
+                break;
+            case Internals.ButtonDown:
+                CenterButtonDown?.Invoke(this, EventArgs.Empty);
+                break;
+            case Internals.ButtonUp:
+                CenterButtonUp?.Invoke(this, EventArgs.Empty);
                 break;
         }
     }

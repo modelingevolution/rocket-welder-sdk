@@ -88,7 +88,7 @@ class TestUiServiceHappyPath:
         icon_button: IconButtonControl = ui_service.factory.define_icon_button(
             control_id=control_id,
             icon="M12,2A10,10",
-            properties={"color": Color.PRIMARY.value, "size": Size.MEDIUM.value},
+            properties={"Color": Color.PRIMARY.value, "Size": Size.MEDIUM.value},
         )
 
         # Add to region - this should schedule DefineControl
@@ -120,9 +120,9 @@ class TestUiServiceHappyPath:
         assert define_command.control_id == control_id
         assert define_command.type == RocketWelderControlType.ICON_BUTTON
         assert define_command.region_name == "TopRight"
-        assert define_command.properties["icon"] == "M12,2A10,10"
-        assert define_command.properties["color"] == "Primary"
-        assert define_command.properties["size"] == "Medium"
+        assert define_command.properties["Icon"] == "M12,2A10,10"
+        assert define_command.properties["Color"] == "Primary"
+        assert define_command.properties["Size"] == "Medium"
 
         # Act 3: Simulate button click event
         button_down_fired: bool = False
@@ -158,8 +158,8 @@ class TestUiServiceHappyPath:
         assert recipient_id == session_id
         assert isinstance(change_command, ChangeControls)
         assert control_id in change_command.updates
-        assert change_command.updates[control_id]["color"] == "Success"
-        assert change_command.updates[control_id]["text"] == "Clicked!"
+        assert change_command.updates[control_id]["Color"] == "Success"
+        assert change_command.updates[control_id]["Text"] == "Clicked!"
 
         # Act 6: Dispose control (schedules deletion)
         command_bus.send_async.reset_mock()
@@ -192,7 +192,7 @@ class TestUiServiceHappyPath:
         # Act 1: Create and add ArrowGrid control
         arrow_grid: ArrowGridControl = ui_service.factory.define_arrow_grid(
             control_id=control_id,
-            properties={"size": Size.LARGE.value, "color": Color.SECONDARY.value},
+            properties={"Size": Size.LARGE.value, "Color": Color.SECONDARY.value},
         )
 
         ui_service[RegionName.BOTTOM].append(arrow_grid)
@@ -295,7 +295,10 @@ class TestUiServiceHappyPath:
             label: LabelControl = ui_service.factory.define_label(
                 control_id=label_id,
                 text=f"Initial Text {i}",
-                properties={"typo": Typography.BODY1.value, "color": Color.TEXT_PRIMARY.value},
+                properties={
+                    "Typography": Typography.BODY1.value,
+                    "Color": Color.TEXT_PRIMARY.value,
+                },
             )
             labels.append(label)
 

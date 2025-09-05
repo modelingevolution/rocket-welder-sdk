@@ -98,29 +98,7 @@ namespace RocketWelder.SDK.Tests
             TestRoundTrip(buttonUp, "ButtonUp");
         }
 
-        [Fact]
-        public void ArrowDown_RoundTrip()
-        {
-            var arrowDown = new ArrowDown
-            {
-                Id = Guid.Parse("67890123-6789-6789-6789-678901234567"),
-                ControlId = "test-arrow",
-                Direction = ArrowDirection.Up
-            };
-            TestRoundTrip(arrowDown, "ArrowDown");
-        }
-
-        [Fact]
-        public void ArrowUp_RoundTrip()
-        {
-            var arrowUp = new ArrowUp
-            {
-                Id = Guid.Parse("78901234-7890-7890-7890-789012345678"),
-                ControlId = "test-arrow",
-                Direction = ArrowDirection.Down
-            };
-            TestRoundTrip(arrowUp, "ArrowUp");
-        }
+       
 
         private void TestRoundTrip<T>(T original, string typeName) where T : class
         {

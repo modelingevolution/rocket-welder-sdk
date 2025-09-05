@@ -115,7 +115,7 @@ class IconButtonControl(ControlBase):
             properties: Additional properties
         """
         props = properties or {}
-        props["icon"] = icon
+        props["Icon"] = icon
         super().__init__(control_id, ControlType.ICON_BUTTON, ui_service, props)
 
         # Event handlers
@@ -125,28 +125,28 @@ class IconButtonControl(ControlBase):
     @property
     def icon(self) -> str:
         """Get icon SVG path."""
-        return self.properties.get("icon", "")
+        return self.properties.get("Icon", "")
 
     @icon.setter
     def icon(self, value: str) -> None:
         """Set icon SVG path."""
-        self.set_property("icon", value)
+        self.set_property("Icon", value)
 
     @property
     def text(self) -> str | None:
         """Get button text."""
-        return self.properties.get("text")
+        return self.properties.get("Text")
 
     @text.setter
     def text(self, value: str | None) -> None:
         """Set button text."""
         if value is not None:
-            self.set_property("text", value)
+            self.set_property("Text", value)
 
     @property
     def color(self) -> Color:
         """Get button color."""
-        color_str = self.properties.get("color", Color.PRIMARY.value)
+        color_str = self.properties.get("Color", Color.PRIMARY.value)
         try:
             return Color(color_str)
         except ValueError:
@@ -156,19 +156,19 @@ class IconButtonControl(ControlBase):
     def color(self, value: Color | str) -> None:
         """Set button color."""
         if isinstance(value, Color):
-            self.set_property("color", value.value)
+            self.set_property("Color", value.value)
         else:
             # Try to find matching enum
             for color in Color:
                 if color.value == value:
-                    self.set_property("color", value)
+                    self.set_property("Color", value)
                     return
             raise ValueError(f"Invalid color value: {value}")
 
     @property
     def size(self) -> Size:
         """Get button size."""
-        size_str = self.properties.get("size", Size.MEDIUM.value)
+        size_str = self.properties.get("Size", Size.MEDIUM.value)
         try:
             return Size(size_str)
         except ValueError:
@@ -178,12 +178,12 @@ class IconButtonControl(ControlBase):
     def size(self, value: Size | str) -> None:
         """Set button size."""
         if isinstance(value, Size):
-            self.set_property("size", value.value)
+            self.set_property("Size", value.value)
         else:
             # Try to find matching enum
             for size in Size:
                 if size.value == value:
-                    self.set_property("size", value)
+                    self.set_property("Size", value)
                     return
             raise ValueError(f"Invalid size value: {value}")
 
@@ -226,7 +226,7 @@ class ArrowGridControl(ControlBase):
     @property
     def size(self) -> Size:
         """Get grid size."""
-        size_str = self.properties.get("size", Size.MEDIUM.value)
+        size_str = self.properties.get("Size", Size.MEDIUM.value)
         try:
             return Size(size_str)
         except ValueError:
@@ -236,19 +236,19 @@ class ArrowGridControl(ControlBase):
     def size(self, value: Size | str) -> None:
         """Set grid size."""
         if isinstance(value, Size):
-            self.set_property("size", value.value)
+            self.set_property("Size", value.value)
         else:
             # Try to find matching enum
             for size in Size:
                 if size.value == value:
-                    self.set_property("size", value)
+                    self.set_property("Size", value)
                     return
             raise ValueError(f"Invalid size value: {value}")
 
     @property
     def color(self) -> Color:
         """Get grid color."""
-        color_str = self.properties.get("color", Color.PRIMARY.value)
+        color_str = self.properties.get("Color", Color.PRIMARY.value)
         try:
             return Color(color_str)
         except ValueError:
@@ -258,12 +258,12 @@ class ArrowGridControl(ControlBase):
     def color(self, value: Color | str) -> None:
         """Set grid color."""
         if isinstance(value, Color):
-            self.set_property("color", value.value)
+            self.set_property("Color", value.value)
         else:
             # Try to find matching enum
             for color in Color:
                 if color.value == value:
-                    self.set_property("color", value)
+                    self.set_property("Color", value)
                     return
             raise ValueError(f"Invalid color value: {value}")
 
@@ -299,23 +299,23 @@ class LabelControl(ControlBase):
             properties: Additional properties
         """
         props = properties or {}
-        props["text"] = text
+        props["Text"] = text
         super().__init__(control_id, ControlType.LABEL, ui_service, props)
 
     @property
     def text(self) -> str:
         """Get label text."""
-        return self.properties.get("text", "")
+        return self.properties.get("Text", "")
 
     @text.setter
     def text(self, value: str) -> None:
         """Set label text."""
-        self.set_property("text", value)
+        self.set_property("Text", value)
 
     @property
     def typography(self) -> Typography:
         """Get label typography."""
-        typo_str = self.properties.get("typo", Typography.BODY1.value)
+        typo_str = self.properties.get("Typography", Typography.BODY1.value)
         try:
             return Typography(typo_str)
         except ValueError:
@@ -325,19 +325,19 @@ class LabelControl(ControlBase):
     def typography(self, value: Typography | str) -> None:
         """Set label typography."""
         if isinstance(value, Typography):
-            self.set_property("typo", value.value)
+            self.set_property("Typography", value.value)
         else:
             # Try to find matching enum
             for typo in Typography:
                 if typo.value == value:
-                    self.set_property("typo", value)
+                    self.set_property("Typography", value)
                     return
             raise ValueError(f"Invalid typography value: {value}")
 
     @property
     def color(self) -> Color:
         """Get label color."""
-        color_str = self.properties.get("color", Color.TEXT_PRIMARY.value)
+        color_str = self.properties.get("Color", Color.TEXT_PRIMARY.value)
         try:
             return Color(color_str)
         except ValueError:
@@ -347,12 +347,12 @@ class LabelControl(ControlBase):
     def color(self, value: Color | str) -> None:
         """Set label color."""
         if isinstance(value, Color):
-            self.set_property("color", value.value)
+            self.set_property("Color", value.value)
         else:
             # Try to find matching enum
             for color in Color:
                 if color.value == value:
-                    self.set_property("color", value)
+                    self.set_property("Color", value)
                     return
             raise ValueError(f"Invalid color value: {value}")
 
