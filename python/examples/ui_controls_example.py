@@ -43,9 +43,9 @@ async def main():
         control_id="btn-record",
         icon="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z",
         properties={
-            "color": Color.PRIMARY.value,
-            "size": Size.LARGE.value,
-            "text": "Record"
+            "Color": Color.PRIMARY.value,
+            "Size": Size.LARGE.value,
+            "Text": "Record"
         }
     )
     ui_service[RegionName.TOP_RIGHT].append(button)
@@ -55,8 +55,8 @@ async def main():
         control_id="lbl-status",
         text="Ready",
         properties={
-            "typo": Typography.H6.value,
-            "color": Color.TEXT_PRIMARY.value
+            "Typography": Typography.H6.value,
+            "Color": Color.TEXT_PRIMARY.value
         }
     )
     ui_service[RegionName.TOP].append(label)
@@ -65,8 +65,8 @@ async def main():
     arrows = factory.define_arrow_grid(
         control_id="arrow-nav",
         properties={
-            "size": Size.MEDIUM.value,
-            "color": Color.SECONDARY.value
+            "Size": Size.MEDIUM.value,
+            "Color": Color.SECONDARY.value
         }
     )
     ui_service[RegionName.BOTTOM].append(arrows)

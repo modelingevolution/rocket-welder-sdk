@@ -6,7 +6,7 @@ from .controls import (
     IconButtonControl,
     LabelControl,
 )
-from .icons import Icons, Material
+from .icons import Custom, Icons, Material
 from .ui_events_projection import UiEventsProjection
 from .ui_service import (
     ItemsControl,
@@ -28,6 +28,7 @@ __all__ = [
     "ControlBase",
     # Enums
     "ControlType",
+    "Custom",
     "IconButtonControl",
     # Icons
     "Icons",

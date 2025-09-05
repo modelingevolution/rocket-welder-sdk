@@ -41,8 +41,8 @@ async def main() -> None:
             control_id="submit-button",
             icon="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z",  # Plus icon
             properties={
-                "color": Color.PRIMARY.value,
-                "size": Size.LARGE.value,
+                "Color": Color.PRIMARY.value,
+                "Size": Size.LARGE.value,
             }
         )
         
@@ -63,7 +63,7 @@ async def main() -> None:
             control_id="status-label",
             text="Ready for input",
             properties={
-                "color": Color.TEXT_PRIMARY.value,
+                "Color": Color.TEXT_PRIMARY.value,
             }
         )
         ui_service[RegionName.TOP].append(label)

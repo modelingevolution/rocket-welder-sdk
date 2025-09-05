@@ -32,9 +32,9 @@ class TestExternalControlsSerialization:
             control_id="test-button",
             type=RocketWelderControlType.ICON_BUTTON,
             properties={
-                "icon": "M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z",
-                "color": "Primary",
-                "size": "Medium",
+                "Icon": "M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z",
+                "Color": "Primary",
+                "Size": "Medium",
             },
             region_name="preview-top-right",
         )
@@ -54,11 +54,11 @@ class TestExternalControlsSerialization:
             id=UUID("34567890-3456-3456-3456-345678901234"),
             updates={
                 "test-button": {
-                    "text": "Clicked!",
-                    "color": "Success",
+                    "Text": "Clicked!",
+                    "Color": "Success",
                 },
                 "test-label": {
-                    "text": "Status: Running",
+                    "Text": "Status: Running",
                 },
             },
         )

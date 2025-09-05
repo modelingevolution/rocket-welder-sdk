@@ -275,8 +275,8 @@ class TestUiServiceHappyPath:
         change_command: ChangeControls = kwargs.get("command", args[1] if len(args) > 1 else None)
         assert isinstance(change_command, ChangeControls)
         assert control_id in change_command.updates
-        assert change_command.updates[control_id]["color"] == "Warning"
-        assert change_command.updates[control_id]["size"] == "ExtraLarge"
+        assert change_command.updates[control_id]["Color"] == "Warning"
+        assert change_command.updates[control_id]["Size"] == "ExtraLarge"
 
     @pytest.mark.asyncio
     async def test_label_control_batched_updates(
@@ -360,23 +360,23 @@ class TestUiServiceHappyPath:
         assert len(change_command.updates) == 5
 
         # Verify each label's updates
-        assert change_command.updates[label_ids[0]]["text"] == "Status: Running"
-        assert change_command.updates[label_ids[0]]["typo"] == "h6"
-        assert change_command.updates[label_ids[0]]["color"] == "Success"
+        assert change_command.updates[label_ids[0]]["Text"] == "Status: Running"
+        assert change_command.updates[label_ids[0]]["Typography"] == "h6"
+        assert change_command.updates[label_ids[0]]["Color"] == "Success"
 
-        assert change_command.updates[label_ids[1]]["text"] == "Warning Message"
-        assert change_command.updates[label_ids[1]]["typo"] == "subtitle1"
-        assert change_command.updates[label_ids[1]]["color"] == "Warning"
+        assert change_command.updates[label_ids[1]]["Text"] == "Warning Message"
+        assert change_command.updates[label_ids[1]]["Typography"] == "subtitle1"
+        assert change_command.updates[label_ids[1]]["Color"] == "Warning"
 
-        assert change_command.updates[label_ids[2]]["text"] == "Error Occurred"
-        assert change_command.updates[label_ids[2]]["typo"] == "caption"
-        assert change_command.updates[label_ids[2]]["color"] == "Error"
+        assert change_command.updates[label_ids[2]]["Text"] == "Error Occurred"
+        assert change_command.updates[label_ids[2]]["Typography"] == "caption"
+        assert change_command.updates[label_ids[2]]["Color"] == "Error"
 
-        assert change_command.updates[label_ids[3]]["text"] == "Info Panel"
-        assert change_command.updates[label_ids[3]]["color"] == "Info"
+        assert change_command.updates[label_ids[3]]["Text"] == "Info Panel"
+        assert change_command.updates[label_ids[3]]["Color"] == "Info"
 
-        assert change_command.updates[label_ids[4]]["text"] == "Debug Output"
-        assert change_command.updates[label_ids[4]]["typo"] == "overline"
+        assert change_command.updates[label_ids[4]]["Text"] == "Debug Output"
+        assert change_command.updates[label_ids[4]]["Typography"] == "overline"
 
         # Act 3: No changes, no command should be sent
         command_bus.send_async.reset_mock()
@@ -418,5 +418,5 @@ class TestUiServiceHappyPath:
         change_command = kwargs.get("command", args[1] if len(args) > 1 else None)
         assert isinstance(change_command, ChangeControls)
         assert len(change_command.updates) == 2
-        assert change_command.updates[label_ids[1]]["text"] == "Still Active"
-        assert change_command.updates[label_ids[3]]["text"] == "Also Active"
+        assert change_command.updates[label_ids[1]]["Text"] == "Still Active"
+        assert change_command.updates[label_ids[3]]["Text"] == "Also Active"
