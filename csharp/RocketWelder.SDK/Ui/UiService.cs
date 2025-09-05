@@ -2,6 +2,7 @@
 using MicroPlumberd.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using RocketWelder.SDK.Ui.Internals;
 using System;
 using System.Collections.Generic;
@@ -32,21 +33,10 @@ public class UiService : IUiService
     {
         _sessionId = sessionId;
             
-        // Initialize regions with predefined names
-        InitializeRegion(RegionName.Top);
-        InitializeRegion(RegionName.TopLeft);
-        InitializeRegion(RegionName.TopRight);
-        InitializeRegion(RegionName.BottomLeft);
-        InitializeRegion(RegionName.BottomRight);
-        InitializeRegion(RegionName.Bottom);
-            
         Factory = new UiControlFactory(this);
     }
         
-    private void InitializeRegion(RegionName regionName)
-    {
-        _regions[regionName] = new ItemsControl(this, regionName);
-    }
+    
     /// <summary>
     /// Send commands in single thread loop.
     /// </summary>
@@ -130,13 +120,28 @@ public class UiService : IUiService
 
     public IUiControlFactory Factory { get; }
         
-    public IItemsControl this[RegionName r] => _regions[r];
-    public async Task<IUiService> Initialize()
+    public IItemsControl this[RegionName r]
     {
-        ServiceCollection sc = new ServiceCollection();
-        sc.AddPlumberd();
-        await Initialize(sc.BuildServiceProvider());
-        return this;
+        get
+        {
+            if(!_regions.TryGetValue(r, out var ret))
+                return _regions.TryAdd(r,ret = new ItemsControl(this, r)) ? ret : _regions[r];
+            return ret;
+        }
+    }
+
+    public async Task<(IUiService, IHost)> BuildUiHost( Action<HostBuilderContext, IServiceCollection>? onConfigureServices = null)
+    {
+        IHostBuilder builder= Host.CreateDefaultBuilder(_sessionId != Guid.Empty ? [$"SessionId={_sessionId}"] : []);
+        builder.ConfigureServices((context, services) =>
+        {
+            onConfigureServices?.Invoke(context,services);
+            services.AddRocketWelderUi();
+        });
+        
+        var host = builder.Build();
+        await host.StartAsync();
+        return (host.Services.GetRequiredService<IUiService>(), host);
     }
 
     public async Task<IUiService> Initialize(IServiceProvider sp)

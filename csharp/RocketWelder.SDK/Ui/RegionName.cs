@@ -17,7 +17,7 @@ namespace RocketWelder.SDK.Ui
         {
             _value = value ?? throw new ArgumentNullException(nameof(value));
         }
-
+        public static RegionName From(String value) => new RegionName(value);
         // Implicit conversion from string to RegionName
         public static implicit operator RegionName(string value) => new RegionName(value);
 

@@ -7,6 +7,7 @@ using RocketWelder.SDK.Ui.Internals;
 using Xunit;
 using MicroPlumberd;
 using MicroPlumberd.Services;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace RocketWelder.SDK.Tests
 {
@@ -32,7 +33,7 @@ namespace RocketWelder.SDK.Tests
             var expectedStreamName = $"Ui.Events-{_sessionId}";
 
             // Act
-            await _uiService.Initialize();
+            await _uiService.BuildUiHost();
 
             // Assert - verify that subscription was called
             // Note: This test would need adjustment based on actual implementation
@@ -111,6 +112,90 @@ namespace RocketWelder.SDK.Tests
 
             // Assert - no exceptions should be thrown
             Assert.True(true);
+        }
+
+        [Fact]
+        public async Task FromSessionId_WithInitializeHost_ShouldProperlyConfigureDI()
+        {
+            // Arrange
+            var sessionId = Guid.NewGuid();
+            var uiService = UiService.FromSessionId(sessionId);
+            
+            // Act
+            var (initializedService, host) = await uiService.BuildUiHost();
+            
+            try
+            {
+                // Assert - Service should be properly initialized
+                Assert.NotNull(initializedService);
+                Assert.NotNull(host);
+                
+                // Verify the service is registered in DI
+                var serviceFromDI = host.Services.GetRequiredService<IUiService>();
+                Assert.NotNull(serviceFromDI);
+                
+                // Verify PlumberInstance is registered
+                var plumber = host.Services.GetService<IPlumberInstance>();
+                Assert.NotNull(plumber);
+                
+                // Verify CommandBus is registered
+                var commandBus = host.Services.GetService<ICommandBus>();
+                Assert.NotNull(commandBus);
+                
+                // Verify the factory is available
+                Assert.NotNull(initializedService.Factory);
+                
+                // Verify regions are accessible
+                var topRegion = initializedService[RegionName.Top];
+                Assert.NotNull(topRegion);
+                Assert.IsAssignableFrom<IItemsControl>(topRegion);
+            }
+            finally
+            {
+                // Cleanup
+                await host.StopAsync();
+                host.Dispose();
+            }
+        }
+
+        [Fact]
+        public async Task FromSessionId_WithInitializeHost_AndCustomConfiguration_ShouldApplyConfiguration()
+        {
+            // Arrange
+            var sessionId = Guid.NewGuid();
+            var uiService = UiService.FromSessionId(sessionId);
+            bool customConfigurationApplied = false;
+            
+            // Act
+            var (initializedService, host) = await uiService.BuildUiHost((context,services) =>
+            {
+                // Custom configuration callback
+                customConfigurationApplied = true;
+                
+                    services.AddSingleton<string>("TestService");
+            });
+            
+            try
+            {
+                // Assert - Custom configuration should be applied
+                Assert.True(customConfigurationApplied);
+                
+                // Verify custom service was registered
+                var testService = host.Services.GetService<string>();
+                Assert.NotNull(testService);
+                Assert.Equal("TestService", testService);
+                
+                // Verify the UI service is still properly configured
+                Assert.NotNull(initializedService);
+                var serviceFromDI = host.Services.GetRequiredService<IUiService>();
+                Assert.NotNull(serviceFromDI);
+            }
+            finally
+            {
+                // Cleanup
+                await host.StopAsync();
+                host.Dispose();
+            }
         }
     }
 }
