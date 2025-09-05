@@ -118,6 +118,7 @@ public class UiService : IUiService
         }
     }
 
+    public Guid SessionId => _sessionId;
     public IUiControlFactory Factory { get; }
         
     public IItemsControl this[RegionName r]

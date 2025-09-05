@@ -7,6 +7,7 @@ namespace RocketWelder.SDK.Ui;
 
 public interface IUiService 
 {
+    Guid SessionId { get; }
     IUiControlFactory Factory { get; }
     IItemsControl this[RegionName r] { get; }
     Task<(IUiService, IHost)> BuildUiHost(Action<HostBuilderContext, IServiceCollection>? onConfigureServices = null);
