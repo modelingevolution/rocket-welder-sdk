@@ -159,7 +159,8 @@ public class UiService : IUiService
     {
         _plumber = plumberd;
         _bus = bus;
-        _token = await _plumber.SubscribeEventHandler(_eventQueue, $"Ui.Events-{_sessionId}");
+        // We don't create any projection in the eventstore.
+        _token = await _plumber.SubscribeEventHandler(_eventQueue, $"Ui.Events-{_sessionId}",null,false);
     }
     internal void ScheduleDelete(ControlId controlId)
     {
