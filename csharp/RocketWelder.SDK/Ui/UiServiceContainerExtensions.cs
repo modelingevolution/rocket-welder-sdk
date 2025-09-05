@@ -1,4 +1,6 @@
-﻿using System.Linq;
+﻿using System;
+using System.Linq;
+using EventStore.Client;
 using MicroPlumberd;
 using MicroPlumberd.Services;
 using Microsoft.Extensions.Configuration;
@@ -12,7 +14,7 @@ public static class UiServiceContainerExtensions {
         // Only add Plumberd if not already registered
         if (di.All(x => x.ServiceType != typeof(IPlumberInstance)))
         {
-            di.AddPlumberd();
+            di.AddPlumberd(sp => EventStoreClientSettings.Create(sp.GetRequiredService<IConfiguration>()["EventStore"] ?? throw new InvalidOperationException("EventStore not found int Configuration")));
         }
         
         
