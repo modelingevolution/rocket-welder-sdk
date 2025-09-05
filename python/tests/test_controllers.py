@@ -75,9 +75,7 @@ class TestOneWayShmController:
         controller.start(on_frame)
 
         # Verify Reader was created with correct parameters
-        mock_reader_class.assert_called_once_with(
-            "test_buffer", mock_config
-        )
+        mock_reader_class.assert_called_once_with("test_buffer", mock_config)
         assert controller._reader == mock_reader
 
         # Verify thread was started

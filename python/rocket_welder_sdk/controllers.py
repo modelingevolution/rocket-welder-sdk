@@ -109,9 +109,7 @@ class OneWayShmController(IController):
         if self._is_running:
             raise RuntimeError("Controller is already running")
 
-        logger.debug(
-            "Starting OneWayShmController for buffer '%s'", self._connection.buffer_name
-        )
+        logger.debug("Starting OneWayShmController for buffer '%s'", self._connection.buffer_name)
         self._is_running = True
         self._cancellation_token = cancellation_token
 
@@ -212,15 +210,11 @@ class OneWayShmController(IController):
                         self._is_running = False
                         break
                     elif "BufferFull" in error_type:
-                        logger.error(
-                            "Buffer full on '%s': %s", self._connection.buffer_name, e
-                        )
+                        logger.error("Buffer full on '%s': %s", self._connection.buffer_name, e)
                         if not self._is_running:
                             break
                     elif "FrameTooLarge" in error_type:
-                        logger.error(
-                            "Frame too large on '%s': %s", self._connection.buffer_name, e
-                        )
+                        logger.error("Frame too large on '%s': %s", self._connection.buffer_name, e)
                         if not self._is_running:
                             break
                     elif "ZeroBuffer" in error_type:
@@ -289,9 +283,7 @@ class OneWayShmController(IController):
                             # Find the start of JSON (skip any null bytes at the beginning)
                             json_start = metadata_str.find("{")
                             if json_start == -1:
-                                logger.warning(
-                                    "No JSON found in metadata: %r", metadata_str[:100]
-                                )
+                                logger.warning("No JSON found in metadata: %r", metadata_str[:100])
                                 continue
 
                             if json_start > 0:
@@ -411,25 +403,27 @@ class OneWayShmController(IController):
 
             # No caps available - try to infer from frame size
             logger.warning("No GstCaps available, attempting to infer from frame size")
-            
+
             # Try common resolutions
             frame_size = len(frame.data)
             common_resolutions = [
-                (640, 480, 3),   # VGA RGB
-                (640, 480, 4),   # VGA RGBA
+                (640, 480, 3),  # VGA RGB
+                (640, 480, 4),  # VGA RGBA
                 (1280, 720, 3),  # 720p RGB
-                (1920, 1080, 3), # 1080p RGB
-                (640, 480, 1),   # VGA Grayscale
+                (1920, 1080, 3),  # 1080p RGB
+                (640, 480, 1),  # VGA Grayscale
             ]
-            
+
             for width, height, channels in common_resolutions:
                 if frame_size == width * height * channels:
                     logger.info(f"Inferred resolution: {width}x{height} with {channels} channels")
-                    
+
                     # Create caps for future use
                     format_str = "RGB" if channels == 3 else "RGBA" if channels == 4 else "GRAY8"
-                    self._gst_caps = GstCaps.from_simple(width=width, height=height, format=format_str)
-                    
+                    self._gst_caps = GstCaps.from_simple(
+                        width=width, height=height, format=format_str
+                    )
+
                     # Create Mat
                     data = np.frombuffer(frame.data, dtype=np.uint8)
                     if channels == 3:
@@ -438,7 +432,7 @@ class OneWayShmController(IController):
                         return data.reshape((height, width))  # type: ignore[no-any-return]
                     elif channels == 4:
                         return data.reshape((height, width, 4))  # type: ignore[no-any-return]
-            
+
             logger.error(f"Could not infer resolution for frame size {frame_size}")
             return None
 
@@ -591,9 +585,7 @@ class DuplexShmController(IController):
             )
 
             metadata_str = metadata_bytes.decode("utf-8")
-            logger.debug(
-                "Decoded metadata string: %r", metadata_str[: min(200, len(metadata_str))]
-            )
+            logger.debug("Decoded metadata string: %r", metadata_str[: min(200, len(metadata_str))])
 
             metadata_json = json.loads(metadata_str)
             self._metadata = GstMetadata.from_json(metadata_json)

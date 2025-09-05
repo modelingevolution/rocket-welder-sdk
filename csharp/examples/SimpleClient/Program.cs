@@ -12,9 +12,18 @@ using Microsoft.Extensions.Logging;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
+using EventStore.Client;
+using MicroPlumberd;
+using ModelingEvolution.Drawing;
 using RocketWelder.SDK;
+using RocketWelder.SDK.Ui;
+using RocketWelder.SDK.Ui.Internals;
 using ZeroBuffer;
 using ZeroBuffer.DuplexChannel;
+using VectorF = ModelingEvolution.Drawing.Vector<float>;
+using PointF = ModelingEvolution.Drawing.Point<float>;
+using RectangleF = ModelingEvolution.Drawing.Rectangle<float>;
+using Timeout = System.Threading.Timeout;
 
 /// <summary>
 /// Calculates FPS based on a rolling window of frame timestamps.
@@ -72,7 +81,7 @@ public static class FrameOverlay
         CvInvoke.PutText(frame, text, position, font, fontScale, textColor, thickness);
     }
 
-    public static void DrawDuplexOverlay(Mat frame, int frameCount, double fps)
+    public static void DrawDuplexOverlay(Mat frame, int frameCount, double fps, PointF crosshairPos)
     {
         // Draw "DUPLEX" label
         DrawText(frame, "DUPLEX", new Point(10, 30), 
@@ -88,6 +97,34 @@ public static class FrameOverlay
         // Draw FPS
         DrawText(frame, $"FPS: {fps:F1}", new Point(10, 120), 
                 color: new MCvScalar(0, 255, 0));
+        
+        // Draw crosshair
+        DrawCrosshair(frame, crosshairPos);
+    }
+    
+    public static void DrawCrosshair(Mat frame, PointF position)
+    {
+        // Draw a crosshair at the specified position
+        var color = new MCvScalar(0, 255, 255); // Yellow
+        var lineThickness = 2;
+        var size = 20;
+        var x = (int)position.X;
+        var y = (int)position.Y;
+        
+        // Horizontal line
+        CvInvoke.Line(frame, 
+            new Point(x - size, y), 
+            new Point(x + size, y), 
+            color, lineThickness);
+        
+        // Vertical line
+        CvInvoke.Line(frame, 
+            new Point(x, y - size), 
+            new Point(x, y + size), 
+            color, lineThickness);
+        
+        // Center dot
+        CvInvoke.Circle(frame, new Point(x, y), 3, new MCvScalar(255, 0, 0), -1);
     }
 }
 
@@ -101,7 +138,7 @@ class Program
         Console.WriteLine("========================================");
         Console.WriteLine($"Arguments received: {args.Length}");
         Console.WriteLine($"OpenCV: {typeof(Mat).Assembly.FullName}");
-        using var m = new Mat(new Size(640, 640), DepthType.Cv8U, 1);
+        using var m = new Mat(new System.Drawing.Size(640, 640), DepthType.Cv8U, 1);
         for (int i = 0; i < args.Length; i++)
         {
             Console.WriteLine($"  [{i}]: {args[i]}");
@@ -119,6 +156,7 @@ class Program
                     var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
                     return RocketWelderClient.From(configuration, loggerFactory);
                 });
+                services.AddRocketWelderUi();
             })
             .RunConsoleAsync();
     }
@@ -130,31 +168,58 @@ public class VideoProcessingService : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly ILogger<VideoProcessingService> _logger;
     private readonly IHostApplicationLifetime _lifetime;
+    private readonly IPlumberInstance _plumber;
+    private readonly IServiceProvider _serviceProvider;
     private int _frameCount = 0;
     private int _exitAfter = -1;
     
     // Separate concerns - FPS calculation
     private readonly FpsCalculator _fpsCalculator = new FpsCalculator(windowSize: 5);
+    
+    // UI controls
+    private IUiService? _uiService;
+    private ArrowGridControl? _arrowGrid;
+    
+    // Crosshair movement
+    private PointF _crosshairPosition;
+    private VectorF _velocity = new VectorF(0f, 0f);
+    private RectangleF _frameBounds;
+    private const float MovementSpeed = 5f; // pixels per frame
+    private Timer? _uiUpdateTimer;
 
     public VideoProcessingService(
         RocketWelderClient client,
         IConfiguration configuration,
         ILogger<VideoProcessingService> logger,
-        IHostApplicationLifetime lifetime)
+        IHostApplicationLifetime lifetime, IPlumberInstance plumber,
+        IServiceProvider serviceProvider)
     {
         _client = client;
         _configuration = configuration;
         _logger = logger;
         _lifetime = lifetime;
+        _plumber = plumber;
+        _serviceProvider = serviceProvider;
         
         // Get exit-after from configuration
         _exitAfter = configuration.GetValue<int>("exit-after", -1);
+        
+        // Initialize crosshair at center (will be set properly when we know frame size)
+        _crosshairPosition = new PointF(320f, 240f);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _logger.LogInformation("SessionId: " + _configuration["SessionId"]);
+        _logger.LogInformation("EventStore: " + _configuration["EventStore"]);
+        await CheckEventStore(stoppingToken);
+
         _logger.LogInformation("Starting RocketWelder client..." + _client.Connection);
         _client.OnError += OnError;
+        
+        // Initialize UI service if SessionId is available
+        await InitializeUiControls();
+        
         // Check if we're in duplex mode or one-way mode
         if (_client.Connection.ConnectionMode == ConnectionMode.Duplex)
         {
@@ -188,6 +253,99 @@ public class VideoProcessingService : BackgroundService
         _client.Stop();
     }
 
+    private async Task CheckEventStore(CancellationToken stoppingToken)
+    {
+        var conn = EventStoreClientSettings.Create(_configuration["EventStore"]);
+        await conn.WaitUntilReady(TimeSpan.FromSeconds(5));
+        EventStoreClient client = new EventStoreClient(conn);
+        var evt = await client.ReadAllAsync(Direction.Forwards, Position.Start, 1, false, null)
+            .FirstAsync(cancellationToken: stoppingToken);
+        _logger.LogInformation("EventStore connected, read 1 event: "+evt.Event.EventStreamId);
+    }
+
+    private async Task InitializeUiControls()
+    {
+        var sessionIdString = _configuration["SessionId"];
+        if (string.IsNullOrEmpty(sessionIdString))
+        {
+            _logger.LogInformation("No SessionId configured, UI controls will be disabled");
+            return;
+        }
+        
+        if (!Guid.TryParse(sessionIdString, out var sessionId))
+        {
+            _logger.LogWarning("Invalid SessionId format: {SessionId}", sessionIdString);
+            return;
+        }
+        
+        try
+        {
+            _logger.LogInformation("Initializing UI service with SessionId: {SessionId}", sessionId);
+            _uiService = UiService.FromSessionId(sessionId);
+            await _uiService.Initialize(_serviceProvider);
+            
+            // Create ArrowGrid control
+            _arrowGrid = _uiService.Factory.DefineArrowGrid("crosshair-control");
+            
+            // Hook up events
+            _arrowGrid.ArrowDown += OnArrowDown;
+            _arrowGrid.ArrowUp += OnArrowUp;
+            
+            // Add to bottom-center region
+            _uiService[RegionName.PreviewBottomCenter].Add(_arrowGrid);
+            
+            // Send initial control definition
+            await _uiService.Do();
+            
+            // Start timer to call Do() every 500ms
+            _uiUpdateTimer = new Timer(async _ => 
+            {
+                try
+                {
+                    if (_uiService != null)
+                    {
+                        await _uiService.Do();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error calling UiService.Do()");
+                }
+            }, null, TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(500));
+            
+            _logger.LogInformation("ArrowGrid control initialized successfully");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to initialize UI controls");
+            _uiService = null;
+            _arrowGrid = null;
+        }
+    }
+    
+    private void OnArrowDown(object sender, ArrowDirection direction)
+    {
+        _logger.LogInformation("Arrow {Direction} pressed", direction);
+        
+        // Set velocity based on arrow direction using unit vectors and scalar multiplication
+        _velocity = direction switch
+        {
+            ArrowDirection.Up => new VectorF(0f, -1f) * MovementSpeed,
+            ArrowDirection.Down => new VectorF(0f, 1f) * MovementSpeed,
+            ArrowDirection.Left => new VectorF(-1f, 0f) * MovementSpeed,
+            ArrowDirection.Right => new VectorF(1f, 0f) * MovementSpeed,
+            _ => new VectorF(0f, 0f)
+        };
+    }
+    
+    private void OnArrowUp(object sender, ArrowDirection direction)
+    {
+        _logger.LogInformation("Arrow {Direction} released", direction);
+        
+        // Stop movement when arrow is released
+        _velocity = new VectorF(0f, 0f);
+    }
+    
     private void OnError(object? sender, ErrorEventArgs e)
     {
         _logger.LogError(e.Exception, "Client error occurred");
@@ -217,11 +375,22 @@ public class VideoProcessingService : BackgroundService
         _frameCount++;
         _fpsCalculator.Update();
 
+        // Initialize frame bounds and crosshair position on first frame
+        if (_frameCount == 1)
+        {
+            _frameBounds = new RectangleF(20f, 20f, input.Width - 40f, input.Height - 40f);
+            _crosshairPosition = new PointF(input.Width / 2f, input.Height / 2f);
+        }
+        
+        // Update crosshair position based on velocity using point + vector operator
+        _crosshairPosition = (_crosshairPosition+_velocity).Clamp(_frameBounds);
+        
+
         // Copy input to output first
         input.CopyTo(output);
 
-        // Use FrameOverlay to draw all overlays
-        FrameOverlay.DrawDuplexOverlay(output, _frameCount, _fpsCalculator.GetFps());
+        // Use FrameOverlay to draw all overlays including crosshair
+        FrameOverlay.DrawDuplexOverlay(output, _frameCount, _fpsCalculator.GetFps(), _crosshairPosition);
 
         _logger.LogInformation("Processed frame {FrameCount} ({Width}x{Height}) in duplex mode", 
             _frameCount, input.Width, input.Height);
@@ -236,6 +405,9 @@ public class VideoProcessingService : BackgroundService
 
     public override void Dispose()
     {
+        _uiUpdateTimer?.Dispose();
+        _arrowGrid?.Dispose();
+        _uiService?.DisposeAsync().AsTask().Wait();
         _client?.Dispose();
         base.Dispose();
     }

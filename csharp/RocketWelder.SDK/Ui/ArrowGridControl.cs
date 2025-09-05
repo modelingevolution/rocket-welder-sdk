@@ -1,0 +1,62 @@
+﻿using System;
+using System.Collections.Generic;
+using RocketWelder.SDK.Ui.Internals;
+
+namespace RocketWelder.SDK.Ui;
+
+[ControlType(ControlType.ArrowGrid)]
+public sealed class ArrowGridControl : ControlBase
+{
+    public event EventHandler<ArrowDirection>? ArrowDown;
+    public event EventHandler<ArrowDirection>? ArrowUp;
+    public event EventHandler CenterButtonDown;
+    public event EventHandler CenterButtonUp;
+    private static readonly Dictionary<KeyCode, ArrowDirection> KeyToDirectionMap = new()
+    {
+        [KeyCode.ArrowUp] = ArrowDirection.Up,
+        [KeyCode.ArrowDown] = ArrowDirection.Down,
+        [KeyCode.ArrowLeft] = ArrowDirection.Left,
+        [KeyCode.ArrowRight] = ArrowDirection.Right
+    };
+        
+    internal ArrowGridControl(ControlId id, UiService ui, Dictionary<string, string>? properties = null) 
+        : base(id, ui, properties)
+    {
+    }
+        
+    public Size? Size
+    {
+        get => GetProperty<Size>(nameof(Size));
+        set => SetProperty(nameof(Size), value ?? Ui.Size.Medium);
+    }
+        
+    public Color? Color
+    {
+        get => GetProperty<Color>(nameof(Color));
+        set => SetProperty(nameof(Color), value ?? Ui.Color.Primary);
+    }
+        
+    internal override void HandleEvent(EventBase evt)
+    {
+        switch (evt)
+        {
+            case Internals.KeyDown keyDown when TryGetDirection(keyDown.Code, out var directionDown):
+                ArrowDown?.Invoke(this, directionDown);
+                break;
+            case Internals.KeyUp keyUp when TryGetDirection(keyUp.Code, out var directionUp):
+                ArrowUp?.Invoke(this, directionUp);
+                break;
+            case Internals.ButtonDown:
+                CenterButtonDown?.Invoke(this, EventArgs.Empty);
+                break;
+            case Internals.ButtonUp:
+                CenterButtonUp?.Invoke(this, EventArgs.Empty);
+                break;
+        }
+    }
+        
+    private static bool TryGetDirection(KeyCode keyCode, out ArrowDirection direction)
+    {
+        return KeyToDirectionMap.TryGetValue(keyCode, out direction);
+    }
+}
