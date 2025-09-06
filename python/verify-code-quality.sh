@@ -39,7 +39,7 @@ venv/bin/pip install --quiet mypy black ruff pytest pytest-cov numpy opencv-pyth
 # Run mypy for type checking
 echo ""
 echo -e "${YELLOW}Running mypy type checking...${NC}"
-if venv/bin/python -m mypy rocket_welder_sdk --strict --no-error-summary; then
+if venv/bin/python -m mypy rocket_welder_sdk examples --strict --no-error-summary; then
     echo -e "${GREEN}✓ Type checking passed${NC}"
     MYPY_PASS=1
 else
@@ -50,19 +50,19 @@ fi
 # Run black for code formatting check
 echo ""
 echo -e "${YELLOW}Checking code formatting with black...${NC}"
-if venv/bin/python -m black --check rocket_welder_sdk tests 2>/dev/null; then
+if venv/bin/python -m black --check rocket_welder_sdk tests examples 2>/dev/null; then
     echo -e "${GREEN}✓ Code formatting is correct${NC}"
     BLACK_PASS=1
 else
     echo -e "${RED}✗ Code formatting issues found${NC}"
-    echo "Run 'venv/bin/python -m black rocket_welder_sdk tests' to auto-format"
+    echo "Run 'venv/bin/python -m black rocket_welder_sdk tests examples' to auto-format"
     OVERALL_PASS=0
 fi
 
 # Run ruff for linting
 echo ""
 echo -e "${YELLOW}Running ruff linter...${NC}"
-if venv/bin/python -m ruff check rocket_welder_sdk tests; then
+if venv/bin/python -m ruff check rocket_welder_sdk tests examples; then
     echo -e "${GREEN}✓ Linting passed${NC}"
     RUFF_PASS=1
 else

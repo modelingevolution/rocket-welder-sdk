@@ -6,7 +6,7 @@ from uuid import UUID
 
 import pytest
 
-from rocketwelder.external_controls import (
+from rocket_welder_sdk.external_controls import (
     ArrowDirection,
     ArrowDown,
     ArrowUp,

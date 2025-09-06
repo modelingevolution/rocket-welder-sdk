@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 import pytest_asyncio
 
-from rocketwelder.external_controls import (
+from rocket_welder_sdk.external_controls import (
     ArrowDirection,
     ButtonDown,
     ChangeControls,
@@ -17,7 +17,7 @@ from rocketwelder.external_controls import (
     KeyUp,
     RocketWelderControlType,
 )
-from rocketwelder.ui import (
+from rocket_welder_sdk.ui import (
     ArrowGridControl,
     Color,
     IconButtonControl,
@@ -27,10 +27,81 @@ from rocketwelder.ui import (
     Typography,
     UiService,
 )
+from rocket_welder_sdk.ui.ui_service import ItemsControl
 
 
 class TestUiServiceHappyPath:
     """Happy path tests matching C# UiServiceHappyPathTests."""
+
+    @pytest.mark.asyncio
+    async def test_from_session_id_factory_method(self) -> None:
+        """Test that from_session_id creates UiService correctly."""
+        # Arrange
+        session_id = "550e8400-e29b-41d4-a716-446655440000"
+
+        # Act
+        ui_service = UiService.from_session_id(session_id)
+
+        # Assert
+        assert ui_service is not None
+        assert ui_service.session_id == session_id
+        assert ui_service.factory is not None
+
+        # Test with UUID object
+        import uuid
+
+        session_uuid = uuid.UUID(session_id)
+        ui_service2 = UiService.from_session_id(session_uuid)
+        assert ui_service2.session_id == session_id
+
+    @pytest.mark.asyncio
+    async def test_items_control_add_method(self) -> None:
+        """Test that ItemsControl.add() method works (C# API compatibility)."""
+        # Arrange
+        session_id = "test-session"
+        ui_service = UiService(session_id)
+
+        with patch("rocket_welder_sdk.ui.ui_service.CommandBus") as mock_bus_class:
+            mock_command_bus = Mock()
+            mock_bus_class.return_value = mock_command_bus
+
+            # Initialize service
+            ui_service.command_bus = mock_command_bus
+
+            # Create a control
+            control = ui_service.factory.define_icon_button(
+                control_id="test-btn", icon="M12,2", properties={"Color": Color.PRIMARY.value}
+            )
+
+            # Act - use add() method instead of append()
+            ui_service[RegionName.TOP_RIGHT].add(control)
+
+            # Assert - control should be in the region
+            assert control in ui_service[RegionName.TOP_RIGHT]
+            assert len(ui_service[RegionName.TOP_RIGHT]) == 1
+
+    @pytest.mark.asyncio
+    async def test_preview_regions_exist(self) -> None:
+        """Test that all preview regions are available."""
+        # Arrange
+        session_id = "test-session"
+        ui_service = UiService(session_id)
+
+        # Act & Assert - all preview regions should be accessible
+        preview_regions = [
+            RegionName.PREVIEW_TOP,
+            RegionName.PREVIEW_TOP_LEFT,
+            RegionName.PREVIEW_TOP_RIGHT,
+            RegionName.PREVIEW_BOTTOM,
+            RegionName.PREVIEW_BOTTOM_LEFT,
+            RegionName.PREVIEW_BOTTOM_RIGHT,
+            RegionName.PREVIEW_BOTTOM_CENTER,
+        ]
+
+        for region in preview_regions:
+            items_control = ui_service[region]
+            assert items_control is not None
+            assert isinstance(items_control, ItemsControl)
 
     @pytest.fixture
     def mock_command_bus(self) -> Mock:
@@ -57,8 +128,8 @@ class TestUiServiceHappyPath:
         service: UiService = UiService(session_id)
         # Patch both CommandBus and UiEventsProjection to avoid actual EventStore connections
         with (
-            patch("rocketwelder.ui.ui_service.CommandBus", return_value=mock_command_bus),
-            patch("rocketwelder.ui.ui_service.UiEventsProjection") as mock_projection_class,
+            patch("rocket_welder_sdk.ui.ui_service.CommandBus", return_value=mock_command_bus),
+            patch("rocket_welder_sdk.ui.ui_service.UiEventsProjection") as mock_projection_class,
         ):
             # Mock the projection instance
             mock_projection = Mock()

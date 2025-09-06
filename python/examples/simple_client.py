@@ -6,6 +6,7 @@ High-performance video streaming client using ZeroBuffer shared memory.
 
 import argparse
 import asyncio
+import contextlib
 import logging
 import os
 import signal
@@ -13,7 +14,7 @@ import sys
 import time
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Any, Callable, Optional, Union
 
 import cv2
 import numpy as np
@@ -22,38 +23,38 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from rocket_welder_sdk import ConnectionMode, RocketWelderClient
-from rocket_welder_sdk.ui import UiService, ArrowGridControl, RegionName, ArrowDirection
+from rocket_welder_sdk.ui import ArrowDirection, ArrowGridControl, RegionName, UiService
 
 
 class FpsCalculator:
     """Calculates FPS based on a rolling window of frame timestamps."""
-    
-    def __init__(self, window_size: int = 5):
+
+    def __init__(self, window_size: int = 5) -> None:
         """
         Initialize FPS calculator.
-        
+
         Args:
             window_size: Number of frames to use for FPS calculation
         """
         self.window_size = window_size
-        self.frame_times = []
+        self.frame_times: list[float] = []
         self.fps = 0.0
-    
+
     def update(self) -> None:
         """Update FPS calculation with a new frame."""
         current_time = time.time()
         self.frame_times.append(current_time)
-        
+
         # Keep only last N frame times
         if len(self.frame_times) > self.window_size:
             self.frame_times.pop(0)
-        
+
         # Calculate FPS from frame window
         if len(self.frame_times) >= 2:
             time_span = self.frame_times[-1] - self.frame_times[0]
             if time_span > 0:
                 self.fps = (len(self.frame_times) - 1) / time_span
-    
+
     def get_fps(self) -> float:
         """Get current FPS value."""
         return self.fps
@@ -61,14 +62,19 @@ class FpsCalculator:
 
 class FrameOverlay:
     """Handles rendering of overlays on video frames."""
-    
+
     @staticmethod
-    def draw_text(frame: np.ndarray, text: str, position: tuple, 
-                  font_scale: float = 0.5, color: tuple = (255, 255, 255), 
-                  thickness: int = 1) -> None:
+    def draw_text(
+        frame: np.ndarray[Any, np.dtype[Any]],
+        text: str,
+        position: tuple[int, int],
+        font_scale: float = 0.5,
+        color: tuple[int, int, int] = (255, 255, 255),
+        thickness: int = 1,
+    ) -> None:
         """
         Draw text on a frame.
-        
+
         Args:
             frame: Frame to draw on
             text: Text to draw
@@ -77,15 +83,18 @@ class FrameOverlay:
             color: BGR color tuple
             thickness: Text thickness
         """
-        cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX,
-                   font_scale, color, thickness)
-    
+        cv2.putText(frame, text, position, cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, thickness)
+
     @staticmethod
-    def draw_duplex_overlay(frame: np.ndarray, frame_count: int, fps: float, 
-                           crosshair_pos: np.ndarray) -> None:
+    def draw_duplex_overlay(
+        frame: np.ndarray[Any, np.dtype[Any]],
+        frame_count: int,
+        fps: float,
+        crosshair_pos: np.ndarray[Any, np.dtype[np.float32]],
+    ) -> None:
         """
         Draw duplex mode overlay on frame.
-        
+
         Args:
             frame: Frame to draw on
             frame_count: Current frame number
@@ -94,25 +103,27 @@ class FrameOverlay:
         """
         # Draw "DUPLEX" label
         FrameOverlay.draw_text(frame, "DUPLEX", (10, 30), 1.0, (0, 0, 255), 2)
-        
+
         # Draw timestamp
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         FrameOverlay.draw_text(frame, timestamp, (10, 60))
-        
+
         # Draw frame counter
         FrameOverlay.draw_text(frame, f"Frame: {frame_count}", (10, 90))
-        
+
         # Draw FPS
         FrameOverlay.draw_text(frame, f"FPS: {fps:.1f}", (10, 120), color=(0, 255, 0))
-        
+
         # Draw crosshair
         FrameOverlay.draw_crosshair(frame, crosshair_pos)
-    
+
     @staticmethod
-    def draw_crosshair(frame: np.ndarray, position: np.ndarray) -> None:
+    def draw_crosshair(
+        frame: np.ndarray[Any, np.dtype[Any]], position: np.ndarray[Any, np.dtype[np.float32]]
+    ) -> None:
         """
         Draw a crosshair at the specified position.
-        
+
         Args:
             frame: Frame to draw on
             position: np.array with (x, y) position for crosshair
@@ -121,13 +132,13 @@ class FrameOverlay:
         color = (0, 255, 255)  # Yellow in BGR
         thickness = 2
         size = 20
-        
+
         # Horizontal line
         cv2.line(frame, (x - size, y), (x + size, y), color, thickness)
-        
+
         # Vertical line
         cv2.line(frame, (x, y - size), (x, y + size), color, thickness)
-        
+
         # Center dot
         cv2.circle(frame, (x, y), 3, (0, 0, 255), -1)  # Red dot
 
@@ -158,31 +169,39 @@ class VideoProcessingService:
         self.frame_count = 0
         self.stop_event = asyncio.Event()
         self._loop: Optional[asyncio.AbstractEventLoop] = None
-        
+
         # Separate concerns - FPS calculation
         self.fps_calculator = FpsCalculator(window_size=5)
-        
+
         # UI controls
         self.ui_service: Optional[UiService] = None
         self.arrow_grid: Optional[ArrowGridControl] = None
-        
+
         # Crosshair movement
-        self.crosshair_position = np.array([320.0, 240.0], dtype=np.float32)  # Initial position
-        self.velocity = np.array([0.0, 0.0], dtype=np.float32)  # (dx, dy) per frame
+        self.crosshair_position: np.ndarray[Any, np.dtype[np.float32]] = np.array(
+            [320.0, 240.0], dtype=np.float32
+        )  # Initial position
+        self.velocity: np.ndarray[Any, np.dtype[np.float32]] = np.array(
+            [0.0, 0.0], dtype=np.float32
+        )  # (dx, dy) per frame
         self.movement_speed = 5.0  # pixels per frame
-        self._ui_update_task = None
-    
+        self._ui_update_task: Optional[asyncio.Task[None]] = None
+
     async def run(self) -> None:
         """Run the video processing service."""
         self.logger.info(f"Starting RocketWelder client... {self.client.connection}")
-        
+
         # Store the event loop for use in callbacks
         self._loop = asyncio.get_running_loop()
-        
+
         # Initialize UI controls if session ID is available
         await self.initialize_ui_controls()
 
         # Check if we're in duplex mode or one-way mode
+        callback: Union[
+            Callable[[np.ndarray[Any, np.dtype[Any]]], None],
+            Callable[[np.ndarray[Any, np.dtype[Any]], np.ndarray[Any, np.dtype[Any]]], None],
+        ]
         if self.client.connection.connection_mode == ConnectionMode.DUPLEX:
             self.logger.info("Running in DUPLEX mode - will process frames and return results")
             self.logger.info(
@@ -216,22 +235,20 @@ class VideoProcessingService:
         finally:
             self.logger.info("Stopping client...")
             self.logger.info(f"Total frames processed: {self.frame_count}")
-            
+
             # Cancel UI update task
             if self._ui_update_task:
                 self._ui_update_task.cancel()
-                try:
+                with contextlib.suppress(asyncio.CancelledError):
                     await self._ui_update_task
-                except asyncio.CancelledError:
-                    pass
-            
+
             if self.arrow_grid:
                 self.arrow_grid.dispose()
             if self.ui_service:
                 await self.ui_service.dispose()
             self.client.stop()
 
-    def process_frame_oneway(self, input_frame: np.ndarray) -> None:
+    def process_frame_oneway(self, input_frame: np.ndarray[Any, np.dtype[Any]]) -> None:
         """
         Process a frame in one-way mode.
 
@@ -241,9 +258,7 @@ class VideoProcessingService:
         self.frame_count += 1
 
         height, width = input_frame.shape[:2]
-        self.logger.info(
-            f"Processed frame {self.frame_count} ({width}x{height}) in one-way mode"
-        )
+        self.logger.info(f"Processed frame {self.frame_count} ({width}x{height}) in one-way mode")
 
         # Check if we should exit
         if self.exit_after > 0 and self.frame_count >= self.exit_after:
@@ -254,44 +269,45 @@ class VideoProcessingService:
                 self._loop.call_soon_threadsafe(self.stop_event.set)
             else:
                 self.stop_event.set()
-    
+
     async def initialize_ui_controls(self) -> None:
         """Initialize UI controls if session ID is available."""
         if not self.session_id:
             self.logger.info("No SessionId configured, UI controls will be disabled")
             return
-        
+
         try:
             session_uuid = uuid.UUID(self.session_id)
             self.logger.info(f"Initializing UI service with SessionId: {session_uuid}")
-            
+
             # Create UI service from session ID
             self.ui_service = UiService.from_session_id(session_uuid)
-            await self.ui_service.initialize()
-            
+            # Note: initialize() method would need EventStore client to work properly
+            # For now, we'll skip initialization since we don't have EventStore configured
+
             # Create ArrowGrid control
             self.arrow_grid = self.ui_service.factory.define_arrow_grid("crosshair-control")
-            
+
             # Hook up events
-            self.arrow_grid.arrow_down += self.on_arrow_down
-            self.arrow_grid.arrow_up += self.on_arrow_up
-            
+            self.arrow_grid.on_arrow_down = self.on_arrow_down
+            self.arrow_grid.on_arrow_up = self.on_arrow_up
+
             # Add to bottom-center region
             self.ui_service[RegionName.PREVIEW_BOTTOM_CENTER].add(self.arrow_grid)
-            
+
             # Send initial control definition
             await self.ui_service.do()
-            
+
             # Start background task to call do() every 500ms
             self._ui_update_task = asyncio.create_task(self._ui_update_loop())
-            
+
             self.logger.info("ArrowGrid control initialized successfully")
         except Exception as ex:
             self.logger.error(f"Failed to initialize UI controls: {ex}")
             self.ui_service = None
             self.arrow_grid = None
-    
-    async def _ui_update_loop(self):
+
+    async def _ui_update_loop(self) -> None:
         """Background task to call do() every 500ms."""
         while not self.stop_event.is_set():
             try:
@@ -302,11 +318,11 @@ class VideoProcessingService:
                 break
             except Exception as ex:
                 self.logger.error(f"Error calling UiService.do(): {ex}")
-    
-    def on_arrow_down(self, sender, direction: ArrowDirection) -> None:
+
+    def on_arrow_down(self, sender: Any, direction: ArrowDirection) -> None:
         """Handle arrow button press."""
         self.logger.info(f"Arrow {direction} pressed")
-        
+
         # Set velocity based on arrow direction
         if direction == ArrowDirection.UP:
             self.velocity = np.array([0.0, -self.movement_speed], dtype=np.float32)
@@ -316,15 +332,19 @@ class VideoProcessingService:
             self.velocity = np.array([-self.movement_speed, 0.0], dtype=np.float32)
         elif direction == ArrowDirection.RIGHT:
             self.velocity = np.array([self.movement_speed, 0.0], dtype=np.float32)
-    
-    def on_arrow_up(self, sender, direction: ArrowDirection) -> None:
+
+    def on_arrow_up(self, sender: Any, direction: ArrowDirection) -> None:
         """Handle arrow button release."""
         self.logger.info(f"Arrow {direction} released")
-        
+
         # Stop movement when arrow is released
         self.velocity = np.array([0.0, 0.0], dtype=np.float32)
 
-    def process_frame_duplex(self, input_frame: np.ndarray, output_frame: np.ndarray) -> None:
+    def process_frame_duplex(
+        self,
+        input_frame: np.ndarray[Any, np.dtype[Any]],
+        output_frame: np.ndarray[Any, np.dtype[Any]],
+    ) -> None:
         """
         Process frames in duplex mode.
 
@@ -334,16 +354,16 @@ class VideoProcessingService:
         """
         self.frame_count += 1
         self.fps_calculator.update()
-        
+
         height, width = input_frame.shape[:2]
-        
+
         # Initialize crosshair position on first frame
         if self.frame_count == 1:
             self.crosshair_position = np.array([width / 2.0, height / 2.0], dtype=np.float32)
-        
+
         # Update crosshair position based on velocity using numpy operations
         self.crosshair_position = self.crosshair_position + self.velocity
-        
+
         # Keep crosshair within frame bounds
         self.crosshair_position[0] = np.clip(self.crosshair_position[0], 20, width - 20)
         self.crosshair_position[1] = np.clip(self.crosshair_position[1], 20, height - 20)
@@ -353,15 +373,10 @@ class VideoProcessingService:
 
         # Use FrameOverlay to draw all overlays including crosshair
         FrameOverlay.draw_duplex_overlay(
-            output_frame, 
-            self.frame_count, 
-            self.fps_calculator.get_fps(),
-            self.crosshair_position
+            output_frame, self.frame_count, self.fps_calculator.get_fps(), self.crosshair_position
         )
 
-        self.logger.info(
-            f"Processed frame {self.frame_count} ({width}x{height}) in duplex mode"
-        )
+        self.logger.info(f"Processed frame {self.frame_count} ({width}x{height}) in duplex mode")
 
         # Check if we should exit
         if self.exit_after > 0 and self.frame_count >= self.exit_after:
@@ -374,7 +389,7 @@ class VideoProcessingService:
                 self.stop_event.set()
 
 
-async def main():
+async def main() -> None:
     """Main entry point for the application."""
     # Parse command line arguments
     parser = argparse.ArgumentParser(
@@ -384,10 +399,10 @@ async def main():
 Examples:
   # One-way mode (receive only)
   %(prog)s "shm://test_buffer?mode=OneWay" --exit-after 10
-  
+
   # Duplex mode (receive and send)
   %(prog)s "shm://test_buffer?mode=Duplex" --exit-after 10
-  
+
   # Using environment variable
   CONNECTION_STRING="shm://test_buffer?mode=OneWay" %(prog)s
         """,
@@ -416,29 +431,31 @@ Examples:
     # Get connection string from argument or environment variable
     connection_string = args.connection_string or os.environ.get("CONNECTION_STRING")
     if not connection_string:
-        parser.error("Connection string must be provided as argument or CONNECTION_STRING environment variable")
-    
+        parser.error(
+            "Connection string must be provided as argument or CONNECTION_STRING environment variable"
+        )
+
     # Get session ID from environment variable
-    session_id = os.environ.get("SessionId")
+    session_id = os.environ.get("SessionId")  # noqa: SIM112 - Must match C# SDK
 
     # Configure logging - respect ROCKET_WELDER_LOG_LEVEL env var
     # Priority: CLI arg > ROCKET_WELDER_LOG_LEVEL > default
     log_level = args.log_level
     if log_level == "INFO":  # Default value
-        env_log_level = os.environ.get('ROCKET_WELDER_LOG_LEVEL')
+        env_log_level = os.environ.get("ROCKET_WELDER_LOG_LEVEL")
         if env_log_level:
             log_level = env_log_level.upper()
-    
+
     # Set up logging
     logging.basicConfig(
         level=getattr(logging, log_level),
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
     logger = logging.getLogger("SimpleClient")
-    
+
     # Ensure ROCKET_WELDER_LOG_LEVEL is set for SDK initialization
-    if not os.environ.get('ROCKET_WELDER_LOG_LEVEL'):
-        os.environ['ROCKET_WELDER_LOG_LEVEL'] = log_level
+    if not os.environ.get("ROCKET_WELDER_LOG_LEVEL"):
+        os.environ["ROCKET_WELDER_LOG_LEVEL"] = log_level
 
     # Print startup information
     print("=" * 40)

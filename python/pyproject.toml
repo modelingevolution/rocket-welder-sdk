@@ -36,6 +36,7 @@ dependencies = [
     "opencv-python>=4.5.0",
     "zerobuffer-ipc>=1.1.17",
     "pydantic>=2.5.0",
+    "py-micro-plumberd>=0.1.6",
 ]
 
 [project.optional-dependencies]
@@ -81,6 +82,10 @@ module = [
     "cv2.*",
     "zerobuffer",
     "zerobuffer.*",
+    "py_micro_plumberd",
+    "py_micro_plumberd.*",
+    "esdbclient",
+    "esdbclient.*",
 ]
 ignore_missing_imports = true
 

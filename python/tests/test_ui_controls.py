@@ -4,14 +4,14 @@ from unittest.mock import Mock
 
 import pytest
 
-from rocketwelder.external_controls import (
+from rocket_welder_sdk.external_controls import (
     ArrowDirection,
     ButtonDown,
     ButtonUp,
     KeyDown,
     KeyUp,
 )
-from rocketwelder.ui import (
+from rocket_welder_sdk.ui import (
     ArrowGridControl,
     Color,
     ControlType,

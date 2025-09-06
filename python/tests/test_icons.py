@@ -2,8 +2,8 @@
 
 from unittest.mock import Mock
 
-from rocketwelder.ui import IconButtonControl, UiService
-from rocketwelder.ui.icons import Icons, Material
+from rocket_welder_sdk.ui import IconButtonControl, UiService
+from rocket_welder_sdk.ui.icons import Icons, Material
 
 
 def test_material_icons_exist():
@@ -84,7 +84,7 @@ def test_common_icons_available():
 
 def test_custom_brands_available():
     """Test that custom brand icons are available."""
-    from rocketwelder.ui.icons import Custom
+    from rocket_welder_sdk.ui.icons import Custom
 
     assert hasattr(Custom, "Brands")
     assert hasattr(Custom.Brands, "MUD_BLAZOR")

@@ -2,3 +2,5 @@ opencv-python>=4.5.0
 numpy>=1.19.0
 posix-ipc>=1.0.0
 zerobuffer-ipc>=1.1.19
+pydantic>=2.5.0
+py-micro-plumberd>=0.1.6

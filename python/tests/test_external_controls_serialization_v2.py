@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from uuid import UUID
 
-from rocketwelder.external_controls.contracts import (
+from rocket_welder_sdk.external_controls.contracts import (
     ArrowDirection,
     ArrowDown,
     ArrowUp,

@@ -48,6 +48,8 @@ setup(
         "numpy>=1.20.0",
         "opencv-python>=4.5.0",
         "zerobuffer-ipc>=1.1.16",
+        "pydantic>=2.5.0",
+        "py-micro-plumberd>=0.1.6",
     ],
     extras_require={
         "dev": [
