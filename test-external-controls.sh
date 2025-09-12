@@ -75,7 +75,8 @@ if [ ! -d "$PYTHON_OUTPUT" ]; then
 fi
 
 # List of event types to compare
-EVENT_TYPES=("DefineControl" "DeleteControl" "ChangeControls" "ButtonDown" "ButtonUp" "ArrowDown" "ArrowUp")
+# Note: ArrowDown/ArrowUp are internal SDK events, not external contracts
+EVENT_TYPES=("DefineControl" "DeleteControls" "ChangeControls" "ButtonDown" "ButtonUp")
 
 FAILED=0
 

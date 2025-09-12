@@ -18,6 +18,8 @@ from typing import Any, Callable, Optional, Union
 
 import cv2
 import numpy as np
+from esdbclient import EventStoreDBClient
+from py_micro_plumberd import EventStoreClient
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -282,8 +284,15 @@ class VideoProcessingService:
 
             # Create UI service from session ID
             self.ui_service = UiService.from_session_id(session_uuid)
-            # Note: initialize() method would need EventStore client to work properly
-            # For now, we'll skip initialization since we don't have EventStore configured
+
+            # Initialize with EventStore if configured
+            eventstore_connection = os.environ.get("EventStore")  # noqa: SIM112 - Must match C# SDK
+            if eventstore_connection:
+                self.logger.info(f"Connecting to EventStore: {eventstore_connection}")
+                eventstore_client = EventStoreClient(eventstore_connection)
+                await self.ui_service.initialize(eventstore_client)
+            else:
+                self.logger.info("EventStore not configured, UI commands will not be sent")
 
             # Create ArrowGrid control
             self.arrow_grid = self.ui_service.factory.define_arrow_grid("crosshair-control")
@@ -296,7 +305,8 @@ class VideoProcessingService:
             self.ui_service[RegionName.PREVIEW_BOTTOM_CENTER].add(self.arrow_grid)
 
             # Send initial control definition
-            await self.ui_service.do()
+            if self.ui_service:
+                await self.ui_service.do()
 
             # Start background task to call do() every 500ms
             self._ui_update_task = asyncio.create_task(self._ui_update_loop())
@@ -389,6 +399,29 @@ class VideoProcessingService:
                 self.stop_event.set()
 
 
+async def check_eventstore(connection_string: str, logger: logging.Logger) -> None:
+    """Verify EventStore connection.
+
+    Args:
+        connection_string: EventStore connection string
+        logger: Logger instance
+    """
+    try:
+        logger.info(f"Verifying EventStore connection to: {connection_string}")
+        client = EventStoreDBClient(connection_string)
+        # Try to read one event to verify connection
+        events = client.read_all(limit=1)
+        for event in events:
+            logger.info(f"EventStore connected, read 1 event: {event.stream_name}")
+            break
+        else:
+            logger.info("EventStore connected (no events found)")
+        client.close()
+    except Exception as e:
+        logger.error(f"Failed to connect to EventStore: {e}")
+        raise
+
+
 async def main() -> None:
     """Main entry point for the application."""
     # Parse command line arguments
@@ -438,6 +471,9 @@ Examples:
     # Get session ID from environment variable
     session_id = os.environ.get("SessionId")  # noqa: SIM112 - Must match C# SDK
 
+    # Get EventStore connection from environment variable
+    eventstore_connection = os.environ.get("EventStore")  # noqa: SIM112 - Must match C# SDK
+
     # Configure logging - respect ROCKET_WELDER_LOG_LEVEL env var
     # Priority: CLI arg > ROCKET_WELDER_LOG_LEVEL > default
     log_level = args.log_level
@@ -468,8 +504,19 @@ Examples:
         print(f"SessionId: {session_id}")
     else:
         print("SessionId: Not configured (UI controls disabled)")
+    if eventstore_connection:
+        print(f"EventStore: {eventstore_connection}")
+    else:
+        print("EventStore: Not configured (UI commands won't be sent)")
     print("=" * 40)
     print()
+
+    # Verify EventStore connection if configured
+    if eventstore_connection:
+        try:
+            await check_eventstore(eventstore_connection, logger)
+        except Exception:
+            sys.exit(1)
 
     # Create client and service
     try:

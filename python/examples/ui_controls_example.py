@@ -24,7 +24,9 @@ async def main() -> None:
     print(f"Using session ID: {session_id}")
 
     # Create EventStore client
-    connection_string = os.environ.get("EVENTSTORE_CONNECTION", "esdb://localhost:2113?tls=false")
+    connection_string = os.environ.get(
+        "EventStore", "esdb://localhost:2113?tls=false"  # noqa: SIM112 - Must match C# SDK
+    )
     eventstore_client = EventStoreClient(connection_string)
 
     # Create UI service

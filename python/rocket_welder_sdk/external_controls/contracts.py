@@ -11,13 +11,7 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_serializer
 from pydantic.alias_generators import to_pascal
 
-
-class RocketWelderControlType(str, Enum):
-    """Types of controls that can be created."""
-
-    ICON_BUTTON = "IconButton"
-    ARROW_GRID = "ArrowGrid"
-    LABEL = "Label"
+from rocket_welder_sdk.ui.value_types import ControlType
 
 
 class ArrowDirection(str, Enum):
@@ -56,7 +50,7 @@ class DefineControl(BaseContract):
     """Command to define a new control in the UI."""
 
     control_id: str
-    type: RocketWelderControlType
+    type: ControlType
     properties: dict[str, str]
     region_name: str
 
@@ -90,20 +84,6 @@ class ButtonUp(BaseContract):
     """Event when a button is released."""
 
     control_id: str
-
-
-class ArrowDown(BaseContract):
-    """Event when an arrow button is pressed down."""
-
-    control_id: str
-    direction: ArrowDirection
-
-
-class ArrowUp(BaseContract):
-    """Event when an arrow button is released."""
-
-    control_id: str
-    direction: ArrowDirection
 
 
 class KeyDown(BaseContract):

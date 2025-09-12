@@ -36,7 +36,7 @@ dependencies = [
     "opencv-python>=4.5.0",
     "zerobuffer-ipc>=1.1.17",
     "pydantic>=2.5.0",
-    "py-micro-plumberd>=0.1.6",
+    "py-micro-plumberd>=0.1.8",
 ]
 
 [project.optional-dependencies]

@@ -1,9 +1,9 @@
 """External Controls module for RocketWelder SDK."""
 
+from rocket_welder_sdk.ui.value_types import ControlType
+
 from .contracts import (
     ArrowDirection,
-    ArrowDown,
-    ArrowUp,
     # Events (UI → Container)
     ButtonDown,
     ButtonUp,
@@ -14,21 +14,17 @@ from .contracts import (
     DeleteControls,
     KeyDown,
     KeyUp,
-    # Enums
-    RocketWelderControlType,
 )
 
 __all__ = [
     "ArrowDirection",
-    "ArrowDown",
-    "ArrowUp",
     "ButtonDown",
     "ButtonUp",
     "ChangeControls",
+    "ControlType",  # Now using the single ControlType from ui.value_types
     "DefineControl",
     "DeleteControl",  # Legacy - deprecated
     "DeleteControls",
     "KeyDown",
     "KeyUp",
-    "RocketWelderControlType",
 ]

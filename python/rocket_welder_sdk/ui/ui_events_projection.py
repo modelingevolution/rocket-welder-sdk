@@ -8,7 +8,7 @@ from contextlib import suppress
 from threading import Event as ThreadingEvent
 from typing import TYPE_CHECKING, Any, Protocol
 
-from rocket_welder_sdk.external_controls import (
+from rocket_welder_sdk.external_controls.contracts import (
     ButtonDown,
     ButtonUp,
     KeyDown,

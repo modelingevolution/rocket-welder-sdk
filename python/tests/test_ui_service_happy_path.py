@@ -11,11 +11,11 @@ from rocket_welder_sdk.external_controls import (
     ArrowDirection,
     ButtonDown,
     ChangeControls,
+    ControlType,
     DefineControl,
     DeleteControls,
     KeyDown,
     KeyUp,
-    RocketWelderControlType,
 )
 from rocket_welder_sdk.ui import (
     ArrowGridControl,
@@ -189,7 +189,7 @@ class TestUiServiceHappyPath:
         assert recipient_id == session_id
         assert isinstance(define_command, DefineControl)
         assert define_command.control_id == control_id
-        assert define_command.type == RocketWelderControlType.ICON_BUTTON
+        assert define_command.type == ControlType.ICON_BUTTON
         assert define_command.region_name == "TopRight"
         assert define_command.properties["Icon"] == "M12,2A10,10"
         assert define_command.properties["Color"] == "Primary"
@@ -279,7 +279,7 @@ class TestUiServiceHappyPath:
         define_command: DefineControl = kwargs.get("command", args[1] if len(args) > 1 else None)
         assert isinstance(define_command, DefineControl)
         assert define_command.control_id == control_id
-        assert define_command.type == RocketWelderControlType.ARROW_GRID
+        assert define_command.type == ControlType.ARROW_GRID
         assert define_command.region_name == "Bottom"
 
         # Act 2: Setup event handlers
@@ -395,7 +395,7 @@ class TestUiServiceHappyPath:
                 "command", args[1] if len(args) > 1 else None
             )
             assert isinstance(define_command, DefineControl)
-            assert define_command.type == RocketWelderControlType.LABEL
+            assert define_command.type == ControlType.LABEL
             assert define_command.control_id in label_ids
 
         command_bus.send_async.reset_mock()

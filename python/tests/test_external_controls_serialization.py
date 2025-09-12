@@ -7,15 +7,12 @@ from uuid import UUID
 import pytest
 
 from rocket_welder_sdk.external_controls import (
-    ArrowDirection,
-    ArrowDown,
-    ArrowUp,
     ButtonDown,
     ButtonUp,
     ChangeControls,
+    ControlType,
     DefineControl,
     DeleteControls,
-    RocketWelderControlType,
 )
 
 
@@ -33,7 +30,7 @@ class TestExternalControlsSerialization:
         define_control = DefineControl(
             id=UUID("12345678-1234-1234-1234-123456789012"),
             control_id="test-button",
-            type=RocketWelderControlType.ICON_BUTTON,
+            type=ControlType.ICON_BUTTON,
             properties={
                 "Icon": "M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2Z",
                 "Color": "Primary",
@@ -82,24 +79,6 @@ class TestExternalControlsSerialization:
             control_id="test-button",
         )
         self._test_round_trip(button_up, "ButtonUp")
-
-    def test_arrow_down_round_trip(self):
-        """Test ArrowDown serialization and deserialization."""
-        arrow_down = ArrowDown(
-            id=UUID("67890123-6789-6789-6789-678901234567"),
-            control_id="test-arrow",
-            direction=ArrowDirection.UP,
-        )
-        self._test_round_trip(arrow_down, "ArrowDown")
-
-    def test_arrow_up_round_trip(self):
-        """Test ArrowUp serialization and deserialization."""
-        arrow_up = ArrowUp(
-            id=UUID("78901234-7890-7890-7890-789012345678"),
-            control_id="test-arrow",
-            direction=ArrowDirection.DOWN,
-        )
-        self._test_round_trip(arrow_up, "ArrowUp")
 
     def _test_round_trip(self, original, type_name: str):
         """Test serialization and deserialization of a single object."""

@@ -7,11 +7,10 @@ from typing import Any
 
 from py_micro_plumberd import CommandBus, EventStoreClient
 
-from rocket_welder_sdk.external_controls import (
+from rocket_welder_sdk.external_controls.contracts import (
     ChangeControls,
     DefineControl,
     DeleteControls,
-    RocketWelderControlType,
 )
 
 from .controls import (
@@ -21,7 +20,7 @@ from .controls import (
     LabelControl,
 )
 from .ui_events_projection import UiEventsProjection
-from .value_types import ControlType, RegionName
+from .value_types import RegionName
 
 
 class ItemsControl(UserList[ControlBase]):
@@ -297,21 +296,9 @@ class UiService:
             # Add to index when actually defining
             self._index[control.id] = control
 
-            # Map control type
-            rw_type: RocketWelderControlType | None = None
-            if control.control_type == ControlType.ICON_BUTTON:
-                rw_type = RocketWelderControlType.ICON_BUTTON
-            elif control.control_type == ControlType.ARROW_GRID:
-                rw_type = RocketWelderControlType.ARROW_GRID
-            elif control.control_type == ControlType.LABEL:
-                rw_type = RocketWelderControlType.LABEL
-
-            if rw_type is None:
-                continue
-
             command = DefineControl(
                 control_id=control.id,
-                type=rw_type,
+                type=control.control_type,
                 properties=control.properties,
                 region_name=region.value,
             )

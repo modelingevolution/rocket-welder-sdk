@@ -311,7 +311,7 @@ public class VideoProcessingService : BackgroundService
                 {
                     _logger.LogError(ex, "Error calling UiService.Do()");
                 }
-            }, null, TimeSpan.FromMilliseconds(500), TimeSpan.FromMilliseconds(500));
+            }, null, TimeSpan.FromSeconds(1/30), TimeSpan.FromSeconds(1 / 30));
             
             _logger.LogInformation("ArrowGrid control initialized successfully");
         }

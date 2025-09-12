@@ -1,6 +1,6 @@
 """UI module for RocketWelder SDK."""
 
-from rocket_welder_sdk.external_controls import ArrowDirection
+from rocket_welder_sdk.external_controls.contracts import ArrowDirection
 
 from .controls import (
     ArrowGridControl,

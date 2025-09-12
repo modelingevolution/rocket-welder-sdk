@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any, Callable, ClassVar
 
-from rocket_welder_sdk.external_controls import (
+from rocket_welder_sdk.external_controls.contracts import (
     ArrowDirection,
     ButtonDown,
     ButtonUp,

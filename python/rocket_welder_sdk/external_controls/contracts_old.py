@@ -1,16 +1,10 @@
-"""External Controls event contracts for RocketWelder SDK."""
+"""External Controls event contracts for RocketWelder SDK (legacy - for backward compatibility)."""
 
 from dataclasses import dataclass, field
 from enum import Enum
 from uuid import UUID, uuid4
 
-
-class RocketWelderControlType(Enum):
-    """Types of controls that can be created."""
-
-    ICON_BUTTON = "IconButton"
-    ARROW_GRID = "ArrowGrid"
-    LABEL = "Label"
+from rocket_welder_sdk.ui.value_types import ControlType
 
 
 class ArrowDirection(Enum):
@@ -30,7 +24,7 @@ class DefineControl:
     """Command to define a new control in the UI."""
 
     control_id: str
-    type: RocketWelderControlType
+    type: ControlType
     properties: dict[str, str]
     region_name: str
     id: UUID = field(default_factory=uuid4)
@@ -108,48 +102,4 @@ class ButtonUp:
         """Create from EventStore data."""
         return cls(
             control_id=str(data["ControlId"]), id=UUID(str(data["Id"])) if "Id" in data else uuid4()
-        )
-
-
-@dataclass
-class ArrowDown:
-    """Event when arrow is pressed."""
-
-    control_id: str
-    direction: ArrowDirection
-    id: UUID = field(default_factory=uuid4)
-
-    def to_dict(self) -> dict[str, str]:
-        """Convert to dictionary for EventStore."""
-        return {"Id": str(self.id), "ControlId": self.control_id, "Direction": self.direction.value}
-
-    @classmethod
-    def from_dict(cls, data: dict[str, object]) -> "ArrowDown":
-        """Create from EventStore data."""
-        return cls(
-            control_id=str(data["ControlId"]),
-            direction=ArrowDirection[str(data["Direction"]).upper()],
-            id=UUID(str(data["Id"])) if "Id" in data else uuid4(),
-        )
-
-
-@dataclass
-class ArrowUp:
-    """Event when arrow is released."""
-
-    control_id: str
-    direction: ArrowDirection
-    id: UUID = field(default_factory=uuid4)
-
-    def to_dict(self) -> dict[str, str]:
-        """Convert to dictionary for EventStore."""
-        return {"Id": str(self.id), "ControlId": self.control_id, "Direction": self.direction.value}
-
-    @classmethod
-    def from_dict(cls, data: dict[str, object]) -> "ArrowUp":
-        """Create from EventStore data."""
-        return cls(
-            control_id=str(data["ControlId"]),
-            direction=ArrowDirection[str(data["Direction"]).upper()],
-            id=UUID(str(data["Id"])) if "Id" in data else uuid4(),
         )
