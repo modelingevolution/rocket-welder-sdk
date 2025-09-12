@@ -12,4 +12,8 @@ internal class ControlTypeAttribute : Attribute
     {
         Type = type;
     }
+    public ControlTypeAttribute(string type)
+    {
+        Type = type;
+    }
 }

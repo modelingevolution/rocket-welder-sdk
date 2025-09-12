@@ -5,6 +5,50 @@ using ModelingEvolution.JsonParsableConverter;
 
 namespace RocketWelder.SDK.Ui
 {
+    [JsonConverter(typeof(JsonParsableConverter<ControlType>))]
+    public readonly record struct ControlType : IParsable<ControlType>
+    {
+        private readonly string _value;
+
+        private ControlType(string value)
+        {
+            _value = value ?? throw new ArgumentNullException(nameof(value));
+        }
+        public static ControlType From(String value) => new ControlType(value);
+        // Implicit conversion from string to RegionName
+        public static implicit operator ControlType(string value) => new ControlType(value);
+
+        // Implicit conversion from RegionName to string
+        public static implicit operator string(ControlType regionName) => regionName._value;
+
+        // IParsable implementation
+        public static ControlType Parse(string s, IFormatProvider? provider)
+        {
+            if (string.IsNullOrWhiteSpace(s))
+                throw new FormatException("RegionName cannot be null or whitespace");
+
+            return new ControlType(s);
+        }
+
+        public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, [MaybeNullWhen(false)] out ControlType result)
+        {
+            if (string.IsNullOrWhiteSpace(s))
+            {
+                result = default;
+                return false;
+            }
+
+            result = new ControlType(s);
+            return true;
+        }
+
+        public override string ToString() => _value ?? string.Empty;
+
+        public const string IconButton = "IconButton";
+        public const string ArrowGrid = "ArrowGrid";
+        public const string Label = "Label";
+    }
+
     /// <summary>
     /// Strongly-typed region name for UI control placement.
     /// </summary>
