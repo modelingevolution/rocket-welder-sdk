@@ -13,7 +13,7 @@ from .controllers import DuplexShmController, IController, OneWayShmController
 from .gst_metadata import GstCaps, GstMetadata
 from .rocket_welder_client import RocketWelderClient
 
-# Alias for backward compatibility
+# Alias for backward compatibility and README examples
 Client = RocketWelderClient
 
 __version__ = "1.1.0"

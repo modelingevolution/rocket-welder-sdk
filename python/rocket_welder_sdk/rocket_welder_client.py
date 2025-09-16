@@ -121,6 +121,110 @@ class RocketWelderClient:
         self.stop()
 
     @classmethod
+    def from_connection_string(cls, connection_string: str) -> RocketWelderClient:
+        """
+        Create a client from a connection string.
+
+        Args:
+            connection_string: Connection string (e.g., 'shm://buffer?mode=Duplex')
+
+        Returns:
+            Configured RocketWelderClient instance
+        """
+        return cls(connection_string)
+
+    @classmethod
+    def from_args(cls, args: list[str]) -> RocketWelderClient:
+        """
+        Create a client from command line arguments.
+
+        Checks in order:
+        1. First positional argument from args
+        2. CONNECTION_STRING environment variable
+
+        Args:
+            args: Command line arguments (typically sys.argv)
+
+        Returns:
+            Configured RocketWelderClient instance
+
+        Raises:
+            ValueError: If no connection string is found
+        """
+        import os
+
+        # Check for positional argument (skip script name if present)
+        connection_string = None
+        for arg in args[1:] if len(args) > 0 and args[0].endswith(".py") else args:
+            if not arg.startswith("-"):
+                connection_string = arg
+                break
+
+        # Fall back to environment variable
+        if not connection_string:
+            connection_string = os.environ.get("CONNECTION_STRING")
+
+        if not connection_string:
+            raise ValueError(
+                "No connection string provided. "
+                "Provide as argument or set CONNECTION_STRING environment variable"
+            )
+
+        return cls(connection_string)
+
+    @classmethod
+    def from_(cls, *args: Any, **kwargs: Any) -> RocketWelderClient:
+        """
+        Create a client with automatic configuration detection.
+
+        This is the most convenient factory method that:
+        1. Checks kwargs for 'args' parameter (command line arguments)
+        2. Checks args for command line arguments
+        3. Falls back to CONNECTION_STRING environment variable
+
+        Examples:
+            client = RocketWelderClient.from_()  # Uses env var
+            client = RocketWelderClient.from_(sys.argv)  # Uses command line
+            client = RocketWelderClient.from_(args=sys.argv)  # Named param
+
+        Returns:
+            Configured RocketWelderClient instance
+
+        Raises:
+            ValueError: If no connection string is found
+        """
+        import os
+
+        # Check kwargs first
+        argv = kwargs.get("args")
+
+        # Then check positional args
+        if not argv and args:
+            # If first arg looks like sys.argv (list), use it
+            if isinstance(args[0], list):
+                argv = args[0]
+            # If first arg is a string, treat it as connection string
+            elif isinstance(args[0], str):
+                return cls(args[0])
+
+        # Try to get from command line args if provided
+        if argv:
+            try:
+                return cls.from_args(argv)
+            except ValueError:
+                pass  # Fall through to env var check
+
+        # Fall back to environment variable
+        connection_string = os.environ.get("CONNECTION_STRING")
+        if connection_string:
+            return cls(connection_string)
+
+        raise ValueError(
+            "No connection string provided. "
+            "Provide as argument or set CONNECTION_STRING environment variable"
+        )
+
+    @classmethod
     def create_oneway_shm(
         cls,
         buffer_name: str,

@@ -1,4 +1,5 @@
-"""Example demonstrating UI controls with event subscription."""
+#!/usr/bin/env python3
+"""UI controls with event subscription example."""
 
 import asyncio
 import logging
@@ -7,87 +8,48 @@ from uuid import uuid4
 
 from py_micro_plumberd import EventStoreClient
 
-from rocket_welder_sdk.ui import (
-    Color,
-    RegionName,
-    Size,
-    UiService,
-)
+from rocket_welder_sdk.ui import Color, RegionName, Size, UiService
 
-# Setup logging to see what's happening
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    """Main example demonstrating UI controls with subscription."""
-    # Create session ID
+    """Main entry point for UI subscription example."""
     session_id = str(uuid4())
-    logger.info(f"Starting UI service with session {session_id}")
+    print(f"Session: {session_id}")
 
-    # Create EventStore client
-    connection_string = "esdb://localhost:2113?tls=false"
-    eventstore_client = EventStoreClient(connection_string)
+    # Create UI with EventStore subscription
+    ui = UiService(session_id)
+    async with ui:
+        client = EventStoreClient("esdb://localhost:2113?tls=false")
+        await ui.initialize(client)
 
-    # Create UI service
-    ui_service = UiService(session_id)
-
-    # Use context manager for proper cleanup
-    async with ui_service:
-        # Initialize with EventStore (starts subscription)
-        await ui_service.initialize(eventstore_client)
-        logger.info("UI service initialized with event subscription")
-
-        # Create some controls
-        button = ui_service.factory.define_icon_button(
-            control_id="submit-button",
+        # Create button
+        button = ui.factory.define_icon_button(
+            "submit",
             icon="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z",  # Plus icon
-            properties={
-                "Color": Color.PRIMARY.value,
-                "Size": Size.LARGE.value,
-            },
+            properties={"Color": Color.PRIMARY.value, "Size": Size.LARGE.value},
         )
 
-        # Set up event handler
-        def on_button_click(control: Any) -> None:
-            logger.info(f"Button {control.id} was clicked!")
-            # Update button appearance
+        # Handle clicks with proper type annotation
+        def on_click(control: Any) -> None:
+            """Handle button click event."""
+            logging.info(f"Button clicked: {control.id}")
             control.color = Color.SUCCESS
-            control.text = "Submitted!"
+            control.text = "Done!"
 
-        button.on_button_down = on_button_click
+        button.on_button_down = on_click
+        ui[RegionName.TOP_RIGHT].append(button)
 
-        # Add button to UI
-        ui_service[RegionName.TOP_RIGHT].append(button)
+        # Send controls
+        await ui.do()
 
-        # Create a label
-        label = ui_service.factory.define_label(
-            control_id="status-label",
-            text="Ready for input",
-            properties={
-                "Color": Color.TEXT_PRIMARY.value,
-            },
-        )
-        ui_service[RegionName.TOP].append(label)
-
-        # Process initial definitions
-        await ui_service.do()
-        logger.info("Controls defined and sent to UI")
-
-        # Simulate receiving events for 30 seconds
-        logger.info("Waiting for UI events (30 seconds)...")
+        # Wait for events
+        print("Waiting 30 seconds for UI events...")
         await asyncio.sleep(30)
 
-        # Update label before closing
-        label.text = "Closing application..."
-        label.color = Color.WARNING
-        await ui_service.do()
-
-        logger.info("Shutting down...")
-
-    # Cleanup
-    eventstore_client.close()
-    logger.info("Example complete")
+    client.close()
+    print("Done")
 
 
 if __name__ == "__main__":

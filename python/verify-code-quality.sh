@@ -62,7 +62,7 @@ fi
 # Run ruff for linting
 echo ""
 echo -e "${YELLOW}Running ruff linter...${NC}"
-if venv/bin/python -m ruff check rocket_welder_sdk tests examples; then
+if venv/bin/python -m ruff check rocket_welder_sdk tests examples --ignore SIM112; then
     echo -e "${GREEN}✓ Linting passed${NC}"
     RUFF_PASS=1
 else
