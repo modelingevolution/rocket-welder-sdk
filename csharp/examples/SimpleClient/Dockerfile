@@ -56,12 +56,13 @@ RUN apt-get update && apt-get install -y \
 # Copy published app
 COPY --from=build /app/publish .
 
-# Install minimal OpenCV/EmguCV dependencies and X11 for preview (NO VTK9!)
+# Install minimal OpenCV/EmguCV dependencies and X11 for preview
 RUN apt-get update && apt-get install -y \
     libgeotiff5 \
     libdc1394-25 \
     libopenexr-3-1-30 \
     libhdf5-103-1 \
+    libvtk9.1t64 \
     libx11-6 \
     libxext6 \
     libxrender1 \
@@ -84,6 +85,9 @@ ENV LD_LIBRARY_PATH=/app/runtimes/ubuntu-x64/native:/app:$LD_LIBRARY_PATH
 # Set up logging
 ENV ZEROBUFFER_LOG_LEVEL=INFO
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
+# Disable RocketWelder UI by default (can be overridden at runtime)
+ENV DisableRocketWelderUI=true
 
 # Health check (optional)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

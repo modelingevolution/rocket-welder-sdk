@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Threading;
+using System.Threading.Tasks;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Microsoft.Extensions.Logging;
@@ -19,6 +20,7 @@ namespace RocketWelder.SDK
         private readonly bool _loop;
         private readonly bool _preview;
         private readonly string _previewWindowName = "RocketWelder Preview";
+        private PeriodicTimer? _frameTimer;
 
         public bool IsRunning => _isRunning;
 
@@ -106,13 +108,7 @@ namespace RocketWelder.SDK
             _logger.LogInformation("Video source opened: {Width}x{Height} @ {Fps}fps, {FrameCount} frames",
                 width, height, fps, frameCount);
 
-            // Create preview window if requested
-            if (_preview)
-            {
-                CvInvoke.NamedWindow(_previewWindowName, Emgu.CV.CvEnum.WindowFlags.Normal);
-                // ResizeWindow not available in EmguCV - Normal flag allows manual resizing
-                _logger.LogInformation("Preview window created");
-            }
+            // Note: Preview window will be created when we get the first frame
 
             // Start processing on worker thread
             _worker = new Thread(() => ProcessFrames(onFrame, cancellationToken))
@@ -148,10 +144,14 @@ namespace RocketWelder.SDK
             }
         }
 
-        private void ProcessFrames(Action<Mat> onFrame, CancellationToken cancellationToken)
+        private async void ProcessFrames(Action<Mat> onFrame, CancellationToken cancellationToken)
         {
             using var frame = new Mat();
-            var frameDelayMs = (int)(1000d / (_metadata?.Caps.FrameRate ?? 30d));
+            var frameDelayMs = TimeSpan.FromMilliseconds(1000d / (_metadata?.Caps.FrameRate ?? 30d));
+            bool previewWindowCreated = false;
+
+            // Create PeriodicTimer for file playback frame rate control
+            _frameTimer = _connection.Protocol == Protocol.File ? new PeriodicTimer(frameDelayMs) : null;
 
             while (_isRunning && !cancellationToken.IsCancellationRequested)
             {
@@ -177,15 +177,23 @@ namespace RocketWelder.SDK
                         {
                             // Network stream issue
                             _logger.LogWarning("Failed to read frame from stream");
-                            Thread.Sleep(10);
+                            await Task.Delay(10, cancellationToken);
                             continue;
                         }
                     }
 
                     if (frame.IsEmpty)
                     {
-                        Thread.Sleep(10);
+                        await Task.Delay(10, cancellationToken);
                         continue;
+                    }
+
+                    // Create preview window on first frame if requested
+                    if (_preview && !previewWindowCreated)
+                    {
+                        CvInvoke.NamedWindow(_previewWindowName, Emgu.CV.CvEnum.WindowFlags.AutoSize);
+                        _logger.LogInformation("Preview window created for {Width}x{Height} video", frame.Width, frame.Height);
+                        previewWindowCreated = true;
                     }
 
                     // Process frame
@@ -204,10 +212,17 @@ namespace RocketWelder.SDK
                         }
                     }
 
-                    // Control frame rate for file playback
-                    if (_connection.Protocol == Protocol.File)
+                    // Control frame rate for file playback using PeriodicTimer
+                    if (_connection.Protocol == Protocol.File && _frameTimer != null)
                     {
-                        Thread.Sleep(frameDelayMs);
+                        try
+                        {
+                            await _frameTimer.WaitForNextTickAsync(cancellationToken);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            break;
+                        }
                     }
                 }
                 catch (Exception ex)
@@ -215,7 +230,7 @@ namespace RocketWelder.SDK
                     _logger.LogError(ex, "Error processing frame");
                     OnError?.Invoke(this, ex);
                     if (!_isRunning) break;
-                    Thread.Sleep(100);
+                    await Task.Delay(100, cancellationToken);
                 }
             }
 
@@ -226,6 +241,11 @@ namespace RocketWelder.SDK
         {
             _logger.LogDebug("Stopping OpenCV controller");
             _isRunning = false;
+
+            // Dispose the timer to stop it
+            _frameTimer?.Dispose();
+            _frameTimer = null;
+
             _worker?.Join(TimeSpan.FromMilliseconds(_connection.TimeoutMs + 50));
             _worker = null;
 

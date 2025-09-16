@@ -354,8 +354,7 @@ namespace RocketWelder.SDK
 
             _logger.LogInformation("Starting preview display in main thread");
 
-            // Create window
-            CvInvoke.NamedWindow(_previewWindowName, Emgu.CV.CvEnum.WindowFlags.Normal);
+            bool windowCreated = false;
 
             try
             {
@@ -371,6 +370,14 @@ namespace RocketWelder.SDK
                         {
                             if (frame != null && !frame.IsEmpty)
                             {
+                                // Create window on first frame
+                                if (!windowCreated)
+                                {
+                                    CvInvoke.NamedWindow(_previewWindowName, Emgu.CV.CvEnum.WindowFlags.AutoSize);
+                                    _logger.LogInformation("Preview window created for {Width}x{Height} video", frame.Width, frame.Height);
+                                    windowCreated = true;
+                                }
+
                                 // Display frame
                                 CvInvoke.Imshow(_previewWindowName, frame);
                                 frame.Dispose(); // Clean up the cloned frame

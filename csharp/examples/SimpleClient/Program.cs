@@ -157,9 +157,10 @@ class Program
                     return RocketWelderClient.From(configuration, loggerFactory);
                 });
 
-                // Only add UI services if EventStore is configured
+                // Only add UI services if EventStore is configured and UI is not disabled
                 var configuration = context.Configuration;
-                if (!string.IsNullOrEmpty(configuration["EventStore"]))
+                var disableUi = configuration.GetValue<bool>("DisableRocketWelderUI", false);
+                if (!string.IsNullOrEmpty(configuration["EventStore"]) && !disableUi)
                 {
                     services.AddRocketWelderUi();
                 }
@@ -174,7 +175,7 @@ public class VideoProcessingService : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly ILogger<VideoProcessingService> _logger;
     private readonly IHostApplicationLifetime _lifetime;
-    private readonly IPlumberInstance _plumber;
+    private readonly IPlumberInstance? _plumber;
     private readonly IServiceProvider _serviceProvider;
     private int _frameCount = 0;
     private int _exitAfter = -1;
@@ -197,15 +198,17 @@ public class VideoProcessingService : BackgroundService
         RocketWelderClient client,
         IConfiguration configuration,
         ILogger<VideoProcessingService> logger,
-        IHostApplicationLifetime lifetime, IPlumberInstance plumber,
+        IHostApplicationLifetime lifetime,
         IServiceProvider serviceProvider)
     {
         _client = client;
         _configuration = configuration;
         _logger = logger;
         _lifetime = lifetime;
-        _plumber = plumber;
         _serviceProvider = serviceProvider;
+
+        // Try to get IPlumberInstance if available (only when UI is enabled)
+        _plumber = serviceProvider.GetService<IPlumberInstance>();
         
         // Get exit-after from configuration
         _exitAfter = configuration.GetValue<int>("exit-after", -1);
@@ -219,22 +222,25 @@ public class VideoProcessingService : BackgroundService
         _logger.LogInformation("SessionId: " + _configuration["SessionId"]);
 
         // Only check EventStore if it's configured
+        var disableUi = _configuration.GetValue<bool>("DisableRocketWelderUI", false);
         var eventStoreConfig = _configuration["EventStore"];
         if (!string.IsNullOrEmpty(eventStoreConfig))
         {
             _logger.LogInformation("EventStore: " + eventStoreConfig);
             await CheckEventStore(stoppingToken);
         }
-        else
+        else if(!disableUi)
         {
             _logger.LogInformation("No EventStore configured, skipping EventStore connection");
         }
 
         _logger.LogInformation("Starting RocketWelder client..." + _client.Connection);
         _client.OnError += OnError;
-        
+
         // Initialize UI service if SessionId is available
-        await InitializeUiControls();
+        
+        if(!disableUi)
+            await InitializeUiControls();
         
         // Check if we're in duplex mode or one-way mode
         if (_client.Connection.ConnectionMode == ConnectionMode.Duplex)

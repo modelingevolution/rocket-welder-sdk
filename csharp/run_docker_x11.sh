@@ -68,7 +68,7 @@ echo "Press 'q' in the preview window to quit"
 docker run --rm \
     --name rocket-welder-csharp-preview \
     -e DISPLAY=$DISPLAY \
-    -e CONNECTION_STRING="file:///data/test_stream.mp4?preview=true&loop=false" \
+    -e CONNECTION_STRING="file:///data/test_stream.mp4?preview=true&loop=false&mode=duplex" \
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
     -v "$VIDEO_PATH:/data/test_stream.mp4:ro" \
     --network host \

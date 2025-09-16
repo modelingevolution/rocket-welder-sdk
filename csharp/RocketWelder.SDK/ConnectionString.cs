@@ -55,7 +55,7 @@ namespace RocketWelder.SDK
             ImmutableDictionary<string, string>? parameters = null,
             long bufferSize = default,
             long metadataSize = default,
-            ConnectionMode connectionMode = ConnectionMode.OneWay,
+            ConnectionMode connectionMode = ConnectionMode.Duplex,
             TimeSpan? timeout = null)
         {
             Protocol = protocol;
@@ -82,7 +82,7 @@ namespace RocketWelder.SDK
             string bufferName,
             long? bufferSize = null,
             long? metadataSize = null,
-            ConnectionMode connectionMode = ConnectionMode.OneWay, TimeSpan? timeout=null)
+            ConnectionMode connectionMode = ConnectionMode.Duplex, TimeSpan? timeout=null)
         {
             return new ConnectionString(
                 Protocol.Shm,
@@ -108,7 +108,7 @@ namespace RocketWelder.SDK
             string host,
             int port,
             bool withHttp = false,
-            ConnectionMode connectionMode = ConnectionMode.OneWay, TimeSpan? timeout = null)
+            ConnectionMode connectionMode = ConnectionMode.Duplex, TimeSpan? timeout = null)
         {
             var protocol = withHttp
                 ? Protocol.Http | Protocol.Mjpeg
@@ -136,7 +136,7 @@ namespace RocketWelder.SDK
         public static ConnectionString CreateFile(
             string filePath,
             bool loop = false,
-            ConnectionMode connectionMode = ConnectionMode.OneWay,
+            ConnectionMode connectionMode = ConnectionMode.Duplex,
             TimeSpan? timeout = null)
         {
             ImmutableDictionary<string,string> parameters = ImmutableDictionary<string, string>.Empty;
@@ -202,7 +202,7 @@ namespace RocketWelder.SDK
             Bytes bufferSize = default;
             Bytes metadataSize = default;
             TimeSpan timeout = TimeSpan.FromMilliseconds(5000);
-            ConnectionMode connectionMode = ConnectionMode.OneWay;
+            ConnectionMode connectionMode = ConnectionMode.Duplex;
 
             // Extract query parameters if present
             var queryIndex = remainder.IndexOf('?');

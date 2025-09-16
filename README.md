@@ -447,15 +447,15 @@ The SDK includes helper scripts for easy testing:
 ./build_docker_samples.sh
 
 # Test Python client with preview
-./run_preview_client_python.sh
+./run_docker_x11.sh python
 
 # Test C# client with preview
-./run_preview_client_csharp.sh
+./run_docker_x11.sh csharp
 ```
 
 These scripts automatically:
 - Configure X11 display forwarding
-- Create a test video if needed (using ffmpeg)
+- Use a test video from the repository's data folder
 - Mount the video into the container
 - Set up the connection string with preview enabled
 - Clean up X server permissions after running
