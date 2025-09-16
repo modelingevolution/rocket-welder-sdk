@@ -124,3 +124,4 @@ local_settings.*
 .env.local
 /python/test_venv
 /python/test_output
+/python/venv38
