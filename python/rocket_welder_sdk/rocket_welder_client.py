@@ -13,6 +13,7 @@ import numpy as np
 
 from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
+from .opencv_controller import OpenCvController
 
 if TYPE_CHECKING:
     from .gst_metadata import GstMetadata
@@ -97,6 +98,8 @@ class RocketWelderClient:
                     self._controller = DuplexShmController(self._connection)
                 else:
                     self._controller = OneWayShmController(self._connection)
+            elif self._connection.protocol in (Protocol.FILE, Protocol.MJPEG):
+                self._controller = OpenCvController(self._connection)
             else:
                 raise ValueError(f"Unsupported protocol: {self._connection.protocol}")
 

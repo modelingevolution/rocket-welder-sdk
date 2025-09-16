@@ -43,7 +43,8 @@ namespace RocketWelder.SDK
             {
                 Protocol.Shm when cs.ConnectionMode == ConnectionMode.Duplex => new DuplexShmController(cs, loggerFactory),
                 Protocol.Shm when cs.ConnectionMode == ConnectionMode.OneWay => new OneWayShmController(cs, loggerFactory),
-                var p when p.HasFlag(Protocol.Mjpeg) => new MjpegController(cs, loggerFactory),
+                Protocol.File => new OpenCvController(cs, loggerFactory),
+                var p when p.HasFlag(Protocol.Mjpeg) => new OpenCvController(cs, loggerFactory),
                 _ => throw new NotSupportedException($"Protocol {cs.Protocol} with mode {cs.ConnectionMode} is not supported")
             };
         }

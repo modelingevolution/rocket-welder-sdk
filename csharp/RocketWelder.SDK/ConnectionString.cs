@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using ModelingEvolution.JsonParsableConverter;
@@ -16,7 +18,8 @@ namespace RocketWelder.SDK
         Shm = 1 << 0,
         Mjpeg = 1 << 1,
         Http = 1 << 2,
-        Tcp = 1 << 3
+        Tcp = 1 << 3,
+        File = 1 << 4
     }
 
     public enum ConnectionMode
@@ -35,6 +38,8 @@ namespace RocketWelder.SDK
         public string? Host { get; }
         public int? Port { get; }
         public string? BufferName { get; init; }
+        public string? FilePath { get; init; }
+        public Dictionary<string, string> Parameters { get; init; } = new();
         public long BufferSize { get; init; }
         public long MetadataSize { get; init; }
         public ConnectionMode ConnectionMode { get; init; }
@@ -45,15 +50,19 @@ namespace RocketWelder.SDK
             string? host = null,
             int? port = null,
             string? bufferName = null,
+            string? filePath = null,
+            Dictionary<string, string>? parameters = null,
             long bufferSize = default,
             long metadataSize = default,
-            ConnectionMode connectionMode = ConnectionMode.OneWay, 
+            ConnectionMode connectionMode = ConnectionMode.OneWay,
             TimeSpan? timeout = null)
         {
             Protocol = protocol;
             Host = host;
             Port = port;
             BufferName = bufferName;
+            FilePath = filePath;
+            Parameters = parameters ?? new Dictionary<string, string>();
             BufferSize = bufferSize == default ? (Bytes)"256MB" : bufferSize;
             MetadataSize = metadataSize == default ? (Bytes)"4KB" : metadataSize;
             ConnectionMode = connectionMode;
@@ -98,18 +107,50 @@ namespace RocketWelder.SDK
             bool withHttp = false,
             ConnectionMode connectionMode = ConnectionMode.OneWay, TimeSpan? timeout = null)
         {
-            var protocol = withHttp 
-                ? Protocol.Http | Protocol.Mjpeg 
+            var protocol = withHttp
+                ? Protocol.Http | Protocol.Mjpeg
                 : Protocol.Tcp | Protocol.Mjpeg;
-            
+
             return new ConnectionString(
                 protocol,
                 host: host,
                 port: port,
                 bufferName: null,
+                filePath: null,
+                parameters: null,
                 bufferSize: default,
                 metadataSize: default,
                 connectionMode: connectionMode, timeout);
+        }
+
+        /// <summary>
+        /// Creates a ConnectionString for file playback.
+        /// </summary>
+        /// <param name="filePath">Path to the video file</param>
+        /// <param name="loop">If true, loops the video playback</param>
+        /// <param name="connectionMode">Connection mode (default: OneWay)</param>
+        /// <returns>A ConnectionString configured for file playback</returns>
+        public static ConnectionString CreateFile(
+            string filePath,
+            bool loop = false,
+            ConnectionMode connectionMode = ConnectionMode.OneWay,
+            TimeSpan? timeout = null)
+        {
+            var parameters = new Dictionary<string, string>();
+            if (loop)
+                parameters["loop"] = "true";
+
+            return new ConnectionString(
+                Protocol.File,
+                host: null,
+                port: null,
+                bufferName: null,
+                filePath: filePath,
+                parameters: parameters,
+                bufferSize: default,
+                metadataSize: default,
+                connectionMode: connectionMode,
+                timeout);
         }
 
         public static ConnectionString Parse(string s, IFormatProvider? provider = null)
@@ -142,9 +183,10 @@ namespace RocketWelder.SDK
                 protocol = protocolString switch
                 {
                     "shm" => Protocol.Shm,
+                    "file" => Protocol.File,
                     _ => Protocol.None
                 };
-                
+
                 if (protocol == Protocol.None)
                     return false;
             }
@@ -152,6 +194,8 @@ namespace RocketWelder.SDK
             string? host = null;
             int? port = null;
             string? bufferName = null;
+            string? filePath = null;
+            var parameters = new Dictionary<string, string>();
             Bytes bufferSize = default;
             Bytes metadataSize = default;
             TimeSpan timeout = TimeSpan.FromMilliseconds(5000);
@@ -163,8 +207,8 @@ namespace RocketWelder.SDK
             {
                 var queryString = remainder[(queryIndex + 1)..];
                 remainder = remainder[..queryIndex];
-                
-                // Parse simple parameters for SHM
+
+                // Parse parameters
                 var pairs = queryString.Split('&');
                 foreach (var pair in pairs)
                 {
@@ -173,7 +217,10 @@ namespace RocketWelder.SDK
                     {
                         var key = keyValue[0].ToLowerInvariant();
                         var value = keyValue[1];
-                        
+
+                        // Store all parameters for controllers to use
+                        parameters[key] = value;
+
                         switch (key)
                         {
                             case "size":
@@ -202,6 +249,12 @@ namespace RocketWelder.SDK
             {
                 // For shm://, the remainder is just the buffer name
                 bufferName = remainder;
+            }
+            else if (protocol == Protocol.File)
+            {
+                // For file://, the remainder is the file path
+                // Handle both file:///absolute/path and file://relative/path
+                filePath = remainder.StartsWith("/") ? remainder : "/" + remainder;
             }
             else if (protocol.HasFlag(Protocol.Mjpeg))
             {
@@ -232,6 +285,8 @@ namespace RocketWelder.SDK
                 host,
                 port,
                 bufferName,
+                filePath,
+                parameters,
                 bufferSize,
                 metadataSize,
                 connectionMode, timeout);
@@ -242,7 +297,17 @@ namespace RocketWelder.SDK
         {
             var protocolString = Protocol.ToFlagsString("+").ToLowerInvariant();
 
-            return Protocol == Protocol.Shm ? $"{protocolString}://{BufferName}?size={(Bytes)BufferSize}&metadata={(Bytes)MetadataSize}&mode={ConnectionMode}&timeout={TimeoutMs}" : $"{protocolString}://{Host}:{Port}";
+            if (Protocol == Protocol.Shm)
+                return $"{protocolString}://{BufferName}?size={(Bytes)BufferSize}&metadata={(Bytes)MetadataSize}&mode={ConnectionMode}&timeout={TimeoutMs}";
+            else if (Protocol == Protocol.File)
+            {
+                var queryString = Parameters.Count > 0
+                    ? "?" + string.Join("&", Parameters.Select(p => $"{p.Key}={p.Value}"))
+                    : "";
+                return $"{protocolString}://{FilePath}{queryString}";
+            }
+            else
+                return $"{protocolString}://{Host}:{Port}";
         }
     }
 }

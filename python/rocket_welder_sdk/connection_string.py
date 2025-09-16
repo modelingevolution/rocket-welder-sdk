@@ -21,6 +21,7 @@ class Protocol(Flag):
     MJPEG = auto()  # Motion JPEG
     HTTP = auto()  # HTTP protocol
     TCP = auto()  # TCP protocol
+    FILE = auto()  # File protocol
 
 
 class ConnectionMode(Enum):
@@ -43,12 +44,15 @@ class ConnectionString:
     - shm://buffer_name?size=256MB&metadata=4KB&mode=Duplex
     - mjpeg://192.168.1.100:8080
     - mjpeg+http://camera.local:80
+    - file:///path/to/video.mp4?loop=true
     """
 
     protocol: Protocol
     host: str | None = None
     port: int | None = None
     buffer_name: str | None = None
+    file_path: str | None = None
+    parameters: dict[str, str] = field(default_factory=dict)
     buffer_size: BytesSize = field(default_factory=lambda: BytesSize.parse("256MB"))
     metadata_size: BytesSize = field(default_factory=lambda: BytesSize.parse("4KB"))
     connection_mode: ConnectionMode = ConnectionMode.ONE_WAY
@@ -82,6 +86,8 @@ class ConnectionString:
         # Parse based on protocol type
         if protocol == Protocol.SHM:
             return cls._parse_shm(protocol, remainder)
+        elif protocol == Protocol.FILE:
+            return cls._parse_file(protocol, remainder)
         elif bool(protocol & Protocol.MJPEG):  # type: ignore[operator]
             return cls._parse_mjpeg(protocol, remainder)
         else:
@@ -110,6 +116,7 @@ class ConnectionString:
             "mjpeg": Protocol.MJPEG,
             "http": Protocol.HTTP,
             "tcp": Protocol.TCP,
+            "file": Protocol.FILE,
         }
 
         protocol = protocol_map.get(protocol_str, Protocol.NONE)
@@ -158,6 +165,43 @@ class ConnectionString:
         )
 
     @classmethod
+    def _parse_file(cls, protocol: Protocol, remainder: str) -> ConnectionString:
+        """Parse file protocol connection string."""
+        # Split file path and query parameters
+        if "?" in remainder:
+            file_path, query_string = remainder.split("?", 1)
+            params = cls._parse_query_params(query_string)
+        else:
+            file_path = remainder
+            params = {}
+
+        # Handle file:///absolute/path and file://relative/path
+        if not file_path.startswith("/"):
+            file_path = "/" + file_path
+
+        # Parse common parameters
+        connection_mode = ConnectionMode.ONE_WAY
+        timeout_ms = 5000
+
+        if "mode" in params:
+            mode_str = params["mode"].upper()
+            if mode_str == "DUPLEX":
+                connection_mode = ConnectionMode.DUPLEX
+            elif mode_str in ("ONEWAY", "ONE_WAY"):
+                connection_mode = ConnectionMode.ONE_WAY
+        if "timeout" in params:
+            with contextlib.suppress(ValueError):
+                timeout_ms = int(params["timeout"])
+
+        return cls(
+            protocol=protocol,
+            file_path=file_path,
+            parameters=params,
+            connection_mode=connection_mode,
+            timeout_ms=timeout_ms,
+        )
+
+    @classmethod
     def _parse_mjpeg(cls, protocol: Protocol, remainder: str) -> ConnectionString:
         """Parse MJPEG connection string."""
         # Parse host:port format
@@ -195,6 +239,8 @@ class ConnectionString:
         protocol_parts = []
         if self.protocol & Protocol.SHM:
             protocol_parts.append("shm")
+        if self.protocol & Protocol.FILE:
+            protocol_parts.append("file")
         if self.protocol & Protocol.MJPEG:
             protocol_parts.append("mjpeg")
         if self.protocol & Protocol.HTTP:
@@ -215,6 +261,11 @@ class ConnectionString:
                 params.append(f"timeout={self.timeout_ms}")
 
             return f"{protocol_str}://{self.buffer_name}?{'&'.join(params)}"
+        elif self.protocol == Protocol.FILE:
+            query_string = ""
+            if self.parameters:
+                query_string = "?" + "&".join(f"{k}={v}" for k, v in self.parameters.items())
+            return f"{protocol_str}://{self.file_path}{query_string}"
         else:
             return f"{protocol_str}://{self.host}:{self.port}"
 
