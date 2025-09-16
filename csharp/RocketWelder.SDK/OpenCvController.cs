@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Threading;
 using Emgu.CV;
+using Emgu.CV.CvEnum;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -16,6 +17,8 @@ namespace RocketWelder.SDK
         private Thread? _worker;
         private GstMetadata? _metadata;
         private readonly bool _loop;
+        private readonly bool _preview;
+        private readonly string _previewWindowName = "RocketWelder Preview";
 
         public bool IsRunning => _isRunning;
 
@@ -33,6 +36,10 @@ namespace RocketWelder.SDK
             _loop = connection.Protocol == Protocol.File &&
                     connection.Parameters.TryGetValue("loop", out var loopStr) &&
                     bool.TryParse(loopStr, out var loop) && loop;
+
+            // Parse preview parameter - show frames in OpenCV window
+            _preview = connection.Parameters.TryGetValue("preview", out var previewStr) &&
+                       bool.TryParse(previewStr, out var preview) && preview;
         }
 
         public void Start(Action<Mat, Mat> onFrame, CancellationToken cancellationToken = default)
@@ -42,6 +49,19 @@ namespace RocketWelder.SDK
             {
                 using var output = new Mat();
                 onFrame(input, output);
+
+                // For preview in duplex mode, show the OUTPUT frame
+                if (_preview)
+                {
+                    CvInvoke.Imshow(_previewWindowName, output);
+                    // Check for 'q' key to quit preview (waitKey returns -1 if no key pressed)
+                    var key = CvInvoke.WaitKey(1);
+                    if (key == 'q' || key == 'Q')
+                    {
+                        _logger.LogInformation("Preview window closed by user");
+                        CvInvoke.DestroyWindow(_previewWindowName);
+                    }
+                }
             }, cancellationToken);
         }
 
@@ -86,6 +106,14 @@ namespace RocketWelder.SDK
             _logger.LogInformation("Video source opened: {Width}x{Height} @ {Fps}fps, {FrameCount} frames",
                 width, height, fps, frameCount);
 
+            // Create preview window if requested
+            if (_preview)
+            {
+                CvInvoke.NamedWindow(_previewWindowName, Emgu.CV.CvEnum.WindowFlags.Normal);
+                CvInvoke.ResizeWindow(_previewWindowName, width, height);
+                _logger.LogInformation("Preview window created");
+            }
+
             // Start processing on worker thread
             _worker = new Thread(() => ProcessFrames(onFrame, cancellationToken))
             {
@@ -101,13 +129,13 @@ namespace RocketWelder.SDK
             {
                 case Protocol.File:
                     // For file protocol, use the file path directly
-                    if (string.IsNullOrEmpty(_connection.FilePath))
+                    if (string.IsNullOrEmpty(_connection.Path))
                         throw new ArgumentException("File path is required for file protocol");
 
-                    if (!File.Exists(_connection.FilePath))
-                        throw new FileNotFoundException($"Video file not found: {_connection.FilePath}");
+                    if (!File.Exists(_connection.Path))
+                        throw new FileNotFoundException($"Video file not found: {_connection.Path}");
 
-                    return _connection.FilePath;
+                    return _connection.Path;
 
                 case Protocol.Mjpeg when _connection.Protocol.HasFlag(Protocol.Http):
                     return $"http://{_connection.Host}:{_connection.Port}";
@@ -123,9 +151,7 @@ namespace RocketWelder.SDK
         private void ProcessFrames(Action<Mat> onFrame, CancellationToken cancellationToken)
         {
             using var frame = new Mat();
-            var frameDelayMs = _metadata?.Caps?.Framerate != null && _metadata.Caps.Framerate.Numerator > 0
-                ? 1000 * _metadata.Caps.Framerate.Denominator / _metadata.Caps.Framerate.Numerator
-                : 33; // Default to ~30fps
+            var frameDelayMs = (int)(1000d / (_metadata?.Caps.FrameRate ?? 30d));
 
             while (_isRunning && !cancellationToken.IsCancellationRequested)
             {
@@ -165,6 +191,19 @@ namespace RocketWelder.SDK
                     // Process frame
                     onFrame(frame);
 
+                    // Show preview if enabled (for one-way mode)
+                    if (_preview)
+                    {
+                        CvInvoke.Imshow(_previewWindowName, frame);
+                        // Check for 'q' key to quit preview
+                        var key = CvInvoke.WaitKey(1);
+                        if (key == 'q' || key == 'Q')
+                        {
+                            _logger.LogInformation("Preview window closed by user");
+                            CvInvoke.DestroyWindow(_previewWindowName);
+                        }
+                    }
+
                     // Control frame rate for file playback
                     if (_connection.Protocol == Protocol.File)
                     {
@@ -192,6 +231,13 @@ namespace RocketWelder.SDK
 
             _capture?.Dispose();
             _capture = null;
+
+            // Clean up preview window
+            if (_preview)
+            {
+                CvInvoke.DestroyWindow(_previewWindowName);
+                CvInvoke.WaitKey(1); // Process any pending window events
+            }
 
             _logger.LogInformation("Stopped OpenCV controller");
         }

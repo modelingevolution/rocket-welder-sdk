@@ -6,6 +6,7 @@ Main entry point for the RocketWelder SDK.
 from __future__ import annotations
 
 import logging
+import queue
 import threading
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -16,10 +17,11 @@ from .controllers import DuplexShmController, IController, OneWayShmController
 from .opencv_controller import OpenCvController
 
 if TYPE_CHECKING:
+    import numpy.typing as npt
     from .gst_metadata import GstMetadata
-
-# Type alias for OpenCV Mat
-Mat = np.ndarray[Any, Any]
+    Mat = npt.NDArray[Any]
+else:
+    Mat = np.ndarray
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -46,6 +48,12 @@ class RocketWelderClient:
 
         self._controller: IController | None = None
         self._lock = threading.Lock()
+
+        # Preview support
+        self._preview_enabled = self._connection.parameters.get("preview", "false").lower() == "true"
+        self._preview_queue: queue.Queue[Mat | None] = queue.Queue(maxsize=2)  # Small buffer
+        self._preview_window_name = "RocketWelder Preview"
+        self._original_callback: Any = None
 
     @property
     def connection(self) -> ConnectionString:
@@ -103,8 +111,48 @@ class RocketWelderClient:
             else:
                 raise ValueError(f"Unsupported protocol: {self._connection.protocol}")
 
+            # If preview is enabled, wrap the callback to capture frames
+            if self._preview_enabled:
+                self._original_callback = on_frame
+
+                # Determine if duplex or one-way
+                if self._connection.connection_mode == ConnectionMode.DUPLEX:
+                    def preview_wrapper_duplex(input_frame: Mat, output_frame: Mat) -> None:
+                        # Call original callback
+                        on_frame(input_frame, output_frame)  # type: ignore[call-arg]
+                        # Queue the OUTPUT frame for preview
+                        try:
+                            self._preview_queue.put_nowait(output_frame.copy())
+                        except queue.Full:
+                            # Drop oldest frame if queue is full
+                            try:
+                                self._preview_queue.get_nowait()
+                                self._preview_queue.put_nowait(output_frame.copy())
+                            except queue.Empty:
+                                pass
+
+                    actual_callback = preview_wrapper_duplex
+                else:
+                    def preview_wrapper_oneway(frame: Mat) -> None:
+                        # Call original callback
+                        on_frame(frame)  # type: ignore[call-arg]
+                        # Queue frame for preview
+                        try:
+                            self._preview_queue.put_nowait(frame.copy())
+                        except queue.Full:
+                            # Drop oldest frame if queue is full
+                            try:
+                                self._preview_queue.get_nowait()
+                                self._preview_queue.put_nowait(frame.copy())
+                            except queue.Empty:
+                                pass
+
+                    actual_callback = preview_wrapper_oneway
+            else:
+                actual_callback = on_frame
+
             # Start the controller
-            self._controller.start(on_frame, cancellation_token)  # type: ignore[arg-type]
+            self._controller.start(actual_callback, cancellation_token)  # type: ignore[arg-type]
             logger.info("RocketWelder client started with %s", self._connection)
 
     def stop(self) -> None:
@@ -113,7 +161,82 @@ class RocketWelderClient:
             if self._controller:
                 self._controller.stop()
                 self._controller = None
+
+                # Signal preview to stop if enabled
+                if self._preview_enabled:
+                    self._preview_queue.put(None)  # Sentinel value
+
                 logger.info("RocketWelder client stopped")
+
+    def show(self, cancellation_token: threading.Event | None = None) -> None:
+        """
+        Display preview frames in a window (main thread only).
+
+        This method should be called from the main thread after start().
+        - If preview=true: blocks and displays frames until stopped or 'q' pressed
+        - If preview=false or not set: returns immediately
+
+        Args:
+            cancellation_token: Optional cancellation token to stop preview
+
+        Example:
+            client = RocketWelderClient("file:///video.mp4?preview=true")
+            client.start(process_frame)
+            client.show()  # Blocks and shows preview
+            client.stop()
+        """
+        if not self._preview_enabled:
+            # No preview requested, return immediately
+            return
+
+        try:
+            import cv2
+        except ImportError:
+            logger.warning("OpenCV not available, cannot show preview")
+            return
+
+        logger.info("Starting preview display in main thread")
+
+        # Create window
+        cv2.namedWindow(self._preview_window_name, cv2.WINDOW_NORMAL)
+
+        try:
+            while True:
+                # Check for cancellation
+                if cancellation_token and cancellation_token.is_set():
+                    break
+
+                try:
+                    # Get frame with timeout
+                    frame = self._preview_queue.get(timeout=0.1)
+
+                    # Check for stop sentinel
+                    if frame is None:
+                        break
+
+                    # Display frame
+                    cv2.imshow(self._preview_window_name, frame)
+
+                    # Process window events and check for 'q' key
+                    key = cv2.waitKey(1) & 0xFF
+                    if key == ord('q'):
+                        logger.info("User pressed 'q', stopping preview")
+                        break
+
+                except queue.Empty:
+                    # No frame available, check if still running
+                    if not self.is_running:
+                        break
+                    # Process window events even without new frame
+                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                        logger.info("User pressed 'q', stopping preview")
+                        break
+
+        finally:
+            # Clean up window
+            cv2.destroyWindow(self._preview_window_name)
+            cv2.waitKey(1)  # Process pending events
+            logger.info("Preview display stopped")
 
     def __enter__(self) -> RocketWelderClient:
         """Context manager entry."""

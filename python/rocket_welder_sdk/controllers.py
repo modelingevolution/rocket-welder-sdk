@@ -20,7 +20,12 @@ from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .gst_metadata import GstCaps, GstMetadata
 
 # Type alias for OpenCV Mat
-Mat = np.ndarray[Any, Any]
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    import numpy.typing as npt
+    Mat = npt.NDArray[Any]
+else:
+    Mat = np.ndarray
 
 # Module logger
 logger = logging.getLogger(__name__)

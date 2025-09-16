@@ -248,21 +248,21 @@ fi
 # Build Python sample client image
 if [ "$BUILD_PYTHON" = true ]; then
     print_section "Building Python Sample Client Docker Image"
-    
+
     # Build image name based on user preference
     if [ "$USE_PLATFORM_TAG" = true ]; then
         PYTHON_IMAGE_TAG="${TAG_PREFIX}-client-python-${PLATFORM}:${TAG_VERSION}"
     else
         PYTHON_IMAGE_TAG="${TAG_PREFIX}-client-python:${TAG_VERSION}"
     fi
-    
+
     print_info "Building image: ${PYTHON_IMAGE_TAG}"
     print_info "Context: ${SCRIPT_DIR}/python"
-    
+
     # Build Docker image (context is at python directory level)
     print_info "Building Docker image..."
     cd "${SCRIPT_DIR}/python"
-    
+
     if [ "$MULTI_PLATFORM" = true ]; then
         # Use buildx for multi-platform build
         docker buildx build ${DOCKER_BUILD_ARGS} \
@@ -276,10 +276,10 @@ if [ "$BUILD_PYTHON" = true ]; then
             -f examples/Dockerfile \
             .
     fi
-    
+
     if [ $? -eq 0 ]; then
         print_success "Python Docker image built successfully: ${PYTHON_IMAGE_TAG}"
-        
+
         # Show image details (only for single platform builds)
         if [ "$MULTI_PLATFORM" = false ]; then
             echo ""
@@ -290,16 +290,62 @@ if [ "$BUILD_PYTHON" = true ]; then
         print_error "Failed to build Python Docker image"
         exit 1
     fi
+
+    # Build Python 3.8 legacy image
+    print_section "Building Python 3.8 Sample Client Docker Image"
+
+    # Build image name for Python 3.8
+    if [ "$USE_PLATFORM_TAG" = true ]; then
+        PYTHON38_IMAGE_TAG="${TAG_PREFIX}-client-python-${PLATFORM}:python38"
+    else
+        PYTHON38_IMAGE_TAG="${TAG_PREFIX}-client-python:python38"
+    fi
+
+    print_info "Building image: ${PYTHON38_IMAGE_TAG}"
+    print_info "Context: ${SCRIPT_DIR}/python"
+
+    # Build Docker image for Python 3.8
+    print_info "Building Python 3.8 Docker image..."
+    cd "${SCRIPT_DIR}/python"
+
+    if [ "$MULTI_PLATFORM" = true ]; then
+        # Use buildx for multi-platform build
+        docker buildx build ${DOCKER_BUILD_ARGS} \
+            -t "${PYTHON38_IMAGE_TAG}" \
+            -f examples/Dockerfile-python38 \
+            .
+    else
+        # Use regular docker build for single platform
+        docker build ${DOCKER_BUILD_ARGS} \
+            -t "${PYTHON38_IMAGE_TAG}" \
+            -f examples/Dockerfile-python38 \
+            .
+    fi
+
+    if [ $? -eq 0 ]; then
+        print_success "Python 3.8 Docker image built successfully: ${PYTHON38_IMAGE_TAG}"
+
+        # Show image details (only for single platform builds)
+        if [ "$MULTI_PLATFORM" = false ]; then
+            echo ""
+            print_info "Image details:"
+            docker images --filter "reference=${TAG_PREFIX}-client-python" --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}" | grep python38
+        fi
+    else
+        print_error "Failed to build Python 3.8 Docker image"
+        exit 1
+    fi
 fi
 
 print_section "Build Complete!"
 
 print_info "Built images:"
 if [ "$BUILD_CSHARP" = true ]; then
-    echo "  • ${TAG_PREFIX}-csharp-client:${TAG_VERSION}"
+    echo "  • ${TAG_PREFIX}-client-csharp:${TAG_VERSION}"
 fi
 if [ "$BUILD_PYTHON" = true ]; then
-    echo "  • ${TAG_PREFIX}-python-client:${TAG_VERSION}"
+    echo "  • ${TAG_PREFIX}-client-python:${TAG_VERSION}"
+    echo "  • ${TAG_PREFIX}-client-python:python38"
 fi
 
 echo ""
@@ -311,16 +357,22 @@ if [ "$BUILD_CSHARP" = true ]; then
     echo "  docker run --rm -it \\"
     echo "    -e CONNECTION_STRING=\"shm://test_buffer?size=10MB&metadata=4KB\" \\"
     echo "    --ipc=host \\"
-    echo "    ${TAG_PREFIX}-csharp-client:${TAG_VERSION}"
+    echo "    ${TAG_PREFIX}-client-csharp:${TAG_VERSION}"
     echo ""
 fi
 
 if [ "$BUILD_PYTHON" = true ]; then
-    echo "Python client:"
+    echo "Python client (latest):"
     echo "  docker run --rm -it \\"
     echo "    -e CONNECTION_STRING=\"shm://test_buffer?size=10MB&metadata=4KB\" \\"
     echo "    --ipc=host \\"
-    echo "    ${TAG_PREFIX}-python-client:${TAG_VERSION}"
+    echo "    ${TAG_PREFIX}-client-python:${TAG_VERSION}"
+    echo ""
+    echo "Python client (Python 3.8):"
+    echo "  docker run --rm -it \\"
+    echo "    -e CONNECTION_STRING=\"shm://test_buffer?size=10MB&metadata=4KB\" \\"
+    echo "    --ipc=host \\"
+    echo "    ${TAG_PREFIX}-client-python:python38"
     echo ""
 fi
 

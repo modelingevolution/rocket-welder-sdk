@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Text.Json;
@@ -38,8 +39,8 @@ namespace RocketWelder.SDK
         public string? Host { get; }
         public int? Port { get; }
         public string? BufferName { get; init; }
-        public string? FilePath { get; init; }
-        public Dictionary<string, string> Parameters { get; init; } = new();
+        public string? Path { get; init; }
+        public ImmutableDictionary<string, string> Parameters { get; init; } = ImmutableDictionary<string, string>.Empty;
         public long BufferSize { get; init; }
         public long MetadataSize { get; init; }
         public ConnectionMode ConnectionMode { get; init; }
@@ -50,8 +51,8 @@ namespace RocketWelder.SDK
             string? host = null,
             int? port = null,
             string? bufferName = null,
-            string? filePath = null,
-            Dictionary<string, string>? parameters = null,
+            string? path = null,
+            ImmutableDictionary<string, string>? parameters = null,
             long bufferSize = default,
             long metadataSize = default,
             ConnectionMode connectionMode = ConnectionMode.OneWay,
@@ -61,8 +62,8 @@ namespace RocketWelder.SDK
             Host = host;
             Port = port;
             BufferName = bufferName;
-            FilePath = filePath;
-            Parameters = parameters ?? new Dictionary<string, string>();
+            Path = path;
+            Parameters = parameters ?? ImmutableDictionary<string, string>.Empty;
             BufferSize = bufferSize == default ? (Bytes)"256MB" : bufferSize;
             MetadataSize = metadataSize == default ? (Bytes)"4KB" : metadataSize;
             ConnectionMode = connectionMode;
@@ -88,6 +89,8 @@ namespace RocketWelder.SDK
                 host: null,
                 port: null,
                 bufferName: bufferName,
+                path:null,
+                parameters: ImmutableDictionary<string, string>.Empty,
                 bufferSize: bufferSize ?? (Bytes)"256MB",
                 metadataSize: metadataSize ?? (Bytes)"4KB",
                 connectionMode: connectionMode, timeout);
@@ -116,7 +119,7 @@ namespace RocketWelder.SDK
                 host: host,
                 port: port,
                 bufferName: null,
-                filePath: null,
+                path: null,
                 parameters: null,
                 bufferSize: default,
                 metadataSize: default,
@@ -136,16 +139,16 @@ namespace RocketWelder.SDK
             ConnectionMode connectionMode = ConnectionMode.OneWay,
             TimeSpan? timeout = null)
         {
-            var parameters = new Dictionary<string, string>();
+            ImmutableDictionary<string,string> parameters = ImmutableDictionary<string, string>.Empty;
             if (loop)
-                parameters["loop"] = "true";
+                 parameters = parameters.Add("loop", "true");
 
             return new ConnectionString(
                 Protocol.File,
                 host: null,
                 port: null,
                 bufferName: null,
-                filePath: filePath,
+                path: filePath,
                 parameters: parameters,
                 bufferSize: default,
                 metadataSize: default,
@@ -195,7 +198,7 @@ namespace RocketWelder.SDK
             int? port = null;
             string? bufferName = null;
             string? filePath = null;
-            var parameters = new Dictionary<string, string>();
+            var parameters = ImmutableDictionary<string, string>.Empty;
             Bytes bufferSize = default;
             Bytes metadataSize = default;
             TimeSpan timeout = TimeSpan.FromMilliseconds(5000);
@@ -219,7 +222,7 @@ namespace RocketWelder.SDK
                         var value = keyValue[1];
 
                         // Store all parameters for controllers to use
-                        parameters[key] = value;
+                        parameters = parameters.SetItem(key, value);
 
                         switch (key)
                         {
@@ -304,7 +307,7 @@ namespace RocketWelder.SDK
                 var queryString = Parameters.Count > 0
                     ? "?" + string.Join("&", Parameters.Select(p => $"{p.Key}={p.Value}"))
                     : "";
-                return $"{protocolString}://{FilePath}{queryString}";
+                return $"{protocolString}://{Path}{queryString}";
             }
             else
                 return $"{protocolString}://{Host}:{Port}";

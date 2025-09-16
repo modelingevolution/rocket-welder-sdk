@@ -7,7 +7,7 @@ name = "rocket-welder-sdk"
 dynamic = ["version"]
 description = "High-performance video streaming SDK for RocketWelder services using ZeroBuffer IPC"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.8.10"
 license = {text = "MIT"}
 authors = [
     {name = "ModelingEvolution", email = "info@modelingevolution.com"}
@@ -23,6 +23,7 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -66,7 +67,7 @@ include = ["rocket_welder_sdk*"]
 rocket_welder_sdk = ["py.typed"]
 
 [tool.mypy]
-python_version = "3.9"
+python_version = "3.9"  # mypy 1.0+ requires 3.9, but code supports 3.8
 strict = true
 warn_return_any = true
 warn_unused_configs = true
@@ -91,12 +92,12 @@ ignore_missing_imports = true
 
 [tool.black]
 line-length = 100
-target-version = ['py39', 'py310', 'py311', 'py312']
+target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
 include = '\.pyi?$'
 
 [tool.ruff]
 line-length = 100
-target-version = "py39"
+target-version = "py38"
 
 [tool.ruff.lint]
 select = [

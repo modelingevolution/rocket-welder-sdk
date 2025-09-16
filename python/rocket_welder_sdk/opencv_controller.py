@@ -56,11 +56,14 @@ class OpenCvController(IController):
         self._worker_thread: threading.Thread | None = None
         self._cancellation_token: threading.Event | None = None
 
-        # Parse loop parameter for file protocol
+        # Parse parameters for file protocol
         self._loop = (
             connection.protocol == Protocol.FILE
             and connection.parameters.get("loop", "false").lower() == "true"
         )
+
+        # Note: Preview is now handled at the client level via show() method
+        # This avoids X11/WSL threading issues with OpenCV GUI functions
 
     @property
     def is_running(self) -> bool:
@@ -125,6 +128,7 @@ class OpenCvController(IController):
         logger.info(
             "Video source opened: %dx%d @ %.1ffps, %d frames", width, height, fps, frame_count
         )
+
 
         # Determine callback type and start worker thread
         if self._connection.connection_mode == ConnectionMode.DUPLEX:
