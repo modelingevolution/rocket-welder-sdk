@@ -9,7 +9,7 @@ import json
 import logging
 import threading
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Callable, Optional
 
 import numpy as np
 from zerobuffer import BufferConfig, Frame, Reader, Writer
@@ -19,13 +19,12 @@ from zerobuffer.exceptions import WriterDeadException
 from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .gst_metadata import GstCaps, GstMetadata
 
-# Type alias for OpenCV Mat
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import numpy.typing as npt
-    Mat = npt.NDArray[Any]
+
+    Mat = npt.NDArray[np.uint8]
 else:
-    Mat = np.ndarray
+    Mat = np.ndarray  # type: ignore[misc]
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -41,13 +40,15 @@ class IController(ABC):
         ...
 
     @abstractmethod
-    def get_metadata(self) -> GstMetadata | None:
+    def get_metadata(self) -> Optional[GstMetadata]:
         """Get the current GStreamer metadata."""
         ...
 
     @abstractmethod
     def start(
-        self, on_frame: Callable[[Mat], None], cancellation_token: threading.Event | None = None
+        self,
+        on_frame: Callable[[Mat], None],  # type: ignore[valid-type]
+        cancellation_token: Optional[threading.Event] = None,
     ) -> None:
         """
         Start the controller with a frame callback.
@@ -85,24 +86,26 @@ class OneWayShmController(IController):
             )
 
         self._connection = connection
-        self._reader: Reader | None = None
-        self._gst_caps: GstCaps | None = None
-        self._metadata: GstMetadata | None = None
+        self._reader: Optional[Reader] = None
+        self._gst_caps: Optional[GstCaps] = None
+        self._metadata: Optional[GstMetadata] = None
         self._is_running = False
-        self._worker_thread: threading.Thread | None = None
-        self._cancellation_token: threading.Event | None = None
+        self._worker_thread: Optional[threading.Thread] = None
+        self._cancellation_token: Optional[threading.Event] = None
 
     @property
     def is_running(self) -> bool:
         """Check if the controller is running."""
         return self._is_running
 
-    def get_metadata(self) -> GstMetadata | None:
+    def get_metadata(self) -> Optional[GstMetadata]:
         """Get the current GStreamer metadata."""
         return self._metadata
 
     def start(
-        self, on_frame: Callable[[Mat], None], cancellation_token: threading.Event | None = None
+        self,
+        on_frame: Callable[[Mat], None],  # type: ignore[valid-type]
+        cancellation_token: Optional[threading.Event] = None,
     ) -> None:
         """
         Start receiving frames from shared memory.
@@ -166,7 +169,7 @@ class OneWayShmController(IController):
         self._worker_thread = None
         logger.info("Stopped controller for buffer '%s'", self._connection.buffer_name)
 
-    def _process_frames(self, on_frame: Callable[[Mat], None]) -> None:
+    def _process_frames(self, on_frame: Callable[[Mat], None]) -> None:  # type: ignore[valid-type]
         """
         Process frames from shared memory.
 
@@ -241,7 +244,7 @@ class OneWayShmController(IController):
             logger.error("Fatal error in frame processing loop: %s", e)
             self._is_running = False
 
-    def _on_first_frame(self, on_frame: Callable[[Mat], None]) -> None:
+    def _on_first_frame(self, on_frame: Callable[[Mat], None]) -> None:  # type: ignore[valid-type]
         """
         Process the first frame and extract metadata.
         Matches C# OnFirstFrame behavior - loops until valid frame received.
@@ -347,7 +350,7 @@ class OneWayShmController(IController):
                     if not self._is_running:
                         break
 
-    def _create_mat_from_frame(self, frame: Frame) -> Mat | None:
+    def _create_mat_from_frame(self, frame: Frame) -> Optional[Mat]:  # type: ignore[valid-type]
         """
         Create OpenCV Mat from frame data using GstCaps.
         Matches C# CreateMat behavior - creates Mat wrapping the data.
@@ -445,7 +448,7 @@ class OneWayShmController(IController):
             logger.error("Failed to convert frame to Mat: %s", e)
             return None
 
-    def _infer_caps_from_frame(self, mat: Mat) -> None:
+    def _infer_caps_from_frame(self, mat: Mat) -> None:  # type: ignore[valid-type]
         """
         Infer GStreamer caps from OpenCV Mat.
 
@@ -492,11 +495,11 @@ class DuplexShmController(IController):
             )
 
         self._connection = connection
-        self._duplex_server: IImmutableDuplexServer | None = None
-        self._gst_caps: GstCaps | None = None
-        self._metadata: GstMetadata | None = None
+        self._duplex_server: Optional[IImmutableDuplexServer] = None
+        self._gst_caps: Optional[GstCaps] = None
+        self._metadata: Optional[GstMetadata] = None
         self._is_running = False
-        self._on_frame_callback: Callable[[Mat, Mat], None] | None = None
+        self._on_frame_callback: Optional[Callable[[Mat, Mat], None]] = None  # type: ignore[valid-type]
         self._frame_count = 0
 
     @property
@@ -504,14 +507,14 @@ class DuplexShmController(IController):
         """Check if the controller is running."""
         return self._is_running
 
-    def get_metadata(self) -> GstMetadata | None:
+    def get_metadata(self) -> Optional[GstMetadata]:
         """Get the current GStreamer metadata."""
         return self._metadata
 
     def start(
         self,
-        on_frame: Callable[[Mat, Mat], None],  # type: ignore[override]
-        cancellation_token: threading.Event | None = None,
+        on_frame: Callable[[Mat, Mat], None],  # type: ignore[override,valid-type]
+        cancellation_token: Optional[threading.Event] = None,
     ) -> None:
         """
         Start duplex frame processing.
@@ -667,7 +670,7 @@ class DuplexShmController(IController):
         except Exception as e:
             logger.error("Error processing duplex frame: %s", e)
 
-    def _frame_to_mat(self, frame: Frame) -> Mat | None:
+    def _frame_to_mat(self, frame: Frame) -> Optional[Mat]:  # type: ignore[valid-type]
         """Convert frame to OpenCV Mat (reuse from OneWayShmController)."""
         # Implementation is same as OneWayShmController
         return OneWayShmController._create_mat_from_frame(self, frame)  # type: ignore[arg-type]

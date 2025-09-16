@@ -56,15 +56,22 @@ RUN apt-get update && apt-get install -y \
 # Copy published app
 COPY --from=build /app/publish .
 
-# Install additional required libraries for Emgu.CV and VTK
+# Install minimal OpenCV/EmguCV dependencies and X11 for preview (NO VTK9!)
 RUN apt-get update && apt-get install -y \
-    libgeotiff-dev \
-    libdc1394-dev \
-    libtbb-dev \
-    libopenexr-dev \
-    libgstreamer-plugins-bad1.0-0 \
-    libhdf5-dev \
-    libvtk9-dev \
+    libgeotiff5 \
+    libdc1394-25 \
+    libopenexr-3-1-30 \
+    libhdf5-103-1 \
+    libx11-6 \
+    libxext6 \
+    libxrender1 \
+    libxtst6 \
+    libxi6 \
+    libxrandr2 \
+    libxcursor1 \
+    libxinerama1 \
+    libxkbcommon-x11-0 \
+    libglu1-mesa \
     && rm -rf /var/lib/apt/lists/*
 
 # Create symlink for Emgu.CV native library

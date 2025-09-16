@@ -12,6 +12,7 @@ from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
 from .gst_metadata import GstCaps, GstMetadata
 from .opencv_controller import OpenCvController
+from .periodic_timer import PeriodicTimer, PeriodicTimerSync
 from .rocket_welder_client import RocketWelderClient
 
 # Alias for backward compatibility and README examples
@@ -52,6 +53,9 @@ __all__ = [
     "IController",
     "OneWayShmController",
     "OpenCvController",
+    # Timers
+    "PeriodicTimer",
+    "PeriodicTimerSync",
     "Protocol",
     # Main client
     "RocketWelderClient",

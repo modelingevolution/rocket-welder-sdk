@@ -49,6 +49,18 @@ shm://<buffer_name>?mode=duplex&buffer_size=10MB
 - `buffer_size`: Size of the data buffer (default: 20MB, supports units: B, KB, MB, GB)
 - `metadata_size`: Size of the metadata buffer (default: 4KB, supports units: B, KB, MB)
 
+#### File (Video File Playback)
+```
+file:///path/to/video.mp4
+file:///path/to/video.mp4?loop=true
+file:///path/to/video.mp4?preview=true
+file:///path/to/video.mp4?loop=true&preview=true
+```
+
+**Optional Parameters:**
+- `loop`: Loop video playback when end is reached (`true` or `false`; default: `false`)
+- `preview`: Enable preview window display (`true` or `false`; default: `false`)
+
 #### MJPEG over HTTP
 ```
 mjpeg+http://192.168.1.100:8080
@@ -274,6 +286,44 @@ for frame in client.frames():
     print(f"Received frame: {frame.shape}")
 ```
 
+## Preview Display
+
+When using the `file://` protocol with `preview=true` parameter, you can display frames in a window. The `Show()` method must be called from the main thread:
+
+### C# Preview
+```csharp
+var client = RocketWelderClient.FromConnectionString(
+    "file:///path/to/video.mp4?preview=true&loop=true"
+);
+
+// Start processing in background
+client.Start(frame => {
+    // Process frame
+});
+
+// Show preview window in main thread (blocks until 'q' pressed)
+client.Show();
+```
+
+### Python Preview
+```python
+client = rw.Client.from_connection_string(
+    "file:///path/to/video.mp4?preview=true&loop=true"
+)
+
+# Start processing in background
+client.start(lambda frame: process_frame(frame))
+
+# Show preview window in main thread (blocks until 'q' pressed)
+client.show()
+```
+
+**Note**: The `Show()` method:
+- Blocks when `preview=true` is set in the connection string
+- Returns immediately when `preview` is not set or `false`
+- Must be called from the main thread (X11/GUI requirement)
+- Stops when 'q' key is pressed in the preview window
+
 ## Docker Integration
 
 ### C++ Dockerfile
@@ -341,6 +391,75 @@ COPY . .
 CMD ["python", "app.py"]
 ```
 
+### Running Docker with X11 Display Support (Preview)
+
+When using the `preview=true` parameter with file protocol, you need to enable X11 forwarding for Docker containers to display the preview window.
+
+#### Linux
+
+```bash
+# Allow X server connections from Docker
+xhost +local:docker
+
+# Run container with display support
+docker run --rm \
+    -e DISPLAY=$DISPLAY \
+    -e CONNECTION_STRING="file:///data/video.mp4?preview=true&loop=true" \
+    -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+    -v /path/to/video.mp4:/data/video.mp4:ro \
+    --network host \
+    your-image:latest
+
+# Restore X server security after running
+xhost -local:docker
+```
+
+#### Windows WSL2
+
+WSL2 includes WSLg which provides automatic X11 support:
+
+```bash
+# WSLg sets DISPLAY automatically, just verify it's set
+echo $DISPLAY  # Should show :0 or similar
+
+# Allow X server connections
+xhost +local:docker 2>/dev/null || xhost +local: 2>/dev/null
+
+# Run container with display support (same as Linux)
+docker run --rm \
+    -e DISPLAY=$DISPLAY \
+    -e CONNECTION_STRING="file:///data/video.mp4?preview=true&loop=true" \
+    -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+    -v /mnt/c/path/to/video.mp4:/data/video.mp4:ro \
+    --network host \
+    your-image:latest
+
+# Restore X server security
+xhost -local:docker 2>/dev/null || xhost -local: 2>/dev/null
+```
+
+#### Helper Scripts
+
+The SDK includes helper scripts for easy testing:
+
+```bash
+# Build Docker images with sample clients
+./build_docker_samples.sh
+
+# Test Python client with preview
+./run_preview_client_python.sh
+
+# Test C# client with preview
+./run_preview_client_csharp.sh
+```
+
+These scripts automatically:
+- Configure X11 display forwarding
+- Create a test video if needed (using ffmpeg)
+- Mount the video into the container
+- Set up the connection string with preview enabled
+- Clean up X server permissions after running
+
 ## Protocol Details
 
 ### Shared Memory Protocol (shm://)
@@ -349,6 +468,15 @@ High-performance local data transfer between processes:
 
 - **Performance**: Minimal latency, maximum throughput
 - **Use Cases**: Local processing, multi-container applications on same host
+
+### File Protocol (file://)
+
+Local video file playback with OpenCV:
+
+- **Performance**: Controlled playback speed based on video FPS
+- **Features**: Loop playback, preview window, frame-accurate timing
+- **Use Cases**: Testing, development, offline processing, demos
+- **Supported Formats**: All formats supported by OpenCV (MP4, AVI, MOV, etc.)
 
 ### MJPEG over HTTP (mjpeg+http://)
 

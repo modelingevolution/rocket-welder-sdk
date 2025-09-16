@@ -156,7 +156,13 @@ class Program
                     var loggerFactory = sp.GetRequiredService<ILoggerFactory>();
                     return RocketWelderClient.From(configuration, loggerFactory);
                 });
-                services.AddRocketWelderUi();
+
+                // Only add UI services if EventStore is configured
+                var configuration = context.Configuration;
+                if (!string.IsNullOrEmpty(configuration["EventStore"]))
+                {
+                    services.AddRocketWelderUi();
+                }
             })
             .RunConsoleAsync();
     }
@@ -211,8 +217,18 @@ public class VideoProcessingService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         _logger.LogInformation("SessionId: " + _configuration["SessionId"]);
-        _logger.LogInformation("EventStore: " + _configuration["EventStore"]);
-        await CheckEventStore(stoppingToken);
+
+        // Only check EventStore if it's configured
+        var eventStoreConfig = _configuration["EventStore"];
+        if (!string.IsNullOrEmpty(eventStoreConfig))
+        {
+            _logger.LogInformation("EventStore: " + eventStoreConfig);
+            await CheckEventStore(stoppingToken);
+        }
+        else
+        {
+            _logger.LogInformation("No EventStore configured, skipping EventStore connection");
+        }
 
         _logger.LogInformation("Starting RocketWelder client..." + _client.Connection);
         _client.OnError += OnError;
@@ -238,14 +254,24 @@ public class VideoProcessingService : BackgroundService
             _logger.LogInformation("Will exit after {ExitAfter} frames", _exitAfter);
         }
 
-        // Run until cancelled or frame limit reached
-        try
+        // Check if preview is enabled and handle display
+        if (_client.Connection.Parameters.TryGetValue("preview", out var preview) &&
+            preview.Equals("true", StringComparison.OrdinalIgnoreCase))
         {
-            await Task.Delay(Timeout.Infinite, stoppingToken);
+            _logger.LogInformation("Showing preview... Press 'q' in preview window to stop");
+            _client.Show(stoppingToken);
         }
-        catch (OperationCanceledException)
+        else
         {
-            // Expected when stopping
+            // Run until cancelled or frame limit reached
+            try
+            {
+                await Task.Delay(Timeout.Infinite, stoppingToken);
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected when stopping
+            }
         }
 
         _logger.LogInformation("Stopping client...");

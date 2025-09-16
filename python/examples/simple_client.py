@@ -60,10 +60,16 @@ def main() -> None:
     # Start processing
     client.start(callback)
 
-    # Keep running until interrupted
+    # Check if preview is enabled and handle display
     try:
-        while client.is_running:
-            time.sleep(0.1)
+        if client.connection.parameters.get("preview", "false").lower() == "true":
+            # Show preview - blocks until 'q' pressed or stopped
+            print("Showing preview... Press 'q' to stop")
+            client.show()
+        else:
+            # No preview, just keep running
+            while client.is_running:
+                time.sleep(0.1)
     except KeyboardInterrupt:
         print("\nStopping...")
     finally:

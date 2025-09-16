@@ -5,14 +5,15 @@ WORKDIR /app
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \
-    # OpenCV system dependencies
+    # OpenCV and X11 dependencies
     libgomp1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \
     libxrender1 \
     libgl1 \
-    libglib2.0-0 \
+    libx11-6 \
+    libxcb1 \
     # Video processing libraries
     libavcodec-dev \
     libavformat-dev \

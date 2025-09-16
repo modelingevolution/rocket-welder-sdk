@@ -19,11 +19,12 @@ import numpy.typing as npt
 from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import IController
 from .gst_metadata import GstCaps, GstMetadata
+from .periodic_timer import PeriodicTimerSync
 
 if TYPE_CHECKING:
     Mat = npt.NDArray[np.uint8]
 else:
-    Mat = npt.NDArray[Any]
+    Mat = np.ndarray  # type: ignore[misc]
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +130,6 @@ class OpenCvController(IController):
             "Video source opened: %dx%d @ %.1ffps, %d frames", width, height, fps, frame_count
         )
 
-
         # Determine callback type and start worker thread
         if self._connection.connection_mode == ConnectionMode.DUPLEX:
             # For duplex mode with file/mjpeg, we allocate output but process as one-way
@@ -215,48 +215,64 @@ class OpenCvController(IController):
         if not self._capture:
             return
 
-        # Calculate frame delay
-        frame_delay_s = 1.0 / fps if fps > 0 else 0.033  # Default ~30fps
+        # Use PeriodicTimer for precise frame timing (especially important for file playback)
+        timer = None
+        if self._connection.protocol == Protocol.FILE and fps > 0:
+            # Create timer for file playback at specified FPS
+            timer = PeriodicTimerSync(1.0 / fps)
+            logger.debug("Using PeriodicTimer for file playback at %.1f FPS", fps)
 
-        while self._is_running:
-            if self._cancellation_token and self._cancellation_token.is_set():
-                break
+        try:
+            while self._is_running:
+                if self._cancellation_token and self._cancellation_token.is_set():
+                    break
 
-            try:
-                # Read frame
-                ret, frame = self._capture.read()
+                try:
+                    # Read frame
+                    ret, frame = self._capture.read()
 
-                if not ret:
-                    if self._connection.protocol == Protocol.FILE and self._loop:
-                        # Loop: Reset to beginning
-                        self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
-                        logger.debug("Looping video from beginning")
-                        continue
-                    elif self._connection.protocol == Protocol.FILE:
-                        # File ended without loop
-                        logger.info("Video file ended")
-                        break
-                    else:
-                        # Network stream issue
-                        logger.warning("Failed to read frame from stream")
+                    if not ret:
+                        if self._connection.protocol == Protocol.FILE and self._loop:
+                            # Loop: Reset to beginning
+                            self._capture.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                            logger.debug("Looping video from beginning")
+                            continue
+                        elif self._connection.protocol == Protocol.FILE:
+                            # File ended without loop
+                            logger.info("Video file ended")
+                            break
+                        else:
+                            # Network stream issue
+                            logger.warning("Failed to read frame from stream")
+                            time.sleep(0.01)
+                            continue
+
+                    if hasattr(frame, "size") and frame.size == 0:
                         time.sleep(0.01)
                         continue
 
-                if hasattr(frame, "size") and frame.size == 0:
-                    time.sleep(0.01)
-                    continue
+                    # Process frame
+                    on_frame(frame)
 
-                # Process frame
-                on_frame(frame)
+                    # Control frame rate for file playback using PeriodicTimer
+                    if timer:
+                        # Wait for next tick - this provides precise timing
+                        if not timer.wait_for_next_tick():
+                            # Timer disposed or timed out
+                            break
+                    elif self._connection.protocol != Protocol.FILE:
+                        # For network streams, we process as fast as they arrive
+                        # No artificial delay needed
+                        pass
 
-                # Control frame rate for file playback
-                if self._connection.protocol == Protocol.FILE:
-                    time.sleep(frame_delay_s)
+                except Exception as e:
+                    logger.error("Error processing frame: %s", e)
+                    if not self._is_running:
+                        break
+                    time.sleep(0.1)
 
-            except Exception as e:
-                logger.error("Error processing frame: %s", e)
-                if not self._is_running:
-                    break
-                time.sleep(0.1)
+        finally:
+            if timer:
+                timer.dispose()
 
         self._is_running = False

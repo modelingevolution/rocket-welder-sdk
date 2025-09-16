@@ -81,6 +81,7 @@ pretty = true
 module = [
     "cv2",
     "cv2.*",
+    "cv2.typing",
     "zerobuffer",
     "zerobuffer.*",
     "py_micro_plumberd",
@@ -117,6 +118,9 @@ select = [
 ignore = [
     "E501",  # line too long (handled by black)
     "B008",  # do not perform function calls in argument defaults
+    "UP006", # Keep List[X] for Python 3.8 compatibility
+    "UP007", # Keep Union[X, Y] for Python 3.8 compatibility
+    "UP045", # Keep Optional[X] for Python 3.8 compatibility
     "C901",  # too complex
 ]
 

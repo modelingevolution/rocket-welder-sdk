@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import queue
 import threading
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any, Callable, List, Optional, Union
 
 import numpy as np
 
@@ -18,10 +18,13 @@ from .opencv_controller import OpenCvController
 
 if TYPE_CHECKING:
     import numpy.typing as npt
+
     from .gst_metadata import GstMetadata
-    Mat = npt.NDArray[Any]
+
+    # Use numpy array type for Mat - OpenCV Mat is essentially a numpy array
+    Mat = npt.NDArray[np.uint8]
 else:
-    Mat = np.ndarray
+    Mat = np.ndarray  # type: ignore[misc]
 
 # Module logger
 logger = logging.getLogger(__name__)
@@ -34,7 +37,7 @@ class RocketWelderClient:
     Provides a unified interface for different connection types and protocols.
     """
 
-    def __init__(self, connection: str | ConnectionString):
+    def __init__(self, connection: Union[str, ConnectionString]):
         """
         Initialize the RocketWelder client.
 
@@ -46,12 +49,14 @@ class RocketWelderClient:
         else:
             self._connection = connection
 
-        self._controller: IController | None = None
+        self._controller: Optional[IController] = None
         self._lock = threading.Lock()
 
         # Preview support
-        self._preview_enabled = self._connection.parameters.get("preview", "false").lower() == "true"
-        self._preview_queue: queue.Queue[Mat | None] = queue.Queue(maxsize=2)  # Small buffer
+        self._preview_enabled = (
+            self._connection.parameters.get("preview", "false").lower() == "true"
+        )
+        self._preview_queue: queue.Queue[Optional[Mat]] = queue.Queue(maxsize=2)  # type: ignore[valid-type]  # Small buffer
         self._preview_window_name = "RocketWelder Preview"
         self._original_callback: Any = None
 
@@ -66,7 +71,7 @@ class RocketWelderClient:
         with self._lock:
             return self._controller is not None and self._controller.is_running
 
-    def get_metadata(self) -> GstMetadata | None:
+    def get_metadata(self) -> Optional[GstMetadata]:
         """
         Get the current GStreamer metadata.
 
@@ -80,8 +85,8 @@ class RocketWelderClient:
 
     def start(
         self,
-        on_frame: Callable[[Mat], None] | Callable[[Mat, Mat], None],
-        cancellation_token: threading.Event | None = None,
+        on_frame: Union[Callable[[Mat], None], Callable[[Mat, Mat], None]],  # type: ignore[valid-type]
+        cancellation_token: Optional[threading.Event] = None,
     ) -> None:
         """
         Start receiving/processing video frames.
@@ -117,39 +122,41 @@ class RocketWelderClient:
 
                 # Determine if duplex or one-way
                 if self._connection.connection_mode == ConnectionMode.DUPLEX:
-                    def preview_wrapper_duplex(input_frame: Mat, output_frame: Mat) -> None:
+
+                    def preview_wrapper_duplex(input_frame: Mat, output_frame: Mat) -> None:  # type: ignore[valid-type]
                         # Call original callback
                         on_frame(input_frame, output_frame)  # type: ignore[call-arg]
                         # Queue the OUTPUT frame for preview
                         try:
-                            self._preview_queue.put_nowait(output_frame.copy())
+                            self._preview_queue.put_nowait(output_frame.copy())  # type: ignore[attr-defined]
                         except queue.Full:
                             # Drop oldest frame if queue is full
                             try:
                                 self._preview_queue.get_nowait()
-                                self._preview_queue.put_nowait(output_frame.copy())
+                                self._preview_queue.put_nowait(output_frame.copy())  # type: ignore[attr-defined]
                             except queue.Empty:
                                 pass
 
                     actual_callback = preview_wrapper_duplex
                 else:
-                    def preview_wrapper_oneway(frame: Mat) -> None:
+
+                    def preview_wrapper_oneway(frame: Mat) -> None:  # type: ignore[valid-type]
                         # Call original callback
                         on_frame(frame)  # type: ignore[call-arg]
                         # Queue frame for preview
                         try:
-                            self._preview_queue.put_nowait(frame.copy())
+                            self._preview_queue.put_nowait(frame.copy())  # type: ignore[attr-defined]
                         except queue.Full:
                             # Drop oldest frame if queue is full
                             try:
                                 self._preview_queue.get_nowait()
-                                self._preview_queue.put_nowait(frame.copy())
+                                self._preview_queue.put_nowait(frame.copy())  # type: ignore[attr-defined]
                             except queue.Empty:
                                 pass
 
-                    actual_callback = preview_wrapper_oneway
+                    actual_callback = preview_wrapper_oneway  # type: ignore[assignment]
             else:
-                actual_callback = on_frame
+                actual_callback = on_frame  # type: ignore[assignment]
 
             # Start the controller
             self._controller.start(actual_callback, cancellation_token)  # type: ignore[arg-type]
@@ -168,7 +175,7 @@ class RocketWelderClient:
 
                 logger.info("RocketWelder client stopped")
 
-    def show(self, cancellation_token: threading.Event | None = None) -> None:
+    def show(self, cancellation_token: Optional[threading.Event] = None) -> None:
         """
         Display preview frames in a window (main thread only).
 
@@ -219,7 +226,7 @@ class RocketWelderClient:
 
                     # Process window events and check for 'q' key
                     key = cv2.waitKey(1) & 0xFF
-                    if key == ord('q'):
+                    if key == ord("q"):
                         logger.info("User pressed 'q', stopping preview")
                         break
 
@@ -228,7 +235,7 @@ class RocketWelderClient:
                     if not self.is_running:
                         break
                     # Process window events even without new frame
-                    if cv2.waitKey(1) & 0xFF == ord('q'):
+                    if cv2.waitKey(1) & 0xFF == ord("q"):
                         logger.info("User pressed 'q', stopping preview")
                         break
 
@@ -260,7 +267,7 @@ class RocketWelderClient:
         return cls(connection_string)
 
     @classmethod
-    def from_args(cls, args: list[str]) -> RocketWelderClient:
+    def from_args(cls, args: List[str]) -> RocketWelderClient:
         """
         Create a client from command line arguments.
 

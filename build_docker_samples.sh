@@ -291,6 +291,7 @@ if [ "$BUILD_PYTHON" = true ]; then
         exit 1
     fi
 
+
     # Build Python 3.8 legacy image
     print_section "Building Python 3.8 Sample Client Docker Image"
 
@@ -345,6 +346,7 @@ if [ "$BUILD_CSHARP" = true ]; then
 fi
 if [ "$BUILD_PYTHON" = true ]; then
     echo "  • ${TAG_PREFIX}-client-python:${TAG_VERSION}"
+    echo "  • ${TAG_PREFIX}-client-python:x11 (with display support)"
     echo "  • ${TAG_PREFIX}-client-python:python38"
 fi
 
@@ -373,6 +375,16 @@ if [ "$BUILD_PYTHON" = true ]; then
     echo "    -e CONNECTION_STRING=\"shm://test_buffer?size=10MB&metadata=4KB\" \\"
     echo "    --ipc=host \\"
     echo "    ${TAG_PREFIX}-client-python:python38"
+    echo ""
+    echo "Python client with X11 display support:"
+    echo "  docker run --rm -it \\"
+    echo "    -e DISPLAY=\$DISPLAY \\"
+    echo "    -v /tmp/.X11-unix:/tmp/.X11-unix:rw \\"
+    echo "    -v /path/to/video.mp4:/data/stream.mp4:ro \\"
+    echo "    --network host \\"
+    echo "    ${TAG_PREFIX}-client-python:x11"
+    echo ""
+    echo "  Note: For X11, run 'xhost +local:docker' first to allow display access"
     echo ""
 fi
 

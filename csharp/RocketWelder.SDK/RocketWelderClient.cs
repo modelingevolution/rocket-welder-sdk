@@ -58,7 +58,14 @@ namespace RocketWelder.SDK
     {
         private readonly IController _controller;
         private readonly ILogger<RocketWelderClient> _logger;
-        
+
+        // Preview support
+        private readonly bool _previewEnabled;
+        private readonly Channel<Mat> _previewChannel;
+        private readonly string _previewWindowName = "RocketWelder Preview";
+        private Action<Mat>? _originalOneWayCallback;
+        private Action<Mat, Mat>? _originalDuplexCallback;
+
         /// <summary>
         /// Gets the connection configuration.
         /// </summary>
@@ -96,7 +103,17 @@ namespace RocketWelder.SDK
             var factory = loggerFactory ?? NullLoggerFactory.Instance;
             _logger = factory.CreateLogger<RocketWelderClient>();
             _controller = ControllerFactory.Create(connection, loggerFactory);
-            
+
+            // Parse preview parameter
+            _previewEnabled = connection.Parameters.TryGetValue("preview", out var preview) &&
+                              preview.Equals("true", StringComparison.OrdinalIgnoreCase);
+
+            // Create preview channel with bounded capacity
+            _previewChannel = Channel.CreateBounded<Mat>(new BoundedChannelOptions(2)
+            {
+                FullMode = BoundedChannelFullMode.DropOldest
+            });
+
             // Subscribe to controller errors
             _controller.OnError += OnControllerError;
         }
@@ -220,11 +237,29 @@ namespace RocketWelder.SDK
         {
             if (IsRunning)
                 throw new InvalidOperationException("Client is already running");
-                
+
             try
             {
                 _logger.LogInformation("Starting RocketWelder client with connection: {Connection}", Connection);
-                _controller.Start(onFrame, cancellationToken);
+
+                // If preview is enabled, wrap the callback to capture frames
+                if (_previewEnabled)
+                {
+                    _originalDuplexCallback = onFrame;
+                    Action<Mat, Mat> previewWrapper = (input, output) =>
+                    {
+                        // Call original callback
+                        onFrame(input, output);
+                        // Queue the OUTPUT frame for preview
+                        _previewChannel.Writer.TryWrite(output.Clone());
+                    };
+                    _controller.Start(previewWrapper, cancellationToken);
+                }
+                else
+                {
+                    _controller.Start(onFrame, cancellationToken);
+                }
+
                 Started?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex)
@@ -242,11 +277,29 @@ namespace RocketWelder.SDK
         {
             if (IsRunning)
                 throw new InvalidOperationException("Client is already running");
-                
+
             try
             {
                 _logger.LogInformation("Starting RocketWelder client with connection: {Connection}", Connection);
-                _controller.Start(onFrame, cancellationToken);
+
+                // If preview is enabled, wrap the callback to capture frames
+                if (_previewEnabled)
+                {
+                    _originalOneWayCallback = onFrame;
+                    Action<Mat> previewWrapper = (frame) =>
+                    {
+                        // Call original callback
+                        onFrame(frame);
+                        // Queue frame for preview
+                        _previewChannel.Writer.TryWrite(frame.Clone());
+                    };
+                    _controller.Start(previewWrapper, cancellationToken);
+                }
+                else
+                {
+                    _controller.Start(onFrame, cancellationToken);
+                }
+
                 Started?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex)
@@ -264,11 +317,18 @@ namespace RocketWelder.SDK
         {
             if (!IsRunning)
                 return;
-                
+
             try
             {
                 _logger.LogInformation("Stopping RocketWelder client");
                 _controller.Stop(cancellationToken);
+
+                // Signal preview to stop if enabled
+                if (_previewEnabled)
+                {
+                    _previewChannel.Writer.TryComplete();
+                }
+
                 Stopped?.Invoke(this, EventArgs.Empty);
             }
             catch (Exception ex)
@@ -276,6 +336,84 @@ namespace RocketWelder.SDK
                 _logger.LogError(ex, "Error stopping RocketWelder client");
                 OnError?.Invoke(this, new ErrorEventArgs(ex));
                 throw;
+            }
+        }
+
+        /// <summary>
+        /// Display preview frames in a window (main thread only).
+        /// - If preview=true: blocks and displays frames until stopped or 'q' pressed
+        /// - If preview=false or not set: returns immediately
+        /// </summary>
+        public void Show(CancellationToken cancellationToken = default)
+        {
+            if (!_previewEnabled)
+            {
+                // No preview requested, return immediately
+                return;
+            }
+
+            _logger.LogInformation("Starting preview display in main thread");
+
+            // Create window
+            CvInvoke.NamedWindow(_previewWindowName, Emgu.CV.CvEnum.WindowFlags.Normal);
+
+            try
+            {
+                while (!cancellationToken.IsCancellationRequested)
+                {
+                    // Try to read frame with timeout
+                    try
+                    {
+                        var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+                        cts.CancelAfter(100);
+
+                        if (_previewChannel.Reader.TryRead(out var frame))
+                        {
+                            if (frame != null && !frame.IsEmpty)
+                            {
+                                // Display frame
+                                CvInvoke.Imshow(_previewWindowName, frame);
+                                frame.Dispose(); // Clean up the cloned frame
+
+                                // Process window events and check for 'q' key
+                                var key = CvInvoke.WaitKey(1);
+                                if (key == 'q' || key == 'Q')
+                                {
+                                    _logger.LogInformation("User pressed 'q', stopping preview");
+                                    break;
+                                }
+                            }
+                        }
+                        else
+                        {
+                            // No frame available, check if still running
+                            if (!IsRunning)
+                                break;
+
+                            // Process window events even without new frame
+                            var key = CvInvoke.WaitKey(1);
+                            if (key == 'q' || key == 'Q')
+                            {
+                                _logger.LogInformation("User pressed 'q', stopping preview");
+                                break;
+                            }
+
+                            // Small delay to avoid busy loop
+                            Thread.Sleep(10);
+                        }
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break;
+                    }
+                }
+            }
+            finally
+            {
+                // Clean up window
+                CvInvoke.DestroyWindow(_previewWindowName);
+                CvInvoke.WaitKey(1); // Process pending events
+                _logger.LogInformation("Preview display stopped");
             }
         }
         

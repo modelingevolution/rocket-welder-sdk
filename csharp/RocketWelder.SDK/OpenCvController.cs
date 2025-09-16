@@ -110,7 +110,7 @@ namespace RocketWelder.SDK
             if (_preview)
             {
                 CvInvoke.NamedWindow(_previewWindowName, Emgu.CV.CvEnum.WindowFlags.Normal);
-                CvInvoke.ResizeWindow(_previewWindowName, width, height);
+                // ResizeWindow not available in EmguCV - Normal flag allows manual resizing
                 _logger.LogInformation("Preview window created");
             }
 

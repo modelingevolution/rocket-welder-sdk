@@ -127,10 +127,9 @@ class TestUiServiceHappyPath:
         """Create UiService with mocked dependencies."""
         service: UiService = UiService(session_id)
         # Patch both CommandBus and UiEventsProjection to avoid actual EventStore connections
-        with (
-            patch("rocket_welder_sdk.ui.ui_service.CommandBus", return_value=mock_command_bus),
-            patch("rocket_welder_sdk.ui.ui_service.UiEventsProjection") as mock_projection_class,
-        ):
+        with patch(
+            "rocket_welder_sdk.ui.ui_service.CommandBus", return_value=mock_command_bus
+        ), patch("rocket_welder_sdk.ui.ui_service.UiEventsProjection") as mock_projection_class:
             # Mock the projection instance
             mock_projection = Mock()
             mock_projection.start = AsyncMock()
