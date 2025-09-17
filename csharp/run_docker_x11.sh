@@ -1,5 +1,6 @@
 #!/bin/bash
 # Script to run RocketWelder C# Docker container with X11 display support
+# Usage: ./run_docker_x11.sh [video_path]
 
 set -e
 
@@ -38,22 +39,22 @@ if ! docker images --format "{{.Repository}}:{{.Tag}}" | grep -q "^rocket-welder
     exit 1
 fi
 
-# Check if test video exists in data folder
-VIDEO_PATH="$(pwd)/data/test_stream.mp4"
-if [ ! -f "$VIDEO_PATH" ]; then
-    echo -e "${YELLOW}Warning: Test video not found at $VIDEO_PATH${NC}"
-    echo "Creating a test video..."
-    mkdir -p data
-    # Create a simple test video if ffmpeg is available
-    if command -v ffmpeg &> /dev/null; then
-        ffmpeg -f lavfi -i testsrc=duration=10:size=640x480:rate=25 \
-               -f lavfi -i sine=frequency=1000:duration=10 \
-               -pix_fmt yuv420p -y "$VIDEO_PATH" 2>/dev/null
-        echo -e "${GREEN}Test video created at $VIDEO_PATH${NC}"
-    else
-        echo -e "${YELLOW}ffmpeg not found. Please create a test video at $VIDEO_PATH${NC}"
-        exit 1
+# Use provided video path or default to test video
+if [ ! -z "$1" ]; then
+    VIDEO_PATH="$1"
+    # Convert to absolute path if relative
+    if [[ "$VIDEO_PATH" != /* ]]; then
+        VIDEO_PATH="$(pwd)/$VIDEO_PATH"
     fi
+    echo -e "${GREEN}Using provided video: $VIDEO_PATH${NC}"
+else
+    VIDEO_PATH="$(pwd)/data/test_stream.mp4"
+    echo -e "${GREEN}Using default video: $VIDEO_PATH${NC}"
+fi
+# Check if video exists
+if [ ! -f "$VIDEO_PATH" ]; then
+    echo -e "${RED}Error: Video file not found at $VIDEO_PATH${NC}"
+    exit 1
 fi
 
 # Clean up any existing container with the same name
@@ -65,12 +66,27 @@ echo -e "${GREEN}Running Docker container with X11 forwarding...${NC}"
 echo "Using video: $VIDEO_PATH"
 echo "Press 'q' in the preview window to quit"
 
+# Construct and display the full docker command
+DOCKER_CMD="docker run --rm \
+    --name rocket-welder-csharp-preview \
+    -e DISPLAY=$DISPLAY \
+    -e CONNECTION_STRING=\"file:///data/test_stream.mp4?preview=true&loop=false&mode=duplex\" \
+    -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
+    -v \"$VIDEO_PATH:/data/test_stream.mp4:ro\" \
+    --network host \
+    rocket-welder-client-csharp:latest"
+
+echo -e "${YELLOW}Full Docker command:${NC}"
+echo "$DOCKER_CMD"
+echo ""
+
+# Execute the docker command
 docker run --rm \
     --name rocket-welder-csharp-preview \
     -e DISPLAY=$DISPLAY \
-    -e CONNECTION_STRING="file:///data/test_stream.mp4?preview=true&loop=false&mode=duplex" \
+    -e CONNECTION_STRING="file:///data/video_input.mp4?preview=true&loop=false&mode=duplex" \
     -v /tmp/.X11-unix:/tmp/.X11-unix:rw \
-    -v "$VIDEO_PATH:/data/test_stream.mp4:ro" \
+    -v "$VIDEO_PATH:/data/video_input.mp4:ro" \
     --network host \
     rocket-welder-client-csharp:latest
 
