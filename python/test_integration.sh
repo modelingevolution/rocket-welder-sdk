@@ -40,9 +40,9 @@ run_test() {
     
     # Start Python client FIRST (it creates the shared memory buffer)
     echo -e "${GREEN}Step 1: Starting Python client (creates buffer)${NC}"
-    echo -e "${YELLOW}  Command:${NC} ./run.sh \"${CONNECTION_STRING}\" --exit-after=${FRAME_COUNT}"
+    echo -e "${YELLOW}  Command:${NC} venv/bin/python examples/integration_client.py \"${CONNECTION_STRING}\" --exit-after ${FRAME_COUNT}"
     echo ""
-    timeout 10 ./run.sh "${CONNECTION_STRING}" --exit-after=${FRAME_COUNT} > output_${MODE}.log 2>&1 &
+    timeout 10 venv/bin/python examples/integration_client.py "${CONNECTION_STRING}" --exit-after ${FRAME_COUNT} > output_${MODE}.log 2>&1 &
     CLIENT_PID=$!
     
     # Give client time to initialize and create the buffer
