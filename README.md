@@ -133,6 +133,19 @@ docker run --rm \
     my-ai-app:v1
 ```
 
+You can also see preview in your terminal. 
+
+```bash
+# Install x11-apps
+sudo apt install x11-apps
+
+# Test with a video file
+docker run --rm \
+    -e CONNECTION_STRING="file:///data/test.mp4?loop=true&preview=true" \
+    -e DISPLAY=$DISPLAY \
+    -v /path/to/your/file.mp4:/data/test.mp4:ro -v /tmp/.X11-unix:/tmp/.X11-unix     my-ai-app:v1
+```
+
 ### Step 2: Test with Live Stream from Neuron
 
 Once your container works locally, test it with a live stream from your Neuron device:
