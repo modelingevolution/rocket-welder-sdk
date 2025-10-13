@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 
 import numpy as np
 from zerobuffer import BufferConfig, Frame, Reader, Writer
-from zerobuffer.duplex import DuplexChannelFactory, IImmutableDuplexServer
+from zerobuffer.duplex import DuplexChannelFactory
 from zerobuffer.duplex.server import ImmutableDuplexServer
 from zerobuffer.exceptions import WriterDeadException
 
