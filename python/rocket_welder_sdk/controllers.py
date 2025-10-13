@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Callable, Optional
 import numpy as np
 from zerobuffer import BufferConfig, Frame, Reader, Writer
 from zerobuffer.duplex import DuplexChannelFactory
-from zerobuffer.duplex.server import ImmutableDuplexServer
 from zerobuffer.exceptions import WriterDeadException
 
 from .connection_string import ConnectionMode, ConnectionString, Protocol
@@ -22,9 +21,12 @@ from .gst_metadata import GstCaps, GstMetadata
 
 if TYPE_CHECKING:
     import numpy.typing as npt
+    from zerobuffer.duplex import IImmutableDuplexServer
 
     Mat = npt.NDArray[np.uint8]
 else:
+    from zerobuffer.duplex import IImmutableDuplexServer
+
     Mat = np.ndarray  # type: ignore[misc]
 
 # Module logger
@@ -547,7 +549,7 @@ class DuplexShmController(IController):
             )
 
         self._connection = connection
-        self._duplex_server: Optional[ImmutableDuplexServer] = None
+        self._duplex_server: Optional[IImmutableDuplexServer] = None
         self._gst_caps: Optional[GstCaps] = None
         self._metadata: Optional[GstMetadata] = None
         self._is_running = False
@@ -718,10 +720,10 @@ class DuplexShmController(IController):
             if (
                 self._metadata is None
                 and self._duplex_server
-                and self._duplex_server.request_reader
+                and self._duplex_server._request_reader  # type: ignore[attr-defined]
             ):
                 try:
-                    metadata_bytes = self._duplex_server.request_reader.get_metadata()
+                    metadata_bytes = self._duplex_server._request_reader.get_metadata()  # type: ignore[attr-defined]
                     if metadata_bytes:
                         # Use helper method to parse metadata
                         metadata = self._parse_metadata_json(metadata_bytes)
