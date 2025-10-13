@@ -720,10 +720,10 @@ class DuplexShmController(IController):
             if (
                 self._metadata is None
                 and self._duplex_server
-                and self._duplex_server._request_reader  # type: ignore[attr-defined]
+                and self._duplex_server.request_reader
             ):
                 try:
-                    metadata_bytes = self._duplex_server._request_reader.get_metadata()  # type: ignore[attr-defined]
+                    metadata_bytes = self._duplex_server.request_reader.get_metadata()
                     if metadata_bytes:
                         # Use helper method to parse metadata
                         metadata = self._parse_metadata_json(metadata_bytes)
