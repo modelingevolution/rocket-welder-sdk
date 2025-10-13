@@ -19,7 +19,7 @@ echo ""
 # Build the C# client
 echo "Building C# client..."
 cd /mnt/d/source/modelingevolution/rocket-welder-sdk/csharp
-dotnet build -q
+dotnet build
 
 # Start GStreamer pipeline with zerosink in background
 echo "Starting GStreamer pipeline with zerosink..."

@@ -123,7 +123,8 @@ class TestOneWayShmController:
     def test_create_mat_from_frame_no_caps(self, controller):
         """Test _create_mat_from_frame when no caps are available."""
         frame = MagicMock()
-        frame.data = memoryview(b"test")
+        # Use 5 bytes so it's not a perfect square (no square root of 5)
+        frame.data = memoryview(b"tests")
 
         result = controller._create_mat_from_frame(frame)
         assert result is None
@@ -258,7 +259,8 @@ class TestDuplexShmController:
     def test_frame_to_mat_no_caps(self, controller):
         """Test _frame_to_mat when no caps are available."""
         frame = MagicMock()
-        frame.data = memoryview(b"test")
+        # Use 5 bytes so it's not a perfect square (no square root of 5)
+        frame.data = memoryview(b"tests")
 
         result = controller._frame_to_mat(frame)
         assert result is None

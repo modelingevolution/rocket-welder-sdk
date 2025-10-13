@@ -4,6 +4,7 @@ Minimal example showing how to process video frames with RocketWelder SDK.
 Adds a simple timestamp overlay to frames.
 """
 
+import logging
 import sys
 import time
 from datetime import datetime
@@ -16,12 +17,83 @@ import numpy.typing as npt
 import rocket_welder_sdk as rw
 
 
+def setup_logging() -> logging.Logger:
+    """Setup logging with console and file handlers."""
+    # Create main logger
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+
+    # Clear any existing handlers
+    logger.handlers.clear()
+
+    # Create formatters with more detail
+    detailed_formatter = logging.Formatter(
+        "%(asctime)s.%(msecs)03d - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    simple_formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+    )
+
+    # Console handler - show DEBUG level for controllers
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.DEBUG)  # Changed from INFO to DEBUG
+    console_handler.setFormatter(simple_formatter)
+    logger.addHandler(console_handler)
+
+    # File handler with detailed format
+    file_handler = logging.FileHandler("/tmp/python.log")
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(detailed_formatter)
+    logger.addHandler(file_handler)
+
+    # Configure logging for zerobuffer-ipc with DEBUG level
+    zerobuffer_logger = logging.getLogger("zerobuffer")
+    zerobuffer_logger.setLevel(logging.DEBUG)
+    zerobuffer_logger.handlers.clear()  # Clear existing handlers
+    zerobuffer_logger.addHandler(console_handler)
+    zerobuffer_logger.addHandler(file_handler)
+    zerobuffer_logger.propagate = False  # Prevent propagation to root
+
+    # Configure logging for rocket-welder-sdk with DEBUG level
+    rw_logger = logging.getLogger("rocket_welder_sdk")
+    rw_logger.setLevel(logging.DEBUG)
+    rw_logger.handlers.clear()  # Clear existing handlers
+    rw_logger.addHandler(console_handler)
+    rw_logger.addHandler(file_handler)
+    rw_logger.propagate = False  # Prevent propagation to root
+
+    # Specifically configure controllers module with DEBUG
+    # No need to add handlers here since it will inherit from rocket_welder_sdk
+    controllers_logger = logging.getLogger("rocket_welder_sdk.controllers")
+    controllers_logger.setLevel(logging.DEBUG)
+    # Let it propagate to parent (rocket_welder_sdk) which has the handlers
+
+    return logger
+
+
+# Global logger instance
+logger: logging.Logger = None  # type: ignore
+
+
+def log(message: str, level: int = logging.INFO) -> None:
+    """Log a message to both console and file."""
+    if logger:
+        logger.log(level, message)
+
+
 def main() -> None:
     """Main entry point."""
+    # Initialize logging as the first thing
+    global logger
+    logger = setup_logging()
+
+    log("Starting")
     # Create client - automatically detects connection from args or env
     client = rw.Client.from_(sys.argv)
 
-    print(f"Connected: {client.connection}")
+    log(f"Connected: {client.connection}")
 
     # Process frames based on mode
     callback: Union[
@@ -64,14 +136,14 @@ def main() -> None:
     try:
         if client.connection.parameters.get("preview", "false").lower() == "true":
             # Show preview - blocks until 'q' pressed or stopped
-            print("Showing preview... Press 'q' to stop")
+            log("Showing preview... Press 'q' to stop")
             client.show()
         else:
             # No preview, just keep running
             while client.is_running:
                 time.sleep(0.1)
     except KeyboardInterrupt:
-        print("\nStopping...")
+        log("Stopping...", logging.INFO)
     finally:
         client.stop()
 

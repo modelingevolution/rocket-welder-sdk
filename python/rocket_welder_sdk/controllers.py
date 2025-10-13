@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Callable, Optional
 import numpy as np
 from zerobuffer import BufferConfig, Frame, Reader, Writer
 from zerobuffer.duplex import DuplexChannelFactory, IImmutableDuplexServer
+from zerobuffer.duplex.server import ImmutableDuplexServer
 from zerobuffer.exceptions import WriterDeadException
 
 from .connection_string import ConnectionMode, ConnectionString, Protocol
@@ -276,36 +277,14 @@ class OneWayShmController(IController):
                                 bytes(metadata_bytes[: min(100, len(metadata_bytes))]),
                             )
 
-                            # Convert memoryview to bytes if needed
-                            if isinstance(metadata_bytes, memoryview):
-                                metadata_bytes = bytes(metadata_bytes)
-
-                            # Decode UTF-8
-                            metadata_str = metadata_bytes.decode("utf-8")
-
-                            # Check if metadata is empty or all zeros
-                            if not metadata_str or metadata_str == "\x00" * len(metadata_str):
-                                logger.warning("Metadata is empty or all zeros, skipping")
+                            # Use helper method to parse metadata
+                            metadata = self._parse_metadata_json(metadata_bytes)
+                            if not metadata:
+                                logger.warning("Failed to parse metadata, skipping")
                                 continue
 
-                            # Find the start of JSON (skip any null bytes at the beginning)
-                            json_start = metadata_str.find("{")
-                            if json_start == -1:
-                                logger.warning("No JSON found in metadata: %r", metadata_str[:100])
-                                continue
-
-                            if json_start > 0:
-                                logger.debug("Skipping %d bytes before JSON", json_start)
-                                metadata_str = metadata_str[json_start:]
-
-                            # Find the end of JSON (handle null padding)
-                            json_end = metadata_str.rfind("}")
-                            if json_end != -1 and json_end < len(metadata_str) - 1:
-                                metadata_str = metadata_str[: json_end + 1]
-
-                            metadata_json = json.loads(metadata_str)
-                            self._metadata = GstMetadata.from_json(metadata_json)
-                            self._gst_caps = self._metadata.caps
+                            self._metadata = metadata
+                            self._gst_caps = metadata.caps
                             logger.info(
                                 "Received metadata from buffer '%s': %s",
                                 self._connection.buffer_name,
@@ -414,6 +393,40 @@ class OneWayShmController(IController):
 
             # Try common resolutions
             frame_size = len(frame.data)
+
+            # First, check if it's a perfect square (square frame)
+            import math
+
+            sqrt_size = math.sqrt(frame_size)
+            if sqrt_size == int(sqrt_size):
+                # Perfect square - assume square grayscale image
+                dimension = int(sqrt_size)
+                logger.info(
+                    f"Frame size {frame_size} is a perfect square, assuming {dimension}x{dimension} grayscale"
+                )
+                data = np.frombuffer(frame.data, dtype=np.uint8)
+                return data.reshape((dimension, dimension))  # type: ignore[no-any-return]
+
+            # Also check for square RGB (size = width * height * 3)
+            if frame_size % 3 == 0:
+                pixels = frame_size // 3
+                sqrt_pixels = math.sqrt(pixels)
+                if sqrt_pixels == int(sqrt_pixels):
+                    dimension = int(sqrt_pixels)
+                    logger.info(f"Frame size {frame_size} suggests {dimension}x{dimension} RGB")
+                    data = np.frombuffer(frame.data, dtype=np.uint8)
+                    return data.reshape((dimension, dimension, 3))  # type: ignore[no-any-return]
+
+            # Check for square RGBA (size = width * height * 4)
+            if frame_size % 4 == 0:
+                pixels = frame_size // 4
+                sqrt_pixels = math.sqrt(pixels)
+                if sqrt_pixels == int(sqrt_pixels):
+                    dimension = int(sqrt_pixels)
+                    logger.info(f"Frame size {frame_size} suggests {dimension}x{dimension} RGBA")
+                    data = np.frombuffer(frame.data, dtype=np.uint8)
+                    return data.reshape((dimension, dimension, 4))  # type: ignore[no-any-return]
+
             common_resolutions = [
                 (640, 480, 3),  # VGA RGB
                 (640, 480, 4),  # VGA RGBA
@@ -446,6 +459,45 @@ class OneWayShmController(IController):
 
         except Exception as e:
             logger.error("Failed to convert frame to Mat: %s", e)
+            return None
+
+    def _parse_metadata_json(self, metadata_bytes: bytes | memoryview) -> GstMetadata | None:
+        """
+        Parse metadata JSON from bytes, handling null padding and boundaries.
+
+        Args:
+            metadata_bytes: Raw metadata bytes or memoryview
+
+        Returns:
+            GstMetadata object or None if parsing fails
+        """
+        try:
+            # Convert to string
+            if isinstance(metadata_bytes, memoryview):
+                metadata_bytes = bytes(metadata_bytes)
+            metadata_str = metadata_bytes.decode("utf-8")
+
+            # Find JSON boundaries (handle null padding)
+            json_start = metadata_str.find("{")
+            if json_start < 0:
+                logger.debug("No JSON found in metadata")
+                return None
+
+            json_end = metadata_str.rfind("}")
+            if json_end <= json_start:
+                logger.debug("Invalid JSON boundaries in metadata")
+                return None
+
+            # Extract JSON
+            metadata_str = metadata_str[json_start : json_end + 1]
+
+            # Parse JSON
+            metadata_json = json.loads(metadata_str)
+            metadata = GstMetadata.from_json(metadata_json)
+            return metadata
+
+        except Exception as e:
+            logger.debug("Failed to parse metadata JSON: %s", e)
             return None
 
     def _infer_caps_from_frame(self, mat: Mat) -> None:  # type: ignore[valid-type]
@@ -495,7 +547,7 @@ class DuplexShmController(IController):
             )
 
         self._connection = connection
-        self._duplex_server: Optional[IImmutableDuplexServer] = None
+        self._duplex_server: Optional[ImmutableDuplexServer] = None
         self._gst_caps: Optional[GstCaps] = None
         self._metadata: Optional[GstMetadata] = None
         self._is_running = False
@@ -540,6 +592,11 @@ class DuplexShmController(IController):
         if not self._connection.buffer_name:
             raise ValueError("Buffer name is required for shared memory connection")
         timeout_seconds = self._connection.timeout_ms / 1000.0
+        logger.debug(
+            "Creating duplex server with timeout: %d ms (%.1f seconds)",
+            self._connection.timeout_ms,
+            timeout_seconds,
+        )
         factory = DuplexChannelFactory()
         self._duplex_server = factory.create_immutable_server(
             self._connection.buffer_name, config, timeout_seconds
@@ -571,6 +628,44 @@ class DuplexShmController(IController):
 
         logger.info("DuplexShmController stopped")
 
+    def _parse_metadata_json(self, metadata_bytes: bytes | memoryview) -> GstMetadata | None:
+        """
+        Parse metadata JSON from bytes, handling null padding and boundaries.
+
+        Args:
+            metadata_bytes: Raw metadata bytes or memoryview
+
+        Returns:
+            GstMetadata object or None if parsing fails
+        """
+        try:
+            # Convert to string
+            if isinstance(metadata_bytes, memoryview):
+                metadata_bytes = bytes(metadata_bytes)
+            metadata_str = metadata_bytes.decode("utf-8")
+
+            # Find JSON boundaries (handle null padding)
+            json_start = metadata_str.find("{")
+            if json_start < 0:
+                logger.debug("No JSON found in metadata")
+                return None
+
+            json_end = metadata_str.rfind("}")
+            if json_end <= json_start:
+                logger.debug("Invalid JSON boundaries in metadata")
+                return None
+
+            # Extract JSON
+            metadata_str = metadata_str[json_start : json_end + 1]
+
+            # Parse JSON
+            metadata_json = json.loads(metadata_str)
+            metadata = GstMetadata.from_json(metadata_json)
+            return metadata
+        except Exception as e:
+            logger.debug("Failed to parse metadata JSON: %s", e)
+            return None
+
     def _on_metadata(self, metadata_bytes: bytes | memoryview) -> None:
         """
         Handle metadata from duplex channel.
@@ -582,23 +677,20 @@ class DuplexShmController(IController):
             "_on_metadata called with %d bytes", len(metadata_bytes) if metadata_bytes else 0
         )
         try:
-            # Convert memoryview to bytes if needed
-            if isinstance(metadata_bytes, memoryview):
-                metadata_bytes = bytes(metadata_bytes)
-
             # Log raw bytes for debugging
             logger.debug(
                 "Raw metadata bytes (first 100): %r",
                 metadata_bytes[: min(100, len(metadata_bytes))],
             )
 
-            metadata_str = metadata_bytes.decode("utf-8")
-            logger.debug("Decoded metadata string: %r", metadata_str[: min(200, len(metadata_str))])
-
-            metadata_json = json.loads(metadata_str)
-            self._metadata = GstMetadata.from_json(metadata_json)
-            self._gst_caps = self._metadata.caps
-            logger.info("Received metadata: %s", self._metadata)
+            # Use helper method to parse metadata
+            metadata = self._parse_metadata_json(metadata_bytes)
+            if metadata:
+                self._metadata = metadata
+                self._gst_caps = metadata.caps
+                logger.info("Received metadata: %s", self._metadata)
+            else:
+                logger.warning("Failed to parse metadata from buffer initialization")
         except Exception as e:
             logger.error("Failed to parse metadata: %s", e, exc_info=True)
 
@@ -621,6 +713,30 @@ class DuplexShmController(IController):
                 return
 
             self._frame_count += 1
+
+            # Try to read metadata if we don't have it yet
+            if (
+                self._metadata is None
+                and self._duplex_server
+                and self._duplex_server.request_reader
+            ):
+                try:
+                    metadata_bytes = self._duplex_server.request_reader.get_metadata()
+                    if metadata_bytes:
+                        # Use helper method to parse metadata
+                        metadata = self._parse_metadata_json(metadata_bytes)
+                        if metadata:
+                            self._metadata = metadata
+                            self._gst_caps = metadata.caps
+                            logger.info(
+                                "Successfully read metadata from buffer '%s': %s",
+                                self._connection.buffer_name,
+                                self._gst_caps,
+                            )
+                        else:
+                            logger.debug("Failed to parse metadata in frame processing")
+                except Exception as e:
+                    logger.debug("Failed to read metadata in frame processing: %s", e)
 
             # Convert input frame to Mat
             input_mat = self._frame_to_mat(request_frame)
