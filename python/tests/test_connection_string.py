@@ -167,3 +167,119 @@ class TestConnectionString:
         conn_str = str(conn)
         assert "mjpeg" in conn_str.lower()
         assert "tcp" in conn_str.lower()
+
+    def test_mjpeg_tcp_combination(self) -> None:
+        """Test mjpeg+tcp protocol combination."""
+        conn = ConnectionString.parse("mjpeg+tcp://127.0.0.1:8800")
+
+        assert Protocol.MJPEG in conn.protocol
+        assert Protocol.TCP in conn.protocol
+        assert conn.host == "127.0.0.1"
+        assert conn.port == 8800
+        assert conn.protocol == (Protocol.MJPEG | Protocol.TCP)
+
+    def test_tcp_mjpeg_combination(self) -> None:
+        """Test tcp+mjpeg protocol combination (reversed order)."""
+        conn = ConnectionString.parse("tcp+mjpeg://127.0.0.1:8800")
+
+        assert Protocol.MJPEG in conn.protocol
+        assert Protocol.TCP in conn.protocol
+        assert conn.host == "127.0.0.1"
+        assert conn.port == 8800
+        # Order shouldn't matter - both should have same flags
+        assert conn.protocol == (Protocol.MJPEG | Protocol.TCP)
+
+    def test_mjpeg_http_combination(self) -> None:
+        """Test mjpeg+http protocol combination."""
+        conn = ConnectionString.parse("mjpeg+http://camera.local:80")
+
+        assert Protocol.MJPEG in conn.protocol
+        assert Protocol.HTTP in conn.protocol
+        assert conn.host == "camera.local"
+        assert conn.port == 80
+        assert conn.protocol == (Protocol.MJPEG | Protocol.HTTP)
+
+    def test_http_mjpeg_combination(self) -> None:
+        """Test http+mjpeg protocol combination (reversed order)."""
+        conn = ConnectionString.parse("http+mjpeg://camera.local:8080")
+
+        assert Protocol.MJPEG in conn.protocol
+        assert Protocol.HTTP in conn.protocol
+        assert conn.host == "camera.local"
+        assert conn.port == 8080
+        assert conn.protocol == (Protocol.MJPEG | Protocol.HTTP)
+
+    def test_mjpeg_with_preview_query_param(self) -> None:
+        """Test MJPEG connection with preview=true query parameter."""
+        conn = ConnectionString.parse("mjpeg+tcp://127.0.0.1:8800?preview=true")
+
+        assert Protocol.MJPEG in conn.protocol
+        assert Protocol.TCP in conn.protocol
+        assert conn.host == "127.0.0.1"
+        assert conn.port == 8800
+        assert "preview" in conn.parameters
+        assert conn.parameters["preview"] == "true"
+
+    def test_mjpeg_with_multiple_query_params(self) -> None:
+        """Test MJPEG connection with multiple query parameters."""
+        conn = ConnectionString.parse(
+            "mjpeg+http://localhost:8080?preview=true&timeout=10000&custom=value"
+        )
+
+        assert Protocol.MJPEG in conn.protocol
+        assert Protocol.HTTP in conn.protocol
+        assert conn.host == "localhost"
+        assert conn.port == 8080
+        assert len(conn.parameters) == 3
+        assert conn.parameters["preview"] == "true"
+        assert conn.parameters["timeout"] == "10000"
+        assert conn.parameters["custom"] == "value"
+
+    def test_mjpeg_query_params_case_insensitive(self) -> None:
+        """Test MJPEG query parameters are case-insensitive."""
+        conn = ConnectionString.parse("mjpeg+tcp://server:9000?PREVIEW=TRUE&TimeOut=5000")
+
+        assert "preview" in conn.parameters  # Keys are lowercased
+        assert conn.parameters["preview"] == "TRUE"  # Values maintain case
+        assert "timeout" in conn.parameters
+        assert conn.parameters["timeout"] == "5000"
+
+    def test_mjpeg_with_preview_false(self) -> None:
+        """Test MJPEG connection with preview=false."""
+        conn = ConnectionString.parse("mjpeg://192.168.1.100:8080?preview=false")
+
+        assert conn.protocol == Protocol.MJPEG
+        assert conn.host == "192.168.1.100"
+        assert conn.port == 8080
+        assert conn.parameters["preview"] == "false"
+
+    def test_mjpeg_query_params_with_special_values(self) -> None:
+        """Test MJPEG query parameters with special values."""
+        conn = ConnectionString.parse("mjpeg+tcp://host:8000?path=/stream&quality=high&fps=30")
+
+        assert conn.parameters["path"] == "/stream"
+        assert conn.parameters["quality"] == "high"
+        assert conn.parameters["fps"] == "30"
+
+    def test_mjpeg_tcp_default_port_with_query(self) -> None:
+        """Test MJPEG+TCP default port with query parameters."""
+        conn = ConnectionString.parse("mjpeg+tcp://localhost?preview=true")
+
+        assert conn.port == 8080  # Default for non-HTTP
+        assert conn.parameters["preview"] == "true"
+
+    def test_mjpeg_http_default_port_with_query(self) -> None:
+        """Test MJPEG+HTTP default port with query parameters."""
+        conn = ConnectionString.parse("mjpeg+http://localhost?preview=true")
+
+        assert conn.port == 80  # Default for HTTP
+        assert conn.parameters["preview"] == "true"
+
+    def test_file_protocol_with_query_params(self) -> None:
+        """Test file protocol with query parameters (regression test)."""
+        conn = ConnectionString.parse("file:///path/to/video.mp4?loop=true&preview=true")
+
+        assert conn.protocol == Protocol.FILE
+        assert conn.file_path == "/path/to/video.mp4"
+        assert conn.parameters["loop"] == "true"
+        assert conn.parameters["preview"] == "true"
