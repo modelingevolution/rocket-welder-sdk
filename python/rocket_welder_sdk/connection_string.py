@@ -204,19 +204,27 @@ class ConnectionString:
     @classmethod
     def _parse_mjpeg(cls, protocol: Protocol, remainder: str) -> ConnectionString:
         """Parse MJPEG connection string."""
+        # Split host:port and query parameters
+        if "?" in remainder:
+            host_port, query_string = remainder.split("?", 1)
+            params = cls._parse_query_params(query_string)
+        else:
+            host_port = remainder
+            params = {}
+
         # Parse host:port format
-        if ":" in remainder:
-            host, port_str = remainder.rsplit(":", 1)
+        if ":" in host_port:
+            host, port_str = host_port.rsplit(":", 1)
             try:
                 port = int(port_str)
             except ValueError as e:
                 raise ValueError(f"Invalid port number: {port_str}") from e
         else:
-            host = remainder
+            host = host_port
             # Default ports based on protocol
             port = 80 if Protocol.HTTP in protocol else 8080
 
-        return cls(protocol=protocol, host=host, port=port)
+        return cls(protocol=protocol, host=host, port=port, parameters=params)
 
     @classmethod
     def _parse_query_params(cls, query_string: str) -> dict[str, str]:
