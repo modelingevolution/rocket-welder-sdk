@@ -124,7 +124,7 @@ Start by testing your container locally before deploying to Neuron:
 
 ```bash
 # Build your container
-docker build -t my-ai-app:v1 -f examples/python/Dockerfile .
+docker build -t my-ai-app:v1 -f python/examples/Dockerfile .
 
 # Test with a video file
 docker run --rm \
