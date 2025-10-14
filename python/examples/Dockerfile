@@ -36,16 +36,16 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install Python dependencies
-COPY python/requirements.txt .
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy and install the SDK
-COPY python/rocket_welder_sdk/ /app/rocket_welder_sdk/
-COPY python/setup.py python/pyproject.toml python/MANIFEST.in python/README.md ./
+COPY rocket_welder_sdk/ /app/rocket_welder_sdk/
+COPY setup.py pyproject.toml MANIFEST.in README.md ./
 RUN pip install --no-cache-dir .
 
 # Copy the example application
-COPY python/examples/simple_client.py .
+COPY examples/simple_client.py .
 
 # Set up logging - SDK will propagate to ZEROBUFFER_LOG_LEVEL
 ENV ROCKET_WELDER_LOG_LEVEL=INFO
