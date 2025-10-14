@@ -178,6 +178,15 @@ docker run --rm \
     my-ai-app:v1
 ```
 
+You can also see preview in your terminal. 
+```bash
+docker run --rm \
+    -e CONNECTION_STRING="mjpeg+tcp://<neuron-ip>:<tcp-server-sink-port>?preview=true" \
+    -e DISPLAY=$DISPLAY \
+    -v /tmp/.X11-unix:/tmp/.X11-unix \
+    --network host my-ai-app:v1
+```
+
 This allows you to:
 - Test your AI processing with real camera feeds
 - Debug frame processing logic
