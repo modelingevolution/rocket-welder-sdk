@@ -336,6 +336,52 @@ if [ "$BUILD_PYTHON" = true ]; then
         print_error "Failed to build Python 3.8 Docker image"
         exit 1
     fi
+
+
+    # Build Python YOLO Segmentation image
+    print_section "Building Python YOLO Segmentation Client Docker Image"
+
+    # Build image name for Python YOLO
+    if [ "$USE_PLATFORM_TAG" = true ]; then
+        PYTHON_YOLO_IMAGE_TAG="${TAG_PREFIX}-client-python-yolo-${PLATFORM}:${TAG_VERSION}"
+    else
+        PYTHON_YOLO_IMAGE_TAG="${TAG_PREFIX}-client-python-yolo:${TAG_VERSION}"
+    fi
+
+    print_info "Building image: ${PYTHON_YOLO_IMAGE_TAG}"
+    print_info "Context: ${SCRIPT_DIR}/python"
+
+    # Build Docker image for Python YOLO
+    print_info "Building Python YOLO Docker image..."
+    cd "${SCRIPT_DIR}/python"
+
+    if [ "$MULTI_PLATFORM" = true ]; then
+        # Use buildx for multi-platform build
+        docker buildx build ${DOCKER_BUILD_ARGS} \
+            -t "${PYTHON_YOLO_IMAGE_TAG}" \
+            -f examples/rocket-welder-client-python-yolo/Dockerfile \
+            .
+    else
+        # Use regular docker build for single platform
+        docker build ${DOCKER_BUILD_ARGS} \
+            -t "${PYTHON_YOLO_IMAGE_TAG}" \
+            -f examples/rocket-welder-client-python-yolo/Dockerfile \
+            .
+    fi
+
+    if [ $? -eq 0 ]; then
+        print_success "Python YOLO Docker image built successfully: ${PYTHON_YOLO_IMAGE_TAG}"
+
+        # Show image details (only for single platform builds)
+        if [ "$MULTI_PLATFORM" = false ]; then
+            echo ""
+            print_info "Image details:"
+            docker images --filter "reference=${TAG_PREFIX}-client-python-yolo" --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
+        fi
+    else
+        print_error "Failed to build Python YOLO Docker image"
+        exit 1
+    fi
 fi
 
 print_section "Build Complete!"
@@ -348,6 +394,7 @@ if [ "$BUILD_PYTHON" = true ]; then
     echo "  • ${TAG_PREFIX}-client-python:${TAG_VERSION}"
     echo "  • ${TAG_PREFIX}-client-python:x11 (with display support)"
     echo "  • ${TAG_PREFIX}-client-python:python38"
+    echo "  • ${TAG_PREFIX}-client-python-yolo:${TAG_VERSION}"
 fi
 
 echo ""
@@ -385,6 +432,12 @@ if [ "$BUILD_PYTHON" = true ]; then
     echo "    ${TAG_PREFIX}-client-python:x11"
     echo ""
     echo "  Note: For X11, run 'xhost +local:docker' first to allow display access"
+    echo ""
+    echo "Python YOLO Segmentation client:"
+    echo "  docker run --rm -it \\"
+    echo "    -e CONNECTION_STRING=\"shm://test_buffer?size=10MB&metadata=4KB\" \\"
+    echo "    --ipc=host \\"
+    echo "    ${TAG_PREFIX}-client-python-yolo:${TAG_VERSION}"
     echo ""
 fi
 
