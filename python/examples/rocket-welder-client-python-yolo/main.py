@@ -4,6 +4,8 @@ YOLO Segmentation example using RocketWelder SDK.
 Performs real-time instance segmentation on video frames using YOLOv8.
 """
 
+from __future__ import annotations  # Enable Python 3.9+ type hints in Python 3.8
+
 import logging
 import sys
 import time
