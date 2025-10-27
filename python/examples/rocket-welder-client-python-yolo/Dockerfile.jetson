@@ -34,8 +34,8 @@ COPY examples/rocket-welder-client-python-yolo/main.py .
 # Set up logging - SDK will propagate to ZEROBUFFER_LOG_LEVEL
 ENV ROCKET_WELDER_LOG_LEVEL=INFO
 
-# Download YOLO model at build time (optional - will auto-download on first run if not present)
-RUN python3 -c "from ultralytics import YOLO; YOLO('yolov8n-seg.pt')"
+# Note: YOLO model will auto-download on first run
+# Pre-downloading at build time causes GStreamer conflicts with the L4T base image
 
 # Entry point - runs the client with CONNECTION_STRING env var
 ENTRYPOINT ["python3", "main.py"]
