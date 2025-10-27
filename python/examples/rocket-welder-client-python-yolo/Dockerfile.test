@@ -1,0 +1,29 @@
+# Simple YOLO GPU test Dockerfile for Jetson
+# Tests YOLO with GPU acceleration independently of RocketWelder SDK
+
+FROM dustynv/l4t-pytorch:r35.3.1
+
+WORKDIR /app
+
+# Install ultralytics without dependencies, then add required packages
+# Do NOT install opencv-python - use the one from L4T base image
+RUN pip3 install --no-cache-dir --no-deps ultralytics && \
+    pip3 install --no-cache-dir \
+    matplotlib \
+    pillow \
+    pyyaml \
+    scipy \
+    tqdm \
+    psutil
+
+# Copy test script
+COPY test_yolo_gpu.py .
+
+# Make it executable
+RUN chmod +x test_yolo_gpu.py
+
+# Entry point
+ENTRYPOINT ["python3", "test_yolo_gpu.py"]
+
+# Default: use webcam (0), or pass video file path as argument
+CMD []
