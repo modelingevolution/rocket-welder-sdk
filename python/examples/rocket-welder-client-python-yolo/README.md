@@ -4,6 +4,35 @@ This Docker sample demonstrates real-time YOLO instance segmentation using the R
 
 **⚠️ GPU Required**: This application requires NVIDIA GPU with CUDA support and will fail fast if GPU is not available.
 
+## Files Overview
+
+### Application Files
+- **`main.py`** - Main RocketWelder YOLO segmentation client application
+  - Integrates YOLO with RocketWelder SDK for real-time video processing
+  - Supports shared memory (IPC) connections
+  - Production-ready application
+
+- **`test_yolo_gpu.py`** - Standalone YOLO GPU acceleration test
+  - Tests YOLO inference on GPU without RocketWelder SDK
+  - Useful for verifying GPU acceleration works
+  - Processes video files or webcam input
+
+### Docker Files
+- **`Dockerfile`** - Standard x86_64 Dockerfile
+  - For Intel/AMD systems with NVIDIA GPUs
+  - Uses Python 3.12 base image
+
+- **`Dockerfile.jetson`** - Jetson-optimized Dockerfile
+  - **Use this for NVIDIA Jetson devices** (Orin, Xavier, Nano, etc.)
+  - Uses L4T PyTorch base with pre-installed CUDA support
+  - Avoids OpenCV version conflicts
+  - Built automatically with `--jetson` flag or auto-detected
+
+- **`Dockerfile.test`** - Minimal test Dockerfile for Jetson
+  - Simple standalone test without RocketWelder SDK
+  - Useful for debugging GPU issues
+  - Runs `test_yolo_gpu.py`
+
 ## Features
 
 - Real-time instance segmentation using YOLOv8-seg (nano model)
@@ -14,17 +43,50 @@ This Docker sample demonstrates real-time YOLO instance segmentation using the R
 
 ## Building
 
-Build the Docker image using the main build script:
+### For NVIDIA Jetson Devices (Orin, Xavier, Nano)
+
+The build script auto-detects Jetson devices and builds the optimized image:
+
+```bash
+# From the repository root - auto-detects Jetson
+./build_docker_samples.sh --python-only
+
+# Or explicitly enable Jetson build
+./build_docker_samples.sh --python-only --jetson
+
+# Or build manually
+cd python
+docker build -t rocket-welder-client-python-yolo:jetson \
+  -f examples/rocket-welder-client-python-yolo/Dockerfile.jetson \
+  .
+```
+
+### For Standard x86_64 Systems with NVIDIA GPU
 
 ```bash
 # From the repository root
-./build_docker_samples.sh --python-only
+./build_docker_samples.sh --python-only --no-jetson
 
-# Or build only the YOLO image manually
+# Or build manually
 cd python
 docker build -t rocket-welder-client-python-yolo:latest \
   -f examples/rocket-welder-client-python-yolo/Dockerfile \
   .
+```
+
+### Testing GPU Acceleration (Jetson)
+
+Before running the full application, test that GPU acceleration works:
+
+```bash
+# Build the test image
+cd python/examples/rocket-welder-client-python-yolo
+docker build -t yolo-gpu-test:jetson -f Dockerfile.test .
+
+# Test with a video file
+docker run --rm --runtime=nvidia --gpus all \
+  -v /path/to/video.mp4:/app/test.mp4:ro \
+  yolo-gpu-test:jetson /app/test.mp4
 ```
 
 ## Requirements
@@ -39,8 +101,22 @@ Without GPU, the application will fail immediately with a clear error message.
 
 ## Running
 
-### Basic usage (shared memory with GPU):
+### On Jetson Devices
+
 ```bash
+# Basic usage (shared memory with GPU)
+docker run --rm -it \
+  --runtime=nvidia \
+  --gpus all \
+  -e CONNECTION_STRING="shm://test_buffer?size=10MB&metadata=4KB" \
+  --ipc=host \
+  rocket-welder-client-python-yolo:jetson
+```
+
+### On x86_64 Systems
+
+```bash
+# Basic usage (shared memory with GPU)
 docker run --rm -it \
   --runtime=nvidia \
   --gpus all \
@@ -91,9 +167,34 @@ The client processes frames and overlays:
 3. Class labels with confidence scores
 4. Real-time FPS statistics
 
+## Troubleshooting
+
+### Jetson-Specific Issues
+
+**CUDA not available error:**
+- Make sure you're using `Dockerfile.jetson` (or the `:jetson` tag)
+- Verify NVIDIA Container Toolkit is installed: `dpkg -l | grep nvidia-container-toolkit`
+- Test with the standalone GPU test first (see "Testing GPU Acceleration" above)
+
+**OpenCV import errors:**
+- The Jetson Dockerfile (`Dockerfile.jetson`) uses the L4T base image's OpenCV (with CUDA support)
+- Do NOT use the standard `Dockerfile` on Jetson devices - it will have OpenCV conflicts
+
+**Python 3.8 compatibility:**
+- The L4T base image uses Python 3.8
+- The code includes `from __future__ import annotations` for compatibility
+- If you see `TypeError: 'type' object is not subscriptable`, rebuild the image
+
+### General Issues
+
+**GPU not detected:**
+- Run: `docker run --rm --runtime=nvidia --gpus all ubuntu:20.04 nvidia-smi`
+- If this fails, your Docker NVIDIA runtime is not configured correctly
+
 ## Notes
 
 - The client uses `--ipc=host` to share memory with the host system
 - Logs are written to `/tmp/yolo_client.log` inside the container
 - Press 'q' to stop when using preview mode
 - Press Ctrl+C to stop in headless mode
+- For Jetson: First run may be slow as YOLO model downloads (~6MB)
