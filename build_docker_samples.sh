@@ -43,6 +43,12 @@ USE_PLATFORM_TAG=false
 MULTI_PLATFORM=false
 PLATFORMS="linux/amd64,linux/arm64"
 PUSH_TO_REGISTRY=false
+BUILD_JETSON=false
+
+# Auto-detect Jetson platform
+if [ "$PLATFORM" = "arm64" ] && [ -f /etc/nv_tegra_release ]; then
+    BUILD_JETSON=true
+fi
 
 # Function to print colored output
 print_info() {
@@ -109,6 +115,14 @@ while [[ $# -gt 0 ]]; do
             PUSH_TO_REGISTRY=true
             shift
             ;;
+        --jetson)
+            BUILD_JETSON=true
+            shift
+            ;;
+        --no-jetson)
+            BUILD_JETSON=false
+            shift
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -124,6 +138,8 @@ while [[ $# -gt 0 ]]; do
             echo "  --multi-platform    Build multi-platform images using buildx"
             echo "  --platforms PLATS   Platforms to build for (default: linux/amd64,linux/arm64)"
             echo "  --push              Push images to registry (required for multi-platform)"
+            echo "  --jetson            Build Jetson-optimized images (auto-detected on Jetson devices)"
+            echo "  --no-jetson         Skip building Jetson-optimized images"
             echo "  --help              Show this help message"
             echo ""
             echo "Examples:"
@@ -190,6 +206,7 @@ echo "  Tag prefix: ${TAG_PREFIX}"
 echo "  Tag version: ${TAG_VERSION}"
 echo "  Build C# sample: ${BUILD_CSHARP}"
 echo "  Build Python sample: ${BUILD_PYTHON}"
+echo "  Build Jetson images: ${BUILD_JETSON}"
 echo "  No cache: ${NO_CACHE}"
 echo "  Use platform tag: ${USE_PLATFORM_TAG}"
 echo "  Multi-platform: ${MULTI_PLATFORM}"
@@ -382,6 +399,39 @@ if [ "$BUILD_PYTHON" = true ]; then
         print_error "Failed to build Python YOLO Docker image"
         exit 1
     fi
+
+    # Build Python YOLO Segmentation image for Jetson (if enabled)
+    if [ "$BUILD_JETSON" = true ]; then
+        print_section "Building Python YOLO Segmentation Client Docker Image (Jetson-Optimized)"
+
+        # Build image name for Python YOLO Jetson
+        PYTHON_YOLO_JETSON_IMAGE_TAG="${TAG_PREFIX}-client-python-yolo:jetson"
+
+        print_info "Building image: ${PYTHON_YOLO_JETSON_IMAGE_TAG}"
+        print_info "Context: ${SCRIPT_DIR}/python"
+        print_info "Using Jetson-optimized Dockerfile with L4T PyTorch base"
+
+        # Build Docker image for Python YOLO Jetson
+        print_info "Building Python YOLO Jetson Docker image..."
+        cd "${SCRIPT_DIR}/python"
+
+        # Jetson builds are always single-platform (arm64)
+        docker build ${DOCKER_BUILD_ARGS} \
+            -t "${PYTHON_YOLO_JETSON_IMAGE_TAG}" \
+            -f examples/rocket-welder-client-python-yolo/Dockerfile.jetson \
+            .
+
+        if [ $? -eq 0 ]; then
+            print_success "Python YOLO Jetson Docker image built successfully: ${PYTHON_YOLO_JETSON_IMAGE_TAG}"
+
+            echo ""
+            print_info "Image details:"
+            docker images --filter "reference=${TAG_PREFIX}-client-python-yolo" --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}" | grep jetson
+        else
+            print_error "Failed to build Python YOLO Jetson Docker image"
+            exit 1
+        fi
+    fi
 fi
 
 print_section "Build Complete!"
@@ -395,6 +445,9 @@ if [ "$BUILD_PYTHON" = true ]; then
     echo "  • ${TAG_PREFIX}-client-python:x11 (with display support)"
     echo "  • ${TAG_PREFIX}-client-python:python38"
     echo "  • ${TAG_PREFIX}-client-python-yolo:${TAG_VERSION}"
+    if [ "$BUILD_JETSON" = true ]; then
+        echo "  • ${TAG_PREFIX}-client-python-yolo:jetson (Jetson-optimized with GPU support)"
+    fi
 fi
 
 echo ""
@@ -439,6 +492,16 @@ if [ "$BUILD_PYTHON" = true ]; then
     echo "    --ipc=host \\"
     echo "    ${TAG_PREFIX}-client-python-yolo:${TAG_VERSION}"
     echo ""
+
+    if [ "$BUILD_JETSON" = true ]; then
+        echo "Python YOLO Segmentation client (Jetson with GPU):"
+        echo "  docker run --rm -it \\"
+        echo "    -e CONNECTION_STRING=\"shm://test_buffer?size=10MB&metadata=4KB\" \\"
+        echo "    --runtime=nvidia --gpus all \\"
+        echo "    --ipc=host \\"
+        echo "    ${TAG_PREFIX}-client-python-yolo:jetson"
+        echo ""
+    fi
 fi
 
 print_info "Note: Use --ipc=host to share IPC namespace with the host for shared memory access"
