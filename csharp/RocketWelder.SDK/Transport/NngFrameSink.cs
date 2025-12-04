@@ -1,9 +1,11 @@
 using System;
-using System.Text;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
 using nng;
+using nng.Native;
 using nng.Factories.Latest;
+using static nng.Native.Defines;
 
 namespace RocketWelder.SDK.Transport
 {
@@ -56,6 +58,26 @@ namespace RocketWelder.SDK.Transport
         {
             var sender = NngPusherSender.Create(url, bindMode);
             return new NngFrameSink(sender, leaveOpen: false);
+        }
+
+        /// <summary>
+        /// Gets the number of connected subscribers (for pub/sub pattern).
+        /// </summary>
+        public int SubscriberCount => (_sender as NngPublisherSender)?.SubscriberCount ?? 0;
+
+        /// <summary>
+        /// Waits for at least one subscriber to connect (for pub/sub pattern).
+        /// </summary>
+        /// <param name="timeout">Maximum time to wait</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>True if a subscriber connected, false if timed out</returns>
+        public async Task<bool> WaitForSubscriberAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+        {
+            if (_sender is NngPublisherSender publisher)
+            {
+                return await publisher.WaitForSubscriberAsync(timeout, cancellationToken);
+            }
+            return true; // Non-pub/sub senders don't need to wait
         }
 
         public void WriteFrame(ReadOnlySpan<byte> frameData)
@@ -121,19 +143,26 @@ namespace RocketWelder.SDK.Transport
 
     /// <summary>
     /// NNG Publisher sender implementation using the real NNG library.
+    /// Uses pipe notifications to track subscriber connections.
     /// </summary>
     internal sealed class NngPublisherSender : INngSender
     {
         private readonly IPubSocket _socket;
         private readonly ISendAsyncContext<INngMsg> _asyncContext;
         private readonly Factory _factory;
+        private readonly SemaphoreSlim _subscriberConnected;
+        private int _subscriberCount;
         private bool _disposed;
+        private GCHandle _callbackHandle;
+
+        public int SubscriberCount => _subscriberCount;
 
         private NngPublisherSender(IPubSocket socket, ISendAsyncContext<INngMsg> asyncContext, Factory factory)
         {
             _socket = socket;
             _asyncContext = asyncContext;
             _factory = factory;
+            _subscriberConnected = new SemaphoreSlim(0);
         }
 
         public static NngPublisherSender Create(string url)
@@ -142,7 +171,49 @@ namespace RocketWelder.SDK.Transport
             var socket = factory.PublisherOpen().Unwrap();
             socket.Listen(url).Unwrap();
             var asyncContext = socket.CreateAsyncContext(factory).Unwrap();
-            return new NngPublisherSender(socket, asyncContext, factory);
+
+            var sender = new NngPublisherSender(socket, asyncContext, factory);
+            sender.SetupPipeNotifications();
+            return sender;
+        }
+
+        private void SetupPipeNotifications()
+        {
+            // Create a callback that tracks pipe events
+            PipeEventCallback callback = PipeCallback;
+            // Keep the delegate alive for the lifetime of the socket
+            _callbackHandle = GCHandle.Alloc(callback);
+
+            // Register for AddPost (connection established) and RemPost (connection closed)
+            _socket.Notify(NngPipeEv.AddPost, callback, IntPtr.Zero);
+            _socket.Notify(NngPipeEv.RemPost, callback, IntPtr.Zero);
+        }
+
+        private void PipeCallback(nng_pipe pipe, NngPipeEv ev, IntPtr arg)
+        {
+            switch (ev)
+            {
+                case NngPipeEv.AddPost:
+                    // A subscriber has connected
+                    Interlocked.Increment(ref _subscriberCount);
+                    try { _subscriberConnected.Release(); } catch { /* ignore if disposed */ }
+                    break;
+                case NngPipeEv.RemPost:
+                    // A subscriber has disconnected
+                    Interlocked.Decrement(ref _subscriberCount);
+                    break;
+            }
+        }
+
+        /// <summary>
+        /// Waits for at least one subscriber to connect.
+        /// </summary>
+        public async Task<bool> WaitForSubscriberAsync(TimeSpan timeout, CancellationToken cancellationToken = default)
+        {
+            if (_subscriberCount > 0)
+                return true;
+
+            return await _subscriberConnected.WaitAsync(timeout, cancellationToken);
         }
 
         public void Send(ReadOnlySpan<byte> data)
@@ -170,6 +241,9 @@ namespace RocketWelder.SDK.Transport
             _disposed = true;
             _asyncContext.Dispose();
             _socket.Dispose();
+            _subscriberConnected.Dispose();
+            if (_callbackHandle.IsAllocated)
+                _callbackHandle.Free();
         }
 
         public ValueTask DisposeAsync()
