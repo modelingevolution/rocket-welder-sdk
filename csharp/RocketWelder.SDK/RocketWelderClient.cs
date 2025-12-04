@@ -223,6 +223,49 @@ namespace RocketWelder.SDK
     }
 
 
+    /// <summary>
+    /// Simple frame sink that writes directly to stream without length-prefix framing.
+    /// Used for backward compatibility with direct stream usage (e.g., MemoryStream tests).
+    /// </summary>
+    internal class RawStreamSink : IFrameSink
+    {
+        private readonly Stream _stream;
+        private bool _disposed;
+
+        public RawStreamSink(Stream stream)
+        {
+            _stream = stream ?? throw new ArgumentNullException(nameof(stream));
+        }
+
+        public void WriteFrame(ReadOnlySpan<byte> frameData)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(RawStreamSink));
+            _stream.Write(frameData);
+        }
+
+        public async ValueTask WriteFrameAsync(ReadOnlyMemory<byte> frameData)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(RawStreamSink));
+            await _stream.WriteAsync(frameData);
+        }
+
+        public void Flush() => _stream.Flush();
+        public Task FlushAsync() => _stream.FlushAsync();
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            // Don't dispose stream - leave open for caller
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
+        }
+    }
+
     class SegmentationResultWriter : ISegmentationResultWriter
     {
         // Protocol (per frame): [FrameId: 8B][Width: varint][Height: varint]
@@ -239,15 +282,24 @@ namespace RocketWelder.SDK
         private bool _headerWritten = false;
         private bool _disposed = false;
 
+        /// <summary>
+        /// Creates a writer that writes directly to stream WITHOUT length-prefix framing.
+        /// Use this for backward compatibility with direct stream usage (e.g., tests with MemoryStream).
+        /// For transport-agnostic usage, use the IFrameSink constructor.
+        /// </summary>
         public SegmentationResultWriter(ulong frameId, uint width, uint height, Stream destination)
         {
             _frameId = frameId;
             _width = width;
             _height = height;
-            // Convenience: auto-wrap stream in StreamFrameSink
-            _frameSink = new StreamFrameSink(destination, leaveOpen: true);
+            // Write directly to stream without framing for backward compatibility
+            _frameSink = new RawStreamSink(destination);
         }
 
+        /// <summary>
+        /// Creates a writer that writes via IFrameSink with proper frame boundaries.
+        /// Use this for transport-agnostic streaming (TCP, WebSocket, NNG, or file with framing).
+        /// </summary>
         public SegmentationResultWriter(ulong frameId, uint width, uint height, IFrameSink frameSink)
         {
             _frameId = frameId;
@@ -577,6 +629,233 @@ namespace RocketWelder.SDK
         /// Create a writer for the current frame.
         /// </summary>
         ISegmentationResultWriter CreateWriter(ulong frameId, uint width, uint height);
+    }
+
+    /// <summary>
+    /// Factory for creating segmentation result writers per frame (transport-agnostic).
+    /// </summary>
+    public interface ISegmentationResultSink : IDisposable, IAsyncDisposable
+    {
+        /// <summary>
+        /// Create a writer for the current frame.
+        /// </summary>
+        ISegmentationResultWriter CreateWriter(ulong frameId, uint width, uint height);
+    }
+
+    /// <summary>
+    /// Streaming reader for segmentation results via IAsyncEnumerable.
+    /// Designed for real-time streaming over TCP/WebSocket/NNG.
+    /// </summary>
+    public interface ISegmentationResultSource : IDisposable, IAsyncDisposable
+    {
+        /// <summary>
+        /// Stream frames as they arrive from the transport.
+        /// Supports cancellation and backpressure.
+        /// </summary>
+        IAsyncEnumerable<SegmentationFrame> ReadFramesAsync(CancellationToken cancellationToken = default);
+    }
+
+    /// <summary>
+    /// A complete segmentation frame with all instances.
+    /// Non-ref struct for use with IAsyncEnumerable.
+    /// </summary>
+    public readonly struct SegmentationFrame
+    {
+        public ulong FrameId { get; }
+        public uint Width { get; }
+        public uint Height { get; }
+        public IReadOnlyList<SegmentationInstanceData> Instances { get; }
+
+        public SegmentationFrame(ulong frameId, uint width, uint height, IReadOnlyList<SegmentationInstanceData> instances)
+        {
+            FrameId = frameId;
+            Width = width;
+            Height = height;
+            Instances = instances;
+        }
+    }
+
+    /// <summary>
+    /// A single instance in a segmentation frame (heap-allocated version for streaming).
+    /// Unlike SegmentationInstance (ref struct), this can be stored in collections.
+    /// </summary>
+    public readonly struct SegmentationInstanceData
+    {
+        public byte ClassId { get; }
+        public byte InstanceId { get; }
+        public ReadOnlyMemory<Point> Points { get; }
+
+        public SegmentationInstanceData(byte classId, byte instanceId, Point[] points)
+        {
+            ClassId = classId;
+            InstanceId = instanceId;
+            Points = points;
+        }
+
+        /// <summary>
+        /// Converts points to normalized coordinates [0-1] range.
+        /// </summary>
+        public PointF[] ToNormalized(uint width, uint height)
+        {
+            if (width == 0 || height == 0)
+                throw new ArgumentException("Width and height must be greater than zero");
+
+            var points = Points.Span;
+            var result = new PointF[points.Length];
+            float widthF = width;
+            float heightF = height;
+
+            for (int i = 0; i < points.Length; i++)
+            {
+                result[i] = new PointF(points[i].X / widthF, points[i].Y / heightF);
+            }
+
+            return result;
+        }
+    }
+
+    /// <summary>
+    /// Streaming reader for segmentation results.
+    /// Reads frames from IFrameSource and yields them via IAsyncEnumerable.
+    /// </summary>
+    public class SegmentationResultSource : ISegmentationResultSource
+    {
+        private readonly IFrameSource _frameSource;
+        private bool _disposed;
+
+        // Max points per instance - prevents OOM attacks
+        private const int MaxPointsPerInstance = 10_000_000;
+
+        public SegmentationResultSource(IFrameSource frameSource)
+        {
+            _frameSource = frameSource ?? throw new ArgumentNullException(nameof(frameSource));
+        }
+
+        public async IAsyncEnumerable<SegmentationFrame> ReadFramesAsync(
+            [EnumeratorCancellation] CancellationToken cancellationToken = default)
+        {
+            while (!cancellationToken.IsCancellationRequested && !_disposed)
+            {
+                // Read next frame from transport
+                var frameData = await _frameSource.ReadFrameAsync(cancellationToken);
+                if (frameData.IsEmpty)
+                    yield break;
+
+                // Parse frame
+                var frame = ParseFrame(frameData);
+                yield return frame;
+            }
+        }
+
+        private SegmentationFrame ParseFrame(ReadOnlyMemory<byte> frameData)
+        {
+            using var stream = new MemoryStream(frameData.ToArray());
+
+            // Read header: [FrameId: 8B LE][Width: varint][Height: varint]
+            Span<byte> frameIdBytes = stackalloc byte[8];
+            if (stream.Read(frameIdBytes) != 8)
+                throw new EndOfStreamException("Failed to read FrameId");
+
+            ulong frameId = BinaryPrimitives.ReadUInt64LittleEndian(frameIdBytes);
+            uint width = stream.ReadVarint();
+            uint height = stream.ReadVarint();
+
+            // Read instances until end of frame
+            var instances = new List<SegmentationInstanceData>();
+
+            while (stream.Position < stream.Length)
+            {
+                // Read instance header: [classId: 1B][instanceId: 1B]
+                int classIdByte = stream.ReadByte();
+                if (classIdByte == -1) break;
+
+                int instanceIdByte = stream.ReadByte();
+                if (instanceIdByte == -1)
+                    throw new EndOfStreamException("Unexpected end of stream reading instanceId");
+
+                byte classId = (byte)classIdByte;
+                byte instanceId = (byte)instanceIdByte;
+
+                // Read point count
+                uint pointCount = stream.ReadVarint();
+                if (pointCount > MaxPointsPerInstance)
+                    throw new InvalidDataException($"Point count {pointCount} exceeds maximum {MaxPointsPerInstance}");
+
+                // Read points
+                var points = new Point[pointCount];
+                if (pointCount > 0)
+                {
+                    // First point (absolute, zigzag encoded)
+                    int x = stream.ReadVarint().ZigZagDecode();
+                    int y = stream.ReadVarint().ZigZagDecode();
+                    points[0] = new Point(x, y);
+
+                    // Remaining points (delta encoded)
+                    for (int i = 1; i < pointCount; i++)
+                    {
+                        int deltaX = stream.ReadVarint().ZigZagDecode();
+                        int deltaY = stream.ReadVarint().ZigZagDecode();
+                        x += deltaX;
+                        y += deltaY;
+                        points[i] = new Point(x, y);
+                    }
+                }
+
+                instances.Add(new SegmentationInstanceData(classId, instanceId, points));
+            }
+
+            return new SegmentationFrame(frameId, width, height, instances);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _frameSource.Dispose();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            await _frameSource.DisposeAsync();
+        }
+    }
+
+    /// <summary>
+    /// Factory for creating segmentation result writers (transport-agnostic).
+    /// </summary>
+    public class SegmentationResultSink : ISegmentationResultSink
+    {
+        private readonly IFrameSink _frameSink;
+        private bool _disposed;
+
+        public SegmentationResultSink(IFrameSink frameSink)
+        {
+            _frameSink = frameSink ?? throw new ArgumentNullException(nameof(frameSink));
+        }
+
+        public ISegmentationResultWriter CreateWriter(ulong frameId, uint width, uint height)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(SegmentationResultSink));
+
+            return new SegmentationResultWriter(frameId, width, height, _frameSink);
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _frameSink.Dispose();
+        }
+
+        public async ValueTask DisposeAsync()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            await _frameSink.DisposeAsync();
+        }
     }
 
     // NO MEMORY COPY! NO FUCKING MEMORY COPY!

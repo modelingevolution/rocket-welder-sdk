@@ -4,7 +4,9 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using RocketWelder.SDK.Transport;
 
@@ -60,6 +62,193 @@ public interface IKeyPointsWriter : IDisposable, IAsyncDisposable
     /// Append a keypoint to this frame asynchronously.
     /// </summary>
     Task AppendAsync(int keypointId, Point p, float confidence);
+}
+
+/// <summary>
+/// Streaming reader for keypoints via IAsyncEnumerable.
+/// Designed for real-time streaming over TCP/WebSocket/NNG.
+/// </summary>
+public interface IKeyPointsSource : IDisposable, IAsyncDisposable
+{
+    /// <summary>
+    /// Stream frames as they arrive from the transport.
+    /// Supports cancellation and backpressure.
+    /// </summary>
+    IAsyncEnumerable<KeyPointsFrame> ReadFramesAsync(CancellationToken cancellationToken = default);
+}
+
+/// <summary>
+/// A single keypoints frame with all keypoints.
+/// </summary>
+public readonly struct KeyPointsFrame
+{
+    public ulong FrameId { get; }
+    public bool IsDelta { get; }
+    public IReadOnlyList<KeyPointData> KeyPoints { get; }
+
+    public KeyPointsFrame(ulong frameId, bool isDelta, IReadOnlyList<KeyPointData> keyPoints)
+    {
+        FrameId = frameId;
+        IsDelta = isDelta;
+        KeyPoints = keyPoints;
+    }
+}
+
+/// <summary>
+/// A single keypoint with ID, position, and confidence.
+/// </summary>
+public readonly struct KeyPointData
+{
+    public int Id { get; }
+    public int X { get; }
+    public int Y { get; }
+    public float Confidence { get; }
+
+    public KeyPointData(int id, int x, int y, float confidence)
+    {
+        Id = id;
+        X = x;
+        Y = y;
+        Confidence = confidence;
+    }
+
+    public Point ToPoint() => new Point(X, Y);
+}
+
+/// <summary>
+/// Streaming reader for keypoints.
+/// Reads frames from IFrameSource and yields them via IAsyncEnumerable.
+/// Handles master/delta frame decoding automatically.
+/// </summary>
+public class KeyPointsSource : IKeyPointsSource
+{
+    private const byte MasterFrameType = 0x00;
+    private const byte DeltaFrameType = 0x01;
+
+    private readonly IFrameSource _frameSource;
+    private Dictionary<int, (Point point, ushort confidence)>? _previousFrame;
+    private bool _disposed;
+
+    public KeyPointsSource(IFrameSource frameSource)
+    {
+        _frameSource = frameSource ?? throw new ArgumentNullException(nameof(frameSource));
+    }
+
+    public async IAsyncEnumerable<KeyPointsFrame> ReadFramesAsync(
+        [EnumeratorCancellation] CancellationToken cancellationToken = default)
+    {
+        while (!cancellationToken.IsCancellationRequested && !_disposed)
+        {
+            var frameData = await _frameSource.ReadFrameAsync(cancellationToken);
+            if (frameData.IsEmpty)
+                yield break;
+
+            var frame = ParseFrame(frameData);
+            yield return frame;
+        }
+    }
+
+    private KeyPointsFrame ParseFrame(ReadOnlyMemory<byte> frameData)
+    {
+        using var stream = new MemoryStream(frameData.ToArray());
+
+        // Read frame type
+        int frameTypeByte = stream.ReadByte();
+        if (frameTypeByte == -1)
+            throw new EndOfStreamException("Unexpected end of frame");
+
+        byte frameType = (byte)frameTypeByte;
+        bool isDelta = frameType == DeltaFrameType;
+
+        // Read frame ID (8 bytes LE)
+        Span<byte> frameIdBytes = stackalloc byte[8];
+        if (stream.Read(frameIdBytes) != 8)
+            throw new EndOfStreamException("Failed to read FrameId");
+
+        ulong frameId = BinaryPrimitives.ReadUInt64LittleEndian(frameIdBytes);
+
+        // Read keypoint count
+        uint keypointCount = stream.ReadVarint();
+
+        // Read keypoints
+        var keypoints = new List<KeyPointData>((int)keypointCount);
+        var currentFrame = new Dictionary<int, (Point point, ushort confidence)>();
+
+        if (isDelta && _previousFrame != null)
+        {
+            // Delta frame - read deltas from previous frame
+            for (int i = 0; i < keypointCount; i++)
+            {
+                int keypointId = (int)stream.ReadVarint();
+                int deltaX = stream.ReadVarint().ZigZagDecode();
+                int deltaY = stream.ReadVarint().ZigZagDecode();
+                int deltaConfidence = stream.ReadVarint().ZigZagDecode();
+
+                // Apply delta to previous value (or use absolute if new keypoint)
+                int x, y;
+                ushort confidence;
+
+                if (_previousFrame.TryGetValue(keypointId, out var prev))
+                {
+                    x = prev.point.X + deltaX;
+                    y = prev.point.Y + deltaY;
+                    confidence = (ushort)(prev.confidence + deltaConfidence);
+                }
+                else
+                {
+                    // New keypoint - delta is actually absolute value
+                    x = deltaX;
+                    y = deltaY;
+                    confidence = (ushort)deltaConfidence;
+                }
+
+                keypoints.Add(new KeyPointData(keypointId, x, y, confidence / 10000f));
+                currentFrame[keypointId] = (new Point(x, y), confidence);
+            }
+        }
+        else
+        {
+            // Master frame - read absolute values
+            for (int i = 0; i < keypointCount; i++)
+            {
+                int keypointId = (int)stream.ReadVarint();
+
+                // Read coordinates (4 bytes each, LE)
+                Span<byte> coordBytes = stackalloc byte[4];
+                stream.Read(coordBytes);
+                int x = BinaryPrimitives.ReadInt32LittleEndian(coordBytes);
+                stream.Read(coordBytes);
+                int y = BinaryPrimitives.ReadInt32LittleEndian(coordBytes);
+
+                // Read confidence (2 bytes, LE)
+                Span<byte> confBytes = stackalloc byte[2];
+                stream.Read(confBytes);
+                ushort confidence = BinaryPrimitives.ReadUInt16LittleEndian(confBytes);
+
+                keypoints.Add(new KeyPointData(keypointId, x, y, confidence / 10000f));
+                currentFrame[keypointId] = (new Point(x, y), confidence);
+            }
+        }
+
+        // Update previous frame for next delta decoding
+        _previousFrame = currentFrame;
+
+        return new KeyPointsFrame(frameId, isDelta, keypoints);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _frameSource.Dispose();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        await _frameSource.DisposeAsync();
+    }
 }
 
 /// <summary>

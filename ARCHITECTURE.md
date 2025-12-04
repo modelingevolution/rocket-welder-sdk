@@ -76,160 +76,382 @@ public interface IFrameSource : IDisposable, IAsyncDisposable
 
 ## Protocol Layer
 
-### IKeyPointsSink
+### Design Philosophy: Real-Time Streaming
 
-High-level interface for writing KeyPoints protocol:
+The SDK is designed for **real-time streaming**, not just file loading. This means:
+
+1. **Writers**: Buffer one frame, write atomically via `IFrameSink`
+2. **Readers**: Stream frames via `IAsyncEnumerable<T>` as they arrive from `IFrameSource`
+
+This design supports:
+- Live TCP/WebSocket/NNG streaming with backpressure
+- File replay with the same API
+- Cancellation support via `CancellationToken`
+- Memory-efficient processing (one frame at a time)
+
+---
+
+### KeyPoints Protocol
+
+#### IKeyPointsSink (Writer Factory)
 
 ```csharp
 public interface IKeyPointsSink : IDisposable, IAsyncDisposable
 {
     IKeyPointsWriter CreateWriter(ulong frameId);
-    Task<KeyPointsSeries> Read(string json, IFrameSource frameSource);
 }
 ```
 
-### KeyPointsSink Implementation
-
-Uses IFrameSink internally to achieve transport independence:
+#### IKeyPointsSource (Streaming Reader)
 
 ```csharp
-public class KeyPointsSink : IKeyPointsSink
+public interface IKeyPointsSource : IDisposable, IAsyncDisposable
+{
+    IAsyncEnumerable<KeyPointsFrame> ReadFramesAsync(CancellationToken ct = default);
+}
+
+public readonly struct KeyPointsFrame
+{
+    public ulong FrameId { get; }
+    public bool IsDelta { get; }
+    public IReadOnlyList<KeyPoint> KeyPoints { get; }
+}
+
+public readonly struct KeyPoint
+{
+    public int Id { get; }
+    public int X { get; }
+    public int Y { get; }
+    public float Confidence { get; }
+}
+```
+
+#### Usage - Writing
+
+```csharp
+// Create sink with transport
+using var frameSink = new TcpFrameSink(tcpClient);
+using var sink = new KeyPointsSink(frameSink, masterFrameInterval: 300);
+
+// Write frames
+for (ulong frameId = 0; frameId < 1000; frameId++)
+{
+    using var writer = sink.CreateWriter(frameId);
+    writer.Append(keypointId: 0, x: 100, y: 200, confidence: 0.95f);
+    writer.Append(keypointId: 1, x: 120, y: 190, confidence: 0.92f);
+    // Frame sent atomically on dispose
+}
+```
+
+#### Usage - Reading (Streaming)
+
+```csharp
+// Create source with transport
+using var frameSource = new TcpFrameSource(tcpClient);
+using var source = new KeyPointsSource(frameSource);
+
+// Stream frames as they arrive
+await foreach (var frame in source.ReadFramesAsync(cancellationToken))
+{
+    Console.WriteLine($"Frame {frame.FrameId}: {frame.KeyPoints.Count} keypoints");
+
+    foreach (var kp in frame.KeyPoints)
+    {
+        ProcessKeyPoint(kp.Id, kp.X, kp.Y, kp.Confidence);
+    }
+}
+```
+
+---
+
+### Segmentation Protocol
+
+#### ISegmentationResultSink (Writer Factory)
+
+```csharp
+public interface ISegmentationResultSink : IDisposable, IAsyncDisposable
+{
+    ISegmentationResultWriter CreateWriter(ulong frameId, uint width, uint height);
+}
+```
+
+#### ISegmentationResultSource (Streaming Reader)
+
+```csharp
+public interface ISegmentationResultSource : IDisposable, IAsyncDisposable
+{
+    IAsyncEnumerable<SegmentationFrame> ReadFramesAsync(CancellationToken ct = default);
+}
+
+public readonly struct SegmentationFrame
+{
+    public ulong FrameId { get; }
+    public uint Width { get; }
+    public uint Height { get; }
+    public IReadOnlyList<SegmentationInstance> Instances { get; }
+}
+
+public readonly struct SegmentationInstance
+{
+    public byte ClassId { get; }
+    public byte InstanceId { get; }
+    public ReadOnlyMemory<Point> Points { get; }
+}
+```
+
+#### Usage - Writing
+
+```csharp
+// Create sink with transport
+using var frameSink = new WebSocketFrameSink(webSocket);
+using var sink = new SegmentationResultSink(frameSink);
+
+// Write frames
+using var writer = sink.CreateWriter(frameId: 0, width: 1920, height: 1080);
+writer.Append(classId: 1, instanceId: 0, points: contour1);
+writer.Append(classId: 1, instanceId: 1, points: contour2);
+writer.Append(classId: 2, instanceId: 0, points: contour3);
+// Frame sent atomically on dispose
+```
+
+#### Usage - Reading (Streaming)
+
+```csharp
+// Create source with transport
+using var frameSource = new WebSocketFrameSource(webSocket);
+using var source = new SegmentationResultSource(frameSource);
+
+// Stream frames as they arrive
+await foreach (var frame in source.ReadFramesAsync(cancellationToken))
+{
+    Console.WriteLine($"Frame {frame.FrameId}: {frame.Instances.Count} instances");
+
+    foreach (var instance in frame.Instances)
+    {
+        ProcessContour(instance.ClassId, instance.InstanceId, instance.Points.Span);
+    }
+}
+```
+
+---
+
+### Writer Implementation Pattern
+
+All protocol writers follow the same pattern:
+
+```csharp
+internal class ProtocolWriter : IProtocolWriter
 {
     private readonly IFrameSink _frameSink;
-    private readonly int _masterFrameInterval;
-    private Dictionary<int, (Point, ushort)>? _previousFrame;
+    private readonly MemoryStream _buffer = new();
 
-    public KeyPointsSink(IFrameSink frameSink, int masterFrameInterval = 300)
+    public void Append(/* data */)
     {
-        _frameSink = frameSink;
-        _masterFrameInterval = masterFrameInterval;
+        // Write to internal buffer
+        _buffer.Write(/* encoded data */);
     }
 
-    public IKeyPointsWriter CreateWriter(ulong frameId)
+    public void Dispose()
     {
-        bool isDelta = /* determine based on frame count and interval */;
-        return new KeyPointsWriter(frameId, _frameSink, isDelta, _previousFrame, ...);
+        // Send complete frame atomically
+        _frameSink.WriteFrame(_buffer.ToArray());
+        _buffer.Dispose();
     }
 }
 ```
 
-### KeyPointsWriter Refactored
+### Reader Implementation Pattern
 
-**Before (coupled to Stream):**
+All protocol readers follow the same pattern:
+
 ```csharp
-// Writes directly to stream
-_stream.WriteByte(frameType);
-_stream.Write(frameData);
-```
-
-**After (buffered, then written via IFrameSink):**
-```csharp
-// Buffer to memory
-var buffer = new MemoryStream();
-buffer.WriteByte(frameType);
-buffer.Write(frameData);
-
-// On dispose: write complete frame atomically
-public void Dispose()
+internal class ProtocolSource : IProtocolSource
 {
-    buffer.Seek(0, SeekOrigin.Begin);
-    _frameSink.WriteFrame(buffer.ToArray());
-    _onFrameWritten?.Invoke(_currentState);
+    private readonly IFrameSource _frameSource;
+
+    public async IAsyncEnumerable<Frame> ReadFramesAsync(
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            // Read next frame from transport
+            var frameData = await _frameSource.ReadFrameAsync(ct);
+            if (frameData.IsEmpty) yield break;
+
+            // Parse frame
+            var frame = ParseFrame(frameData);
+            yield return frame;
+        }
+    }
+
+    private Frame ParseFrame(ReadOnlyMemory<byte> data)
+    {
+        // Decode binary protocol from frame bytes
+        using var stream = new MemoryStream(data.ToArray());
+        // ... parse and return Frame
+    }
 }
 ```
 
 ## Usage Examples
 
-### File Storage (Original Use Case)
+### File Storage (Write and Replay)
 
 ```csharp
-// C#
+// C# - Writing to file
 using var fileStream = File.Open("keypoints.bin", FileMode.Create);
 using var frameSink = new StreamFrameSink(fileStream);
-using var keypointsSink = new KeyPointsSink(frameSink, masterFrameInterval: 300);
+using var sink = new KeyPointsSink(frameSink, masterFrameInterval: 300);
 
-using (var writer = keypointsSink.CreateWriter(frameId: 0))
+for (ulong frameId = 0; frameId < 100; frameId++)
 {
+    using var writer = sink.CreateWriter(frameId);
     writer.Append(keypointId: 0, x: 100, y: 200, confidence: 0.95f);
     writer.Append(keypointId: 1, x: 120, y: 190, confidence: 0.92f);
 }
 ```
 
-```python
-# Python
-with open("keypoints.bin", "wb") as f:
-    frame_sink = StreamFrameSink(f)
-    keypoints_sink = KeyPointsSink(frame_sink, master_frame_interval=300)
+```csharp
+// C# - Reading from file (streaming replay)
+using var fileStream = File.Open("keypoints.bin", FileMode.Open);
+using var frameSource = new StreamFrameSource(fileStream);
+using var source = new KeyPointsSource(frameSource);
 
-    with keypoints_sink.create_writer(frame_id=0) as writer:
-        writer.append(0, 100, 200, 0.95)
-        writer.append(1, 120, 190, 0.92)
+await foreach (var frame in source.ReadFramesAsync())
+{
+    Console.WriteLine($"Frame {frame.FrameId}: {frame.KeyPoints.Count} keypoints");
+}
 ```
 
-### TCP Streaming
+```python
+# Python - Writing
+with open("keypoints.bin", "wb") as f:
+    frame_sink = StreamFrameSink(f)
+    sink = KeyPointsSink(frame_sink, master_frame_interval=300)
+
+    for frame_id in range(100):
+        with sink.create_writer(frame_id) as writer:
+            writer.append(0, 100, 200, 0.95)
+            writer.append(1, 120, 190, 0.92)
+```
+
+```python
+# Python - Reading (streaming replay)
+with open("keypoints.bin", "rb") as f:
+    frame_source = StreamFrameSource(f)
+    source = KeyPointsSource(frame_source)
+
+    async for frame in source.read_frames_async():
+        print(f"Frame {frame.frame_id}: {len(frame.keypoints)} keypoints")
+```
+
+### TCP Streaming (Real-Time)
 
 ```csharp
-// C# Server
+// C# Server - Sending keypoints
 var server = new TcpListener(IPAddress.Any, 5000);
 server.Start();
 var client = await server.AcceptTcpClientAsync();
 
 using var frameSink = new TcpFrameSink(client);
-using var keypointsSink = new KeyPointsSink(frameSink);
+using var sink = new KeyPointsSink(frameSink);
 
-// Write keypoints...
+while (processingVideo)
+{
+    using var writer = sink.CreateWriter(frameId++);
+    foreach (var kp in detectedKeyPoints)
+        writer.Append(kp.Id, kp.X, kp.Y, kp.Confidence);
+}
+```
+
+```csharp
+// C# Client - Receiving keypoints (streaming)
+using var client = new TcpClient();
+await client.ConnectAsync("localhost", 5000);
+
+using var frameSource = new TcpFrameSource(client);
+using var source = new KeyPointsSource(frameSource);
+
+await foreach (var frame in source.ReadFramesAsync(cancellationToken))
+{
+    // Process each frame as it arrives
+    UpdateVisualization(frame.KeyPoints);
+}
 ```
 
 ```python
-# Python Client
+# Python Client - Receiving keypoints (streaming)
 import socket
 sock = socket.socket()
 sock.connect(("localhost", 5000))
 
 frame_source = TcpFrameSource(sock)
-keypoints_series = keypoints_sink.read(json_def, frame_source)
+source = KeyPointsSource(frame_source)
+
+async for frame in source.read_frames_async():
+    process_keypoints(frame.keypoints)
 ```
 
-### NNG Pub/Sub
+### NNG Pub/Sub (Multicast)
 
 ```csharp
-// C# Publisher
+// C# Publisher - Broadcasting to all subscribers
 using var publisher = new NngPublisher("tcp://localhost:5555");
 using var frameSink = new NngFrameSink(publisher);
-using var keypointsSink = new KeyPointsSink(frameSink);
+using var sink = new SegmentationResultSink(frameSink);
 
-// Publish keypoints to all subscribers
+while (processingVideo)
+{
+    using var writer = sink.CreateWriter(frameId++, width, height);
+    foreach (var contour in detectedContours)
+        writer.Append(contour.ClassId, contour.InstanceId, contour.Points);
+}
 ```
 
 ```python
-# Python Subscriber
+# Python Subscriber - Receiving from publisher (streaming)
 import pynng
 sub = pynng.Sub0()
 sub.dial("tcp://localhost:5555")
+sub.subscribe(b"")  # Subscribe to all topics
 
 frame_source = NngFrameSource(sub)
-# Receive keypoints continuously...
+source = SegmentationResultSource(frame_source)
+
+async for frame in source.read_frames_async():
+    for instance in frame.instances:
+        draw_contour(instance.class_id, instance.points)
 ```
 
 ### WebSocket (Browser Integration)
 
 ```csharp
-// C# Server
+// C# Server - Streaming to browser
 var webSocket = await httpContext.WebSockets.AcceptWebSocketAsync();
 using var frameSink = new WebSocketFrameSink(webSocket);
-using var keypointsSink = new KeyPointsSink(frameSink);
+using var sink = new KeyPointsSink(frameSink);
 
-// Stream keypoints to browser
+while (!cancellationToken.IsCancellationRequested)
+{
+    var keypoints = await DetectKeyPointsAsync(currentFrame);
+    using var writer = sink.CreateWriter(frameId++);
+    foreach (var kp in keypoints)
+        writer.Append(kp.Id, kp.X, kp.Y, kp.Confidence);
+}
 ```
 
 ```javascript
-// Browser JavaScript
+// Browser JavaScript - Receiving keypoints
 const ws = new WebSocket('ws://localhost:8080/keypoints');
 ws.binaryType = 'arraybuffer';
 
 ws.onmessage = (event) => {
     const frameData = new Uint8Array(event.data);
-    // Parse KeyPoints protocol...
+    const frame = parseKeyPointsFrame(frameData);  // Parse binary protocol
+
+    frame.keypoints.forEach(kp => {
+        drawKeyPoint(kp.id, kp.x, kp.y, kp.confidence);
+    });
 };
 ```
 

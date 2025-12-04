@@ -1,30 +1,58 @@
-# Refactoring Guide: Storage → Sink Pattern
+# Refactoring Guide: Storage → Sink/Source Pattern
 
 ## Overview
 
-This guide shows step-by-step how to refactor from `IKeyPointsStorage` to `IKeyPointsSink` using the new transport abstraction.
+This guide shows step-by-step how to refactor from `IKeyPointsStorage` to `IKeyPointsSink` (writing) and `IKeyPointsSource` (reading) using the new transport abstraction.
 
-## Step 1: Rename Interfaces
+### Key Design Principles
 
-### KeyPointsProtocol.cs
+1. **Sink** = Writer factory (creates per-frame writers)
+2. **Source** = Streaming reader (yields frames via `IAsyncEnumerable`)
+3. **Writer** = Buffers one frame, writes atomically on dispose
+4. **Transport** = Handles frame boundaries (length-prefix, native messages)
 
-**FIND:**
+## Step 1: Define New Interfaces
+
+### Separate Sink (Write) and Source (Read)
+
+The old `IKeyPointsStorage` combined writing and reading. We split this into:
+
+**OLD (combined):**
 ```csharp
 public interface IKeyPointsStorage
 {
     IKeyPointsWriter CreateWriter(ulong frameId);
-    Task<KeyPointsSeries> Read(string json, Stream blobStream);
+    Task<KeyPointsSeries> Read(string json, Stream blobStream);  // Loads all into memory
 }
 ```
 
-**REPLACE WITH:**
+**NEW (separated):**
 ```csharp
-public interface IKeyPointsSink
+// Writing - factory for per-frame writers
+public interface IKeyPointsSink : IDisposable, IAsyncDisposable
 {
     IKeyPointsWriter CreateWriter(ulong frameId);
-    Task<KeyPointsSeries> Read(string json, IFrameSource frameSource);
+}
+
+// Reading - streaming via IAsyncEnumerable
+public interface IKeyPointsSource : IDisposable, IAsyncDisposable
+{
+    IAsyncEnumerable<KeyPointsFrame> ReadFramesAsync(CancellationToken ct = default);
 }
 ```
+
+### Why IAsyncEnumerable?
+
+The `Read()` method that returns `Task<KeyPointsSeries>` loads ALL frames into memory. This doesn't work for:
+- Real-time TCP/WebSocket streaming (infinite stream)
+- Large files (memory exhaustion)
+- Backpressure handling
+
+`IAsyncEnumerable` provides:
+- **Streaming**: Process one frame at a time
+- **Backpressure**: Consumer controls pace
+- **Cancellation**: Stop reading anytime
+- **Memory efficient**: Only one frame in memory
 
 ## Step 2: Refactor KeyPointsWriter
 
@@ -221,69 +249,231 @@ public class KeyPointsSink : IKeyPointsSink
 }
 ```
 
-## Step 4: Update Read Method
+## Step 4: Implement KeyPointsSource (Streaming Reader)
 
-The Read method needs to work with `IFrameSource` instead of `Stream`:
+Instead of a `Read()` method that loads everything into memory, implement `IKeyPointsSource` with `IAsyncEnumerable`:
 
 ```csharp
-public async Task<KeyPointsSeries> Read(string json, IFrameSource frameSource)
+public class KeyPointsSource : IKeyPointsSource
 {
-    var definition = JsonSerializer.Deserialize<KeyPointsDefinition>(json);
-    var index = new Dictionary<ulong, SortedDictionary<int, (Point, float)>>();
+    private readonly IFrameSource _frameSource;
+    private Dictionary<int, (Point, ushort)>? _previousFrame;
 
-    Dictionary<int, (Point, ushort)>? previousFrame = null;
-
-    // Read frames until no more available
-    while (frameSource.HasMoreFrames)
+    public KeyPointsSource(IFrameSource frameSource)
     {
-        var frameBytes = await frameSource.ReadFrameAsync();
-        if (frameBytes.Length == 0) break;
+        _frameSource = frameSource ?? throw new ArgumentNullException(nameof(frameSource));
+    }
 
-        // Parse frame from bytes
-        using var frameStream = new MemoryStream(frameBytes.ToArray());
+    public async IAsyncEnumerable<KeyPointsFrame> ReadFramesAsync(
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            // Read next frame from transport
+            var frameBytes = await _frameSource.ReadFrameAsync(ct);
+            if (frameBytes.IsEmpty) yield break;
+
+            // Parse frame
+            var frame = ParseFrame(frameBytes);
+            yield return frame;
+        }
+    }
+
+    private KeyPointsFrame ParseFrame(ReadOnlyMemory<byte> frameBytes)
+    {
+        using var stream = new MemoryStream(frameBytes.ToArray());
 
         // Read frame type
-        int frameTypeByte = frameStream.ReadByte();
-        if (frameTypeByte == -1) break;
+        int frameTypeByte = stream.ReadByte();
+        if (frameTypeByte == -1)
+            throw new EndOfStreamException("Unexpected end of frame");
 
         byte frameType = (byte)frameTypeByte;
+        bool isDelta = frameType == DeltaFrameType;
 
-        // Read frame ID
-        byte[] frameIdBytes = new byte[8];
-        await frameStream.ReadAsync(frameIdBytes, 0, 8);
+        // Read frame ID (8 bytes LE)
+        Span<byte> frameIdBytes = stackalloc byte[8];
+        stream.Read(frameIdBytes);
         ulong frameId = BinaryPrimitives.ReadUInt64LittleEndian(frameIdBytes);
 
         // Read keypoint count
-        uint keypointCount = await frameStream.ReadVarintAsync();
+        uint keypointCount = stream.ReadVarint();
 
-        var frameKeypoints = new SortedDictionary<int, (Point, float)>();
+        // Read keypoints
+        var keypoints = new List<KeyPoint>((int)keypointCount);
 
-        if (frameType == MasterFrameType)
+        if (isDelta && _previousFrame != null)
         {
-            // Read master frame keypoints
-            previousFrame = await ReadMasterFrameKeypoints(
-                frameStream, (int)keypointCount, frameKeypoints);
+            ReadDeltaKeypoints(stream, (int)keypointCount, keypoints);
         }
-        else if (frameType == DeltaFrameType)
+        else
         {
-            // Read delta frame keypoints
-            await ReadDeltaFrameKeypoints(
-                frameStream, (int)keypointCount, previousFrame, frameKeypoints);
+            ReadMasterKeypoints(stream, (int)keypointCount, keypoints);
         }
 
-        index[frameId] = frameKeypoints;
+        // Update state for delta decoding
+        UpdatePreviousFrame(keypoints);
+
+        return new KeyPointsFrame(frameId, isDelta, keypoints);
     }
 
-    return new KeyPointsSeries(
-        definition.Version,
-        definition.ComputeModuleName,
-        definition.Points,
-        index
-    );
+    public void Dispose() => _frameSource.Dispose();
+    public ValueTask DisposeAsync() => _frameSource.DisposeAsync();
 }
 ```
 
-## Step 5: Update All Usages
+### Frame Data Structure
+
+```csharp
+public readonly struct KeyPointsFrame
+{
+    public ulong FrameId { get; }
+    public bool IsDelta { get; }
+    public IReadOnlyList<KeyPoint> KeyPoints { get; }
+
+    public KeyPointsFrame(ulong frameId, bool isDelta, IReadOnlyList<KeyPoint> keyPoints)
+    {
+        FrameId = frameId;
+        IsDelta = isDelta;
+        KeyPoints = keyPoints;
+    }
+}
+
+public readonly struct KeyPoint
+{
+    public int Id { get; }
+    public int X { get; }
+    public int Y { get; }
+    public float Confidence { get; }
+
+    public KeyPoint(int id, int x, int y, float confidence)
+    {
+        Id = id;
+        X = x;
+        Y = y;
+        Confidence = confidence;
+    }
+}
+```
+
+### Usage
+
+```csharp
+// Real-time streaming from TCP
+using var client = new TcpClient();
+await client.ConnectAsync("localhost", 5000);
+using var frameSource = new TcpFrameSource(client);
+using var source = new KeyPointsSource(frameSource);
+
+await foreach (var frame in source.ReadFramesAsync(cancellationToken))
+{
+    // Process each frame as it arrives
+    Console.WriteLine($"Frame {frame.FrameId}: {frame.KeyPoints.Count} keypoints");
+
+    foreach (var kp in frame.KeyPoints)
+    {
+        UpdateVisualization(kp.Id, kp.X, kp.Y, kp.Confidence);
+    }
+}
+```
+
+## Step 5: Implement SegmentationResultSource (Streaming Reader)
+
+Same pattern as KeyPointsSource:
+
+```csharp
+public class SegmentationResultSource : ISegmentationResultSource
+{
+    private readonly IFrameSource _frameSource;
+
+    public SegmentationResultSource(IFrameSource frameSource)
+    {
+        _frameSource = frameSource ?? throw new ArgumentNullException(nameof(frameSource));
+    }
+
+    public async IAsyncEnumerable<SegmentationFrame> ReadFramesAsync(
+        [EnumeratorCancellation] CancellationToken ct = default)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            // Read next frame from transport
+            var frameBytes = await _frameSource.ReadFrameAsync(ct);
+            if (frameBytes.IsEmpty) yield break;
+
+            // Parse frame
+            var frame = ParseFrame(frameBytes);
+            yield return frame;
+        }
+    }
+
+    private SegmentationFrame ParseFrame(ReadOnlyMemory<byte> frameBytes)
+    {
+        using var stream = new MemoryStream(frameBytes.ToArray());
+
+        // Read header
+        Span<byte> frameIdBytes = stackalloc byte[8];
+        stream.Read(frameIdBytes);
+        ulong frameId = BinaryPrimitives.ReadUInt64LittleEndian(frameIdBytes);
+        uint width = stream.ReadVarint();
+        uint height = stream.ReadVarint();
+
+        // Read instances until end of frame
+        var instances = new List<SegmentationInstance>();
+
+        while (stream.Position < stream.Length)
+        {
+            byte classId = (byte)stream.ReadByte();
+            byte instanceId = (byte)stream.ReadByte();
+            uint pointCount = stream.ReadVarint();
+
+            var points = new Point[pointCount];
+            if (pointCount > 0)
+            {
+                // First point (absolute)
+                int x = stream.ReadVarint().ZigZagDecode();
+                int y = stream.ReadVarint().ZigZagDecode();
+                points[0] = new Point(x, y);
+
+                // Remaining points (delta encoded)
+                for (int i = 1; i < pointCount; i++)
+                {
+                    x += stream.ReadVarint().ZigZagDecode();
+                    y += stream.ReadVarint().ZigZagDecode();
+                    points[i] = new Point(x, y);
+                }
+            }
+
+            instances.Add(new SegmentationInstance(classId, instanceId, points));
+        }
+
+        return new SegmentationFrame(frameId, width, height, instances);
+    }
+
+    public void Dispose() => _frameSource.Dispose();
+    public ValueTask DisposeAsync() => _frameSource.DisposeAsync();
+}
+```
+
+### Segmentation Data Structures
+
+```csharp
+public readonly struct SegmentationFrame
+{
+    public ulong FrameId { get; }
+    public uint Width { get; }
+    public uint Height { get; }
+    public IReadOnlyList<SegmentationInstance> Instances { get; }
+}
+
+public readonly struct SegmentationInstance
+{
+    public byte ClassId { get; }
+    public byte InstanceId { get; }
+    public ReadOnlyMemory<Point> Points { get; }
+}
+```
+
+## Step 6: Update All Usages
 
 ### In Controllers
 
@@ -382,44 +572,89 @@ class KeyPointsSink(IKeyPointsSink):
 
 ## Complete File List to Update
 
-### C# Files
-1. ✅ `/csharp/RocketWelder.SDK/Transport/IFrameSink.cs` - NEW
-2. ✅ `/csharp/RocketWelder.SDK/Transport/IFrameSource.cs` - NEW
-3. ✅ `/csharp/RocketWelder.SDK/Transport/StreamFrameSink.cs` - NEW
-4. ✅ `/csharp/RocketWelder.SDK/Transport/StreamFrameSource.cs` - NEW
-5. ✅ `/csharp/RocketWelder.SDK/Transport/TcpFrameSink.cs` - NEW
-6. ✅ `/csharp/RocketWelder.SDK/Transport/TcpFrameSource.cs` - NEW
-7. ✅ `/csharp/RocketWelder.SDK/Transport/WebSocketFrameSink.cs` - NEW
-8. ✅ `/csharp/RocketWelder.SDK/Transport/WebSocketFrameSource.cs` - NEW
-9. ✅ `/csharp/RocketWelder.SDK/Transport/NngFrameSink.cs` - NEW (stub)
-10. ✅ `/csharp/RocketWelder.SDK/Transport/NngFrameSource.cs` - NEW (stub)
-11. ⏳ `/csharp/RocketWelder.SDK/KeyPointsProtocol.cs` - REFACTOR
-12. ⏳ `/csharp/RocketWelder.SDK/SegmentationResult.cs` - REFACTOR
-13. ⏳ `/csharp/RocketWelder.SDK/RocketWelderClient.cs` - UPDATE interface
-14. ⏳ `/csharp/RocketWelder.SDK.Tests/*` - UPDATE tests
-15. ⏳ `/csharp/examples/SimpleClient/Program.cs` - UPDATE usage
+### C# Transport Layer (Complete)
+1. ✅ `/csharp/RocketWelder.SDK/Transport/IFrameSink.cs` - Write interface
+2. ✅ `/csharp/RocketWelder.SDK/Transport/IFrameSource.cs` - Read interface
+3. ✅ `/csharp/RocketWelder.SDK/Transport/StreamFrameSink.cs` - File/stream write
+4. ✅ `/csharp/RocketWelder.SDK/Transport/StreamFrameSource.cs` - File/stream read
+5. ✅ `/csharp/RocketWelder.SDK/Transport/TcpFrameSink.cs` - TCP write
+6. ✅ `/csharp/RocketWelder.SDK/Transport/TcpFrameSource.cs` - TCP read
+7. ✅ `/csharp/RocketWelder.SDK/Transport/WebSocketFrameSink.cs` - WebSocket write
+8. ✅ `/csharp/RocketWelder.SDK/Transport/WebSocketFrameSource.cs` - WebSocket read
+9. ⏳ `/csharp/RocketWelder.SDK/Transport/NngFrameSink.cs` - NNG write (stub)
+10. ⏳ `/csharp/RocketWelder.SDK/Transport/NngFrameSource.cs` - NNG read (stub)
 
-### Python Files
-16. ⏳ `/python/rocket_welder_sdk/transport/frame_sink.py` - NEW
-17. ⏳ `/python/rocket_welder_sdk/transport/frame_source.py` - NEW
-18. ⏳ `/python/rocket_welder_sdk/transport/stream_transport.py` - NEW
-19. ⏳ `/python/rocket_welder_sdk/transport/tcp_transport.py` - NEW
-20. ⏳ `/python/rocket_welder_sdk/transport/websocket_transport.py` - NEW
-21. ⏳ `/python/rocket_welder_sdk/transport/nng_transport.py` - NEW
-22. ⏳ `/python/rocket_welder_sdk/keypoints_protocol.py` - REFACTOR
-23. ⏳ `/python/rocket_welder_sdk/segmentation_result.py` - REFACTOR
-24. ⏳ `/python/tests/test_transport_*.py` - NEW cross-platform tests
+### C# Protocol Layer (In Progress)
+11. ⏳ `/csharp/RocketWelder.SDK/KeyPointsProtocol.cs` - REFACTOR
+    - ✅ `IKeyPointsSink` interface
+    - ✅ `KeyPointsSink` implementation
+    - ✅ `KeyPointsWriter` uses `IFrameSink`
+    - ⏳ `IKeyPointsSource` interface - NEW
+    - ⏳ `KeyPointsSource` with `IAsyncEnumerable` - NEW
+    - ⏳ `KeyPointsFrame` / `KeyPoint` structs - NEW
+
+12. ⏳ `/csharp/RocketWelder.SDK/RocketWelderClient.cs` - REFACTOR
+    - ⏳ `ISegmentationResultSink` interface
+    - ⏳ `SegmentationResultSink` implementation
+    - ✅ `SegmentationResultWriter` uses `IFrameSink` (partial - has bug)
+    - ⏳ `ISegmentationResultSource` interface - NEW
+    - ⏳ `SegmentationResultSource` with `IAsyncEnumerable` - NEW
+    - ⏳ `SegmentationFrame` / `SegmentationInstance` structs - NEW
+
+### C# Tests & Examples
+13. ⏳ `/csharp/RocketWelder.SDK.Tests/KeyPointsProtocolTests.cs` - UPDATE
+14. ⏳ `/csharp/RocketWelder.SDK.Tests/SegmentationResultTests.cs` - UPDATE
+15. ⏳ `/csharp/RocketWelder.SDK.Tests/TransportRoundTripTests.cs` - UPDATE
+16. ⏳ `/csharp/examples/SimpleClient/Program.cs` - UPDATE
+
+### Python Transport Layer (Partial)
+17. ✅ `/python/rocket_welder_sdk/transport/frame_sink.py` - IFrameSink ABC
+18. ✅ `/python/rocket_welder_sdk/transport/frame_source.py` - IFrameSource ABC
+19. ✅ `/python/rocket_welder_sdk/transport/stream_transport.py` - Stream transport
+20. ✅ `/python/rocket_welder_sdk/transport/tcp_transport.py` - TCP transport
+21. ⏳ `/python/rocket_welder_sdk/transport/websocket_transport.py` - WebSocket (not started)
+22. ⏳ `/python/rocket_welder_sdk/transport/nng_transport.py` - NNG (not started)
+
+### Python Protocol Layer (Needs Update)
+23. ⏳ `/python/rocket_welder_sdk/keypoints_protocol.py` - REFACTOR
+    - ✅ `KeyPointsSink` uses `IFrameSink`
+    - ⏳ `KeyPointsSource` with async generator - NEW
+
+24. ⏳ `/python/rocket_welder_sdk/segmentation_result.py` - REFACTOR
+    - ✅ `SegmentationResultWriter` uses `IFrameSink`
+    - ⏳ `SegmentationResultSource` with async generator - NEW
+
+### Python Tests
+25. ⏳ `/python/tests/test_keypoints_protocol.py` - UPDATE for streaming
+26. ⏳ `/python/tests/test_segmentation_result.py` - UPDATE for streaming
+27. ⏳ `/python/tests/test_cross_platform.py` - ADD streaming tests
 
 ## Testing Checklist
 
-- [ ] Unit tests for each transport sink/source
-- [ ] KeyPoints roundtrip with each transport
-- [ ] Segmentation roundtrip with each transport
+### Unit Tests
+- [ ] `KeyPointsSource.ReadFramesAsync()` - single frame
+- [ ] `KeyPointsSource.ReadFramesAsync()` - multiple frames
+- [ ] `KeyPointsSource.ReadFramesAsync()` - cancellation
+- [ ] `SegmentationResultSource.ReadFramesAsync()` - single frame
+- [ ] `SegmentationResultSource.ReadFramesAsync()` - multiple frames
+- [ ] `SegmentationResultSource.ReadFramesAsync()` - cancellation
+
+### Integration Tests
+- [ ] Write via Sink → Read via Source (same process)
+- [ ] TCP streaming (separate processes)
+- [ ] WebSocket streaming
+- [ ] File write → File replay
+
+### Cross-Platform Tests
 - [ ] C# write → Python read (all transports)
 - [ ] Python write → C# read (all transports)
-- [ ] Existing file-based tests still pass
-- [ ] Code quality checks pass (mypy, black, ruff)
+- [ ] Byte-for-byte compatibility verification
+
+### Code Quality
+- [ ] C# builds with no errors
+- [ ] Python: mypy, black, ruff pass
+- [ ] Test coverage ≥ 55%
 
 Legend:
-- ✅ = Complete
+- ✅ = Complete and tested
 - ⏳ = In Progress / To Do
