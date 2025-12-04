@@ -1,6 +1,9 @@
 using System;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using nng;
+using nng.Factories.Latest;
 
 namespace RocketWelder.SDK.Transport
 {
@@ -14,8 +17,6 @@ namespace RocketWelder.SDK.Transport
     /// - Pub/Sub: Subscribe to published messages
     /// - Push/Pull: Receive load-balanced work items
     /// - Pair: Point-to-point communication
-    ///
-    /// Note: Requires ModelingEvolution.Nng package. If not available, throws NotSupportedException.
     /// </remarks>
     public class NngFrameSource : IFrameSource
     {
@@ -38,11 +39,11 @@ namespace RocketWelder.SDK.Transport
         /// Creates an NNG Subscriber frame source connected to the specified URL.
         /// </summary>
         /// <param name="url">NNG URL (e.g., "tcp://127.0.0.1:5555", "ipc:///tmp/mysocket")</param>
-        /// <param name="topic">Optional topic filter (empty for all messages)</param>
+        /// <param name="topic">Optional topic filter (empty byte array for all messages)</param>
         /// <returns>Frame source ready to receive messages</returns>
-        public static NngFrameSource CreateSubscriber(string url, string topic = "")
+        public static NngFrameSource CreateSubscriber(string url, byte[]? topic = null)
         {
-            var receiver = NngReceiverFactory.CreateSubscriber(url, topic);
+            var receiver = NngSubscriberReceiver.Create(url, topic ?? Array.Empty<byte>());
             return new NngFrameSource(receiver, leaveOpen: false);
         }
 
@@ -50,10 +51,11 @@ namespace RocketWelder.SDK.Transport
         /// Creates an NNG Puller frame source bound to the specified URL.
         /// </summary>
         /// <param name="url">NNG URL (e.g., "tcp://127.0.0.1:5555", "ipc:///tmp/mysocket")</param>
+        /// <param name="bindMode">If true, listens (bind); if false, dials (connect)</param>
         /// <returns>Frame source ready to pull messages</returns>
-        public static NngFrameSource CreatePuller(string url)
+        public static NngFrameSource CreatePuller(string url, bool bindMode = true)
         {
-            var receiver = NngReceiverFactory.CreatePuller(url);
+            var receiver = NngPullerReceiver.Create(url, bindMode);
             return new NngFrameSource(receiver, leaveOpen: false);
         }
 
@@ -110,66 +112,141 @@ namespace RocketWelder.SDK.Transport
     }
 
     /// <summary>
-    /// Factory for creating NNG receivers. Throws NotSupportedException if NNG is not available.
+    /// NNG Subscriber receiver implementation using the real NNG library.
     /// </summary>
-    public static class NngReceiverFactory
+    internal sealed class NngSubscriberReceiver : INngReceiver
     {
-        private static readonly bool _nngAvailable = CheckNngAvailable();
+        private readonly ISubSocket _socket;
+        private readonly ISubAsyncContext<INngMsg> _asyncContext;
+        private readonly Factory _factory;
+        private bool _disposed;
 
-        private static bool CheckNngAvailable()
+        private NngSubscriberReceiver(ISubSocket socket, ISubAsyncContext<INngMsg> asyncContext, Factory factory)
         {
-            try
-            {
-                // Try to load NNG types
-                var nngType = Type.GetType("ModelingEvolution.Nng.SubscriberSocket, ModelingEvolution.Nng");
-                return nngType != null;
-            }
-            catch
-            {
-                return false;
-            }
+            _socket = socket;
+            _asyncContext = asyncContext;
+            _factory = factory;
         }
 
-        public static INngReceiver CreateSubscriber(string url, string topic = "")
+        public static NngSubscriberReceiver Create(string url, byte[] topic)
         {
-            if (!_nngAvailable)
-                throw new NotSupportedException(
-                    "NNG transport requires ModelingEvolution.Nng package. " +
-                    "Install the package and ensure native NNG libraries are available.");
+            var factory = new Factory();
+            var socket = factory.SubscriberOpen().Unwrap();
+            socket.Dial(url).Unwrap();
 
-            return NngReceiverImpl.CreateSubscriber(url, topic);
+            // Subscribe to topic (empty topic = all messages)
+            socket.Subscribe(topic);
+
+            var asyncContext = socket.CreateAsyncContext(factory).Unwrap();
+            return new NngSubscriberReceiver(socket, asyncContext, factory);
         }
 
-        public static INngReceiver CreatePuller(string url)
+        public ReadOnlyMemory<byte> Receive(CancellationToken cancellationToken = default)
         {
-            if (!_nngAvailable)
-                throw new NotSupportedException(
-                    "NNG transport requires ModelingEvolution.Nng package. " +
-                    "Install the package and ensure native NNG libraries are available.");
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(NngSubscriberReceiver));
 
-            return NngReceiverImpl.CreatePuller(url);
+            // Synchronous receive using socket directly
+            var result = _socket.RecvMsg();
+            var msg = result.Unwrap();
+            var data = msg.AsSpan().ToArray();
+            msg.Dispose();
+            return data;
+        }
+
+        public async ValueTask<ReadOnlyMemory<byte>> ReceiveAsync(CancellationToken cancellationToken = default)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(NngSubscriberReceiver));
+
+            var result = await _asyncContext.Receive(cancellationToken);
+            var msg = result.Unwrap();
+            var data = msg.AsSpan().ToArray();
+            msg.Dispose();
+            return data;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _asyncContext.Dispose();
+            _socket.Dispose();
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
         }
     }
 
     /// <summary>
-    /// Internal NNG receiver implementation - separated to avoid loading NNG types if not available.
+    /// NNG Puller receiver implementation using the real NNG library.
     /// </summary>
-    internal static class NngReceiverImpl
+    internal sealed class NngPullerReceiver : INngReceiver
     {
-        public static INngReceiver CreateSubscriber(string url, string topic)
+        private readonly IPullSocket _socket;
+        private readonly IReceiveAsyncContext<INngMsg> _asyncContext;
+        private readonly Factory _factory;
+        private bool _disposed;
+
+        private NngPullerReceiver(IPullSocket socket, IReceiveAsyncContext<INngMsg> asyncContext, Factory factory)
         {
-            // This will fail at runtime if NNG is not available,
-            // but the factory checks first so this is only called when NNG is present.
-            throw new NotSupportedException(
-                "NNG implementation requires ModelingEvolution.Nng package to be referenced and native libraries available. " +
-                "To enable NNG support, add: <PackageReference Include=\"ModelingEvolution.Nng\" Version=\"1.0.0\" />");
+            _socket = socket;
+            _asyncContext = asyncContext;
+            _factory = factory;
         }
 
-        public static INngReceiver CreatePuller(string url)
+        public static NngPullerReceiver Create(string url, bool bindMode = true)
         {
-            throw new NotSupportedException(
-                "NNG implementation requires ModelingEvolution.Nng package to be referenced and native libraries available. " +
-                "To enable NNG support, add: <PackageReference Include=\"ModelingEvolution.Nng\" Version=\"1.0.0\" />");
+            var factory = new Factory();
+            var socket = factory.PullerOpen().Unwrap();
+            if (bindMode)
+                socket.Listen(url).Unwrap();
+            else
+                socket.Dial(url).Unwrap();
+            var asyncContext = socket.CreateAsyncContext(factory).Unwrap();
+            return new NngPullerReceiver(socket, asyncContext, factory);
+        }
+
+        public ReadOnlyMemory<byte> Receive(CancellationToken cancellationToken = default)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(NngPullerReceiver));
+
+            // Synchronous receive using socket directly
+            var result = _socket.RecvMsg();
+            var msg = result.Unwrap();
+            var data = msg.AsSpan().ToArray();
+            msg.Dispose();
+            return data;
+        }
+
+        public async ValueTask<ReadOnlyMemory<byte>> ReceiveAsync(CancellationToken cancellationToken = default)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(NngPullerReceiver));
+
+            var result = await _asyncContext.Receive(cancellationToken);
+            var msg = result.Unwrap();
+            var data = msg.AsSpan().ToArray();
+            msg.Dispose();
+            return data;
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _asyncContext.Dispose();
+            _socket.Dispose();
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
         }
     }
 }

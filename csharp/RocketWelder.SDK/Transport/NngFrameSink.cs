@@ -1,5 +1,9 @@
 using System;
+using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
+using nng;
+using nng.Factories.Latest;
 
 namespace RocketWelder.SDK.Transport
 {
@@ -13,8 +17,6 @@ namespace RocketWelder.SDK.Transport
     /// - Pub/Sub: One publisher to many subscribers
     /// - Push/Pull: Load-balanced distribution to workers
     /// - Pair: Point-to-point communication
-    ///
-    /// Note: Requires ModelingEvolution.Nng package. If not available, throws NotSupportedException.
     /// </remarks>
     public class NngFrameSink : IFrameSink
     {
@@ -40,7 +42,7 @@ namespace RocketWelder.SDK.Transport
         /// <returns>Frame sink ready to publish messages</returns>
         public static NngFrameSink CreatePublisher(string url)
         {
-            var sender = NngSenderFactory.CreatePublisher(url);
+            var sender = NngPublisherSender.Create(url);
             return new NngFrameSink(sender, leaveOpen: false);
         }
 
@@ -48,10 +50,11 @@ namespace RocketWelder.SDK.Transport
         /// Creates an NNG Pusher frame sink connected to the specified URL.
         /// </summary>
         /// <param name="url">NNG URL (e.g., "tcp://127.0.0.1:5555", "ipc:///tmp/mysocket")</param>
+        /// <param name="bindMode">If true, listens (bind); if false, dials (connect)</param>
         /// <returns>Frame sink ready to push messages</returns>
-        public static NngFrameSink CreatePusher(string url)
+        public static NngFrameSink CreatePusher(string url, bool bindMode = true)
         {
-            var sender = NngSenderFactory.CreatePusher(url);
+            var sender = NngPusherSender.Create(url, bindMode);
             return new NngFrameSink(sender, leaveOpen: false);
         }
 
@@ -117,66 +120,125 @@ namespace RocketWelder.SDK.Transport
     }
 
     /// <summary>
-    /// Factory for creating NNG senders. Throws NotSupportedException if NNG is not available.
+    /// NNG Publisher sender implementation using the real NNG library.
     /// </summary>
-    public static class NngSenderFactory
+    internal sealed class NngPublisherSender : INngSender
     {
-        private static readonly bool _nngAvailable = CheckNngAvailable();
+        private readonly IPubSocket _socket;
+        private readonly ISendAsyncContext<INngMsg> _asyncContext;
+        private readonly Factory _factory;
+        private bool _disposed;
 
-        private static bool CheckNngAvailable()
+        private NngPublisherSender(IPubSocket socket, ISendAsyncContext<INngMsg> asyncContext, Factory factory)
         {
-            try
-            {
-                // Try to load NNG types
-                var nngType = Type.GetType("ModelingEvolution.Nng.PublisherSocket, ModelingEvolution.Nng");
-                return nngType != null;
-            }
-            catch
-            {
-                return false;
-            }
+            _socket = socket;
+            _asyncContext = asyncContext;
+            _factory = factory;
         }
 
-        public static INngSender CreatePublisher(string url)
+        public static NngPublisherSender Create(string url)
         {
-            if (!_nngAvailable)
-                throw new NotSupportedException(
-                    "NNG transport requires ModelingEvolution.Nng package. " +
-                    "Install the package and ensure native NNG libraries are available.");
-
-            return NngSenderImpl.CreatePublisher(url);
+            var factory = new Factory();
+            var socket = factory.PublisherOpen().Unwrap();
+            socket.Listen(url).Unwrap();
+            var asyncContext = socket.CreateAsyncContext(factory).Unwrap();
+            return new NngPublisherSender(socket, asyncContext, factory);
         }
 
-        public static INngSender CreatePusher(string url)
+        public void Send(ReadOnlySpan<byte> data)
         {
-            if (!_nngAvailable)
-                throw new NotSupportedException(
-                    "NNG transport requires ModelingEvolution.Nng package. " +
-                    "Install the package and ensure native NNG libraries are available.");
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(NngPublisherSender));
 
-            return NngSenderImpl.CreatePusher(url);
+            // Synchronous send using socket directly
+            _socket.Send(data).Unwrap();
+        }
+
+        public async ValueTask SendAsync(ReadOnlyMemory<byte> data)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(NngPublisherSender));
+
+            var msg = _factory.CreateMessage();
+            msg.Append(data.Span);
+            (await _asyncContext.Send(msg)).Unwrap();
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _asyncContext.Dispose();
+            _socket.Dispose();
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
         }
     }
 
     /// <summary>
-    /// Internal NNG sender implementation - separated to avoid loading NNG types if not available.
+    /// NNG Pusher sender implementation using the real NNG library.
     /// </summary>
-    internal static class NngSenderImpl
+    internal sealed class NngPusherSender : INngSender
     {
-        public static INngSender CreatePublisher(string url)
+        private readonly IPushSocket _socket;
+        private readonly ISendAsyncContext<INngMsg> _asyncContext;
+        private readonly Factory _factory;
+        private bool _disposed;
+
+        private NngPusherSender(IPushSocket socket, ISendAsyncContext<INngMsg> asyncContext, Factory factory)
         {
-            // This will fail at runtime if NNG is not available,
-            // but the factory checks first so this is only called when NNG is present.
-            throw new NotSupportedException(
-                "NNG implementation requires ModelingEvolution.Nng package to be referenced and native libraries available. " +
-                "To enable NNG support, add: <PackageReference Include=\"ModelingEvolution.Nng\" Version=\"1.0.0\" />");
+            _socket = socket;
+            _asyncContext = asyncContext;
+            _factory = factory;
         }
 
-        public static INngSender CreatePusher(string url)
+        public static NngPusherSender Create(string url, bool bindMode = true)
         {
-            throw new NotSupportedException(
-                "NNG implementation requires ModelingEvolution.Nng package to be referenced and native libraries available. " +
-                "To enable NNG support, add: <PackageReference Include=\"ModelingEvolution.Nng\" Version=\"1.0.0\" />");
+            var factory = new Factory();
+            var socket = factory.PusherOpen().Unwrap();
+            if (bindMode)
+                socket.Listen(url).Unwrap();
+            else
+                socket.Dial(url).Unwrap();
+            var asyncContext = socket.CreateAsyncContext(factory).Unwrap();
+            return new NngPusherSender(socket, asyncContext, factory);
+        }
+
+        public void Send(ReadOnlySpan<byte> data)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(NngPusherSender));
+
+            // Synchronous send using socket directly
+            _socket.Send(data).Unwrap();
+        }
+
+        public async ValueTask SendAsync(ReadOnlyMemory<byte> data)
+        {
+            if (_disposed)
+                throw new ObjectDisposedException(nameof(NngPusherSender));
+
+            var msg = _factory.CreateMessage();
+            msg.Append(data.Span);
+            (await _asyncContext.Send(msg)).Unwrap();
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _asyncContext.Dispose();
+            _socket.Dispose();
+        }
+
+        public ValueTask DisposeAsync()
+        {
+            Dispose();
+            return ValueTask.CompletedTask;
         }
     }
 }
