@@ -297,10 +297,11 @@ public class VideoProcessingService : BackgroundService
         var conn = EventStoreClientSettings.Create(eventStoreConnectionString);
         await conn.WaitUntilReady(TimeSpan.FromSeconds(5));
         EventStoreClient client = new EventStoreClient(conn);
-        var evt = await System.Linq.AsyncEnumerable.FirstAsync(
-            client.ReadAllAsync(Direction.Forwards, Position.Start, 1, false, null),
-            stoppingToken);
-        _logger.LogInformation("EventStore connected, read 1 event: "+evt.Event.EventStreamId);
+        await foreach (var evt in client.ReadAllAsync(Direction.Forwards, Position.Start, 1, false, null).WithCancellation(stoppingToken))
+        {
+            _logger.LogInformation("EventStore connected, read 1 event: " + evt.Event.EventStreamId);
+            break;
+        }
     }
 
     private async Task InitializeUiControls()

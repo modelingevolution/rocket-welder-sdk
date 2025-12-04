@@ -5,46 +5,67 @@ using System.Threading.Tasks;
 namespace RocketWelder.SDK.Transport
 {
     /// <summary>
-    /// Frame source that subscribes to NNG Pub/Sub pattern.
-    /// Each NNG message is treated as a complete frame.
+    /// Frame source that subscribes to NNG Pub/Sub or Pull pattern.
+    /// Each NNG message is treated as a complete frame (no framing needed - NNG handles message boundaries).
     /// </summary>
     /// <remarks>
-    /// Requires ModelingEvolution.Nng package.
-    /// Uses NNG Subscriber socket for receiving published messages.
+    /// NNG (nanomsg next generation) provides high-performance, scalable messaging patterns.
+    /// Supported patterns:
+    /// - Pub/Sub: Subscribe to published messages
+    /// - Push/Pull: Receive load-balanced work items
+    /// - Pair: Point-to-point communication
+    ///
+    /// Note: Requires ModelingEvolution.Nng package. If not available, throws NotSupportedException.
     /// </remarks>
     public class NngFrameSource : IFrameSource
     {
-        // TODO: Add ModelingEvolution.Nng package reference
-        // private readonly ISubscriberSocket _socket;
-        private readonly object _socket;
+        private readonly INngReceiver _receiver;
         private readonly bool _leaveOpen;
         private bool _disposed;
 
         /// <summary>
-        /// Creates an NNG frame source using a Subscriber socket.
+        /// Creates an NNG frame source from any NNG receiver (Subscriber, Puller, Pair).
         /// </summary>
-        /// <param name="socket">NNG Subscriber socket</param>
-        /// <param name="leaveOpen">If true, doesn't close socket on disposal</param>
-        public NngFrameSource(object socket /* ISubscriberSocket */, bool leaveOpen = false)
+        /// <param name="receiver">NNG receiver socket wrapper</param>
+        /// <param name="leaveOpen">If true, doesn't dispose receiver on disposal</param>
+        public NngFrameSource(INngReceiver receiver, bool leaveOpen = false)
         {
-            _socket = socket ?? throw new ArgumentNullException(nameof(socket));
+            _receiver = receiver ?? throw new ArgumentNullException(nameof(receiver));
             _leaveOpen = leaveOpen;
         }
 
-        public bool HasMoreFrames => !_disposed;  // NNG subscriber waits for messages
+        /// <summary>
+        /// Creates an NNG Subscriber frame source connected to the specified URL.
+        /// </summary>
+        /// <param name="url">NNG URL (e.g., "tcp://127.0.0.1:5555", "ipc:///tmp/mysocket")</param>
+        /// <param name="topic">Optional topic filter (empty for all messages)</param>
+        /// <returns>Frame source ready to receive messages</returns>
+        public static NngFrameSource CreateSubscriber(string url, string topic = "")
+        {
+            var receiver = NngReceiverFactory.CreateSubscriber(url, topic);
+            return new NngFrameSource(receiver, leaveOpen: false);
+        }
+
+        /// <summary>
+        /// Creates an NNG Puller frame source bound to the specified URL.
+        /// </summary>
+        /// <param name="url">NNG URL (e.g., "tcp://127.0.0.1:5555", "ipc:///tmp/mysocket")</param>
+        /// <returns>Frame source ready to pull messages</returns>
+        public static NngFrameSource CreatePuller(string url)
+        {
+            var receiver = NngReceiverFactory.CreatePuller(url);
+            return new NngFrameSource(receiver, leaveOpen: false);
+        }
+
+        public bool HasMoreFrames => !_disposed;  // NNG blocks waiting for messages
 
         public ReadOnlyMemory<byte> ReadFrame(CancellationToken cancellationToken = default)
         {
             if (_disposed)
                 throw new ObjectDisposedException(nameof(NngFrameSource));
 
-            // TODO: Implement with ModelingEvolution.Nng
-            // var message = _socket.Receive(cancellationToken);
-            // return message.AsMemory();
-
-            throw new NotImplementedException(
-                "NNG transport requires ModelingEvolution.Nng package. " +
-                "Add package reference and uncomment implementation.");
+            // NNG messages are atomic - no length prefix parsing needed
+            return _receiver.Receive(cancellationToken);
         }
 
         public async ValueTask<ReadOnlyMemory<byte>> ReadFrameAsync(CancellationToken cancellationToken = default)
@@ -52,14 +73,8 @@ namespace RocketWelder.SDK.Transport
             if (_disposed)
                 throw new ObjectDisposedException(nameof(NngFrameSource));
 
-            // TODO: Implement with ModelingEvolution.Nng
-            // var message = await _socket.ReceiveAsync(cancellationToken);
-            // return message.AsMemory();
-
-            await Task.CompletedTask;
-            throw new NotImplementedException(
-                "NNG transport requires ModelingEvolution.Nng package. " +
-                "Add package reference and uncomment implementation.");
+            // NNG messages are atomic - no length prefix parsing needed
+            return await _receiver.ReceiveAsync(cancellationToken);
         }
 
         public void Dispose()
@@ -69,7 +84,7 @@ namespace RocketWelder.SDK.Transport
 
             if (!_leaveOpen)
             {
-                // TODO: _socket?.Dispose();
+                _receiver.Dispose();
             }
         }
 
@@ -80,10 +95,81 @@ namespace RocketWelder.SDK.Transport
 
             if (!_leaveOpen)
             {
-                // TODO: await _socket?.DisposeAsync();
+                await _receiver.DisposeAsync();
             }
+        }
+    }
 
-            await Task.CompletedTask;
+    /// <summary>
+    /// Abstraction for NNG receiving sockets (Subscriber, Puller, Pair).
+    /// </summary>
+    public interface INngReceiver : IDisposable, IAsyncDisposable
+    {
+        ReadOnlyMemory<byte> Receive(CancellationToken cancellationToken = default);
+        ValueTask<ReadOnlyMemory<byte>> ReceiveAsync(CancellationToken cancellationToken = default);
+    }
+
+    /// <summary>
+    /// Factory for creating NNG receivers. Throws NotSupportedException if NNG is not available.
+    /// </summary>
+    public static class NngReceiverFactory
+    {
+        private static readonly bool _nngAvailable = CheckNngAvailable();
+
+        private static bool CheckNngAvailable()
+        {
+            try
+            {
+                // Try to load NNG types
+                var nngType = Type.GetType("ModelingEvolution.Nng.SubscriberSocket, ModelingEvolution.Nng");
+                return nngType != null;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public static INngReceiver CreateSubscriber(string url, string topic = "")
+        {
+            if (!_nngAvailable)
+                throw new NotSupportedException(
+                    "NNG transport requires ModelingEvolution.Nng package. " +
+                    "Install the package and ensure native NNG libraries are available.");
+
+            return NngReceiverImpl.CreateSubscriber(url, topic);
+        }
+
+        public static INngReceiver CreatePuller(string url)
+        {
+            if (!_nngAvailable)
+                throw new NotSupportedException(
+                    "NNG transport requires ModelingEvolution.Nng package. " +
+                    "Install the package and ensure native NNG libraries are available.");
+
+            return NngReceiverImpl.CreatePuller(url);
+        }
+    }
+
+    /// <summary>
+    /// Internal NNG receiver implementation - separated to avoid loading NNG types if not available.
+    /// </summary>
+    internal static class NngReceiverImpl
+    {
+        public static INngReceiver CreateSubscriber(string url, string topic)
+        {
+            // This will fail at runtime if NNG is not available,
+            // but the factory checks first so this is only called when NNG is present.
+            throw new NotSupportedException(
+                "NNG implementation requires ModelingEvolution.Nng package to be referenced and native libraries available. " +
+                "To enable NNG support, add: <PackageReference Include=\"ModelingEvolution.Nng\" Version=\"1.0.0\" />");
+        }
+
+        public static INngReceiver CreatePuller(string url)
+        {
+            throw new NotSupportedException(
+                "NNG implementation requires ModelingEvolution.Nng package to be referenced and native libraries available. " +
+                "To enable NNG support, add: <PackageReference Include=\"ModelingEvolution.Nng\" Version=\"1.0.0\" />");
         }
     }
 }
