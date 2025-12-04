@@ -16,13 +16,13 @@ This document tracks the progress of refactoring from `IKeyPointsStorage`/`ISegm
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| **C# Transport Layer** | ✅ 80% | 8/10 transports working, NNG stubbed |
+| **C# Transport Layer** | ✅ 100% | All transports implemented (Stream, TCP, Unix Socket, WebSocket, NNG) |
 | **C# KeyPoints Protocol** | ⏳ 50% | Sink done, Source not implemented |
 | **C# Segmentation Protocol** | ⏳ 30% | Writer has bug, Source not implemented |
 | **Python Transport Layer** | ✅ 67% | 4/6 transports working |
 | **Python KeyPoints Protocol** | ⏳ 50% | Sink done, Source not implemented |
 | **Python Segmentation Protocol** | ⏳ 50% | Writer done, Source not implemented |
-| **Tests** | ❌ Failing | 20 C# test failures, Python can't run |
+| **Tests** | ⏳ Partial | 48 transport tests pass, some protocol tests failing |
 
 ---
 
@@ -38,10 +38,37 @@ This document tracks the progress of refactoring from `IKeyPointsStorage`/`ISegm
 | `Transport/StreamFrameSource.cs` | ✅ | Varint length-prefix framing |
 | `Transport/TcpFrameSink.cs` | ✅ | 4-byte LE length-prefix |
 | `Transport/TcpFrameSource.cs` | ✅ | 4-byte LE length-prefix |
+| `Transport/UnixSocketFrameSink.cs` | ✅ | Unix domain socket support |
+| `Transport/UnixSocketFrameSource.cs` | ✅ | Unix domain socket support |
 | `Transport/WebSocketFrameSink.cs` | ✅ | Native message boundaries |
 | `Transport/WebSocketFrameSource.cs` | ✅ | Native message boundaries |
-| `Transport/NngFrameSink.cs` | ⏳ | Stub - throws NotImplementedException |
-| `Transport/NngFrameSource.cs` | ⏳ | Stub - throws NotImplementedException |
+| `Transport/NngFrameSink.cs` | ✅ | NNG Pub/Sub and Push/Pull patterns |
+| `Transport/NngFrameSource.cs` | ✅ | NNG Pub/Sub and Push/Pull patterns |
+
+#### NNG Transport Details
+
+Uses `ModelingEvolution.Nng` v1.0.2 package (fork of nng.NETCore).
+
+**Supported Patterns:**
+- **Push/Pull** - Reliable point-to-point with load balancing (recommended)
+- **Pub/Sub** - One-to-many broadcast (has slow subscriber limitation)
+
+**Features:**
+- Pipe notifications for subscriber connection tracking
+- `WaitForSubscriberAsync()` for pub/sub synchronization
+- Both IPC (`ipc:///tmp/...`) and TCP (`tcp://127.0.0.1:...`) transports
+
+**Usage:**
+```csharp
+// Push/Pull (reliable)
+var pusher = NngFrameSink.CreatePusher("tcp://127.0.0.1:5555");
+var puller = NngFrameSource.CreatePuller("tcp://127.0.0.1:5555", bindMode: false);
+
+// Pub/Sub (broadcast)
+var publisher = NngFrameSink.CreatePublisher("ipc:///tmp/topic");
+var subscriber = NngFrameSource.CreateSubscriber("ipc:///tmp/topic");
+await publisher.WaitForSubscriberAsync(TimeSpan.FromSeconds(5));
+```
 
 ### KeyPoints Protocol ⏳
 
@@ -189,7 +216,7 @@ Add `posix-ipc` to dependencies or make it optional.
 ## Progress Chart
 
 ```
-C# Transport Layer:           ████████████████░░░░  80%  (8/10)
+C# Transport Layer:           ████████████████████ 100%  (12/12 - all transports)
 C# KeyPoints Sink:            ████████████████████ 100%  (complete)
 C# KeyPoints Source:          ░░░░░░░░░░░░░░░░░░░░   0%  (not started)
 C# Segmentation Sink:         ░░░░░░░░░░░░░░░░░░░░   0%  (not started)
@@ -201,7 +228,16 @@ Python KeyPoints Source:      ░░░░░░░░░░░░░░░░�
 Python Segmentation Writer:   ████████████████████ 100%  (complete)
 Python Segmentation Source:   ░░░░░░░░░░░░░░░░░░░░   0%  (not started)
 ─────────────────────────────────────────────────────────────
-OVERALL:                      ██████░░░░░░░░░░░░░░  ~35%
+OVERALL:                      ████████░░░░░░░░░░░░  ~40%
+```
+
+### C# Transport Test Results
+
+```
+Total: 55 tests
+Passed: 48
+Skipped: 7 (4 NNG pub/sub timing, 3 WebSocket integration)
+Failed: 0
 ```
 
 ---
@@ -222,5 +258,5 @@ See `REFACTORING_GUIDE.md` for:
 ---
 
 **Last Updated:** 2025-12-04
-**Status:** ⚠️ In Progress - Core architecture defined, implementation incomplete
+**Status:** ⏳ In Progress - C# Transport Layer complete, protocol implementations ongoing
 **Next Step:** Implement `SegmentationResultSource` with `IAsyncEnumerable`
