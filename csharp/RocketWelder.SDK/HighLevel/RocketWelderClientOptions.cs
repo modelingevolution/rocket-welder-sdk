@@ -4,55 +4,44 @@ namespace RocketWelder.SDK.HighLevel;
 
 /// <summary>
 /// Configuration options for RocketWelderClient.
+/// Uses strongly-typed connection strings implementing IParsable.
 /// </summary>
 public class RocketWelderClientOptions
 {
     /// <summary>
-    /// Video source (file path, camera index, or URL).
+    /// Video source connection string.
+    /// Examples: "0" (camera), "file:///path/to/video.mp4", "shm://buffer"
     /// Default: "0" (default camera)
     /// </summary>
-    public string VideoSource { get; set; } = "0";
+    public VideoSourceConnectionString VideoSource { get; set; } = VideoSourceConnectionString.Default;
 
     /// <summary>
-    /// KeyPoints transport endpoint.
-    /// Default: "ipc:///tmp/rocket-welder-keypoints"
+    /// KeyPoints output connection string.
+    /// Supports parameters: masterFrameInterval
+    /// Default: "nng+push://ipc:///tmp/rocket-welder-keypoints?masterFrameInterval=300"
     /// </summary>
-    public string KeyPointsEndpoint { get; set; } = "ipc:///tmp/rocket-welder-keypoints";
+    public KeyPointsConnectionString KeyPoints { get; set; } = KeyPointsConnectionString.Default;
 
     /// <summary>
-    /// Segmentation transport endpoint.
-    /// Default: "ipc:///tmp/rocket-welder-segmentation"
+    /// Segmentation output connection string.
+    /// Default: "nng+push://ipc:///tmp/rocket-welder-segmentation"
     /// </summary>
-    public string SegmentationEndpoint { get; set; } = "ipc:///tmp/rocket-welder-segmentation";
-
-    /// <summary>
-    /// Frames between master keypoint frames.
-    /// Default: 300
-    /// </summary>
-    public int MasterFrameInterval { get; set; } = 300;
-
-    /// <summary>
-    /// Transport type: "nng", "tcp", "websocket", "file".
-    /// Default: "nng"
-    /// </summary>
-    public string Transport { get; set; } = "nng";
+    public SegmentationConnectionString Segmentation { get; set; } = SegmentationConnectionString.Default;
 
     /// <summary>
     /// Creates options from environment variables.
+    /// Environment variables:
+    /// - VIDEO_SOURCE or CONNECTION_STRING: Video input
+    /// - KEYPOINTS_CONNECTION_STRING: KeyPoints output
+    /// - SEGMENTATION_CONNECTION_STRING: Segmentation output
     /// </summary>
     public static RocketWelderClientOptions FromEnvironment()
     {
         return new RocketWelderClientOptions
         {
-            VideoSource = Environment.GetEnvironmentVariable("ROCKET_WELDER_VIDEO_SOURCE") ?? "0",
-            KeyPointsEndpoint = Environment.GetEnvironmentVariable("ROCKET_WELDER_KEYPOINTS_ENDPOINT")
-                ?? "ipc:///tmp/rocket-welder-keypoints",
-            SegmentationEndpoint = Environment.GetEnvironmentVariable("ROCKET_WELDER_SEGMENTATION_ENDPOINT")
-                ?? "ipc:///tmp/rocket-welder-segmentation",
-            MasterFrameInterval = int.TryParse(
-                Environment.GetEnvironmentVariable("ROCKET_WELDER_MASTER_FRAME_INTERVAL"),
-                out var interval) ? interval : 300,
-            Transport = Environment.GetEnvironmentVariable("ROCKET_WELDER_TRANSPORT") ?? "nng"
+            VideoSource = VideoSourceConnectionString.FromEnvironment(),
+            KeyPoints = KeyPointsConnectionString.FromEnvironment(),
+            Segmentation = SegmentationConnectionString.FromEnvironment()
         };
     }
 }

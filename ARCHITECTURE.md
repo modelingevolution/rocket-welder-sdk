@@ -149,15 +149,21 @@ await client.StartAsync((inputFrame, segmentation, keypoints, outputFrame) =>
 });
 ```
 
-### Environment Variables
+### Environment Variables (Connection Strings)
 
-| Variable | Description | Default |
+| Variable | Description | Example |
 |----------|-------------|---------|
-| `ROCKET_WELDER_VIDEO_SOURCE` | Video source | `0` (camera) |
-| `ROCKET_WELDER_KEYPOINTS_ENDPOINT` | KeyPoints endpoint | `ipc:///tmp/rocket-welder-keypoints` |
-| `ROCKET_WELDER_SEGMENTATION_ENDPOINT` | Segmentation endpoint | `ipc:///tmp/rocket-welder-segmentation` |
-| `ROCKET_WELDER_MASTER_FRAME_INTERVAL` | Master frame interval | `300` |
-| `ROCKET_WELDER_TRANSPORT` | Transport type | `nng` |
+| `VIDEO_SOURCE` | Video input | `0`, `file:///video.mp4`, `shm://buffer` |
+| `KEYPOINTS_CONNECTION_STRING` | KeyPoints output | `nng+push://ipc:///tmp/kp?masterFrameInterval=300` |
+| `SEGMENTATION_CONNECTION_STRING` | Segmentation output | `nng+push://ipc:///tmp/seg` |
+
+**Connection String Format:** `protocol://address?param=value`
+
+Supported protocols:
+- `nng+push://` - NNG Push/Pull pattern (reliable)
+- `nng+pub://` - NNG Pub/Sub pattern (broadcast)
+- `file://` - File output with varint framing
+- `tcp://` - TCP with 4-byte LE framing (planned)
 
 ### Metadata Format
 

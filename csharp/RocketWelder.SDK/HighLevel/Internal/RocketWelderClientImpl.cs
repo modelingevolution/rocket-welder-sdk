@@ -135,21 +135,24 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
         bool useSegmentation,
         CancellationToken cancellationToken)
     {
-        // Initialize transports
+        // Initialize transports from strongly-typed connection strings
         if (useKeyPoints)
         {
-            var keyPointsFrameSink = CreateFrameSink(_options.KeyPointsEndpoint);
-            _keyPointsSink = new KeyPointsSink(keyPointsFrameSink, _options.MasterFrameInterval, ownsSink: true);
+            var cs = _options.KeyPoints;
+            var frameSink = CreateFrameSink(cs);
+            _keyPointsSink = new KeyPointsSink(frameSink, cs.MasterFrameInterval, ownsSink: true);
         }
 
         if (useSegmentation)
         {
-            var segmentationFrameSink = CreateFrameSink(_options.SegmentationEndpoint);
-            _segmentationSink = new SegmentationResultSink(segmentationFrameSink);
+            var cs = _options.Segmentation;
+            var frameSink = CreateFrameSink(cs);
+            _segmentationSink = new SegmentationResultSink(frameSink);
         }
 
         // Open video source
-        using var capture = new VideoCapture(_options.VideoSource);
+        var videoSource = GetVideoSource();
+        using var capture = new VideoCapture(videoSource);
         if (!capture.IsOpened)
             throw new InvalidOperationException($"Failed to open video source: {_options.VideoSource}");
 
@@ -176,31 +179,46 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
         }
     }
 
-    private IFrameSink CreateFrameSink(string endpoint)
+    private string GetVideoSource()
     {
-        // Parse endpoint and create appropriate transport
-        if (endpoint.StartsWith("ipc://") || endpoint.StartsWith("tcp://"))
+        var vs = _options.VideoSource;
+        return vs.SourceType switch
         {
-            // NNG transport
-            return NngFrameSink.CreatePusher(endpoint);
-        }
-        else if (endpoint.StartsWith("file://"))
-        {
-            // File transport
-            var path = endpoint.Substring("file://".Length);
-            var stream = File.Create(path);
-            return new StreamFrameSink(stream);
-        }
-        else if (File.Exists(endpoint) || !endpoint.Contains("://"))
-        {
-            // Assume file path
-            var stream = File.Create(endpoint);
-            return new StreamFrameSink(stream);
-        }
-        else
-        {
-            throw new ArgumentException($"Unsupported endpoint format: {endpoint}");
-        }
+            VideoSourceType.Camera => vs.CameraIndex?.ToString() ?? "0",
+            VideoSourceType.File => vs.Path ?? throw new InvalidOperationException("File path not specified"),
+            VideoSourceType.SharedMemory => vs.Path ?? throw new InvalidOperationException("Shared memory buffer not specified"),
+            VideoSourceType.Rtsp => vs.Path ?? throw new InvalidOperationException("RTSP URL not specified"),
+            VideoSourceType.Http => vs.Path ?? throw new InvalidOperationException("HTTP URL not specified"),
+            _ => throw new NotSupportedException($"Unsupported video source type: {vs.SourceType}")
+        };
+    }
+
+    private static IFrameSink CreateFrameSink(KeyPointsConnectionString cs)
+    {
+        if (cs.IsFile)
+            return new StreamFrameSink(File.Create(cs.Address));
+
+        var protocol = cs.Protocol!.Value;
+        if (protocol.IsPush)
+            return NngFrameSink.CreatePusher(cs.Address);
+        if (protocol.IsPub)
+            return NngFrameSink.CreatePublisher(cs.Address);
+
+        throw new ArgumentException($"Unsupported protocol: {protocol}");
+    }
+
+    private static IFrameSink CreateFrameSink(SegmentationConnectionString cs)
+    {
+        if (cs.IsFile)
+            return new StreamFrameSink(File.Create(cs.Address));
+
+        var protocol = cs.Protocol!.Value;
+        if (protocol.IsPush)
+            return NngFrameSink.CreatePusher(cs.Address);
+        if (protocol.IsPub)
+            return NngFrameSink.CreatePublisher(cs.Address);
+
+        throw new ArgumentException($"Unsupported protocol: {protocol}");
     }
 
     public void Dispose()
