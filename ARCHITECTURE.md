@@ -6,6 +6,26 @@ The RocketWelder SDK provides high-performance video streaming with support for 
 
 ## Core Architectural Principles
 
+### ⚠️ MANDATORY: ALL Data Uses Framing
+
+**THIS IS NON-NEGOTIABLE. DO NOT SKIP FRAMING.**
+
+Every protocol (KeyPoints, Segmentation, etc.) MUST use framing for ALL data:
+- **Files**: Varint length-prefix (`StreamFrameSink`/`StreamFrameSource`)
+- **TCP**: 4-byte LE length-prefix (`TcpFrameSink`/`TcpFrameSource`)
+- **WebSocket/NNG**: Native message boundaries (automatic)
+
+**Why?**
+1. Frame boundary detection is essential for reading multiple frames
+2. Cross-platform compatibility requires consistent framing
+3. Python and C# MUST use the same framing - varint for files
+
+**NEVER write raw bytes without framing. NEVER.**
+
+If you're tempted to "simplify" by removing framing, STOP. The whole purpose of this refactor is to have consistent framing everywhere.
+
+---
+
 ### 1. Separation of Concerns
 
 The SDK separates **protocol logic** from **transport mechanisms** through a two-layer abstraction:

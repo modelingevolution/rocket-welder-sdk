@@ -148,8 +148,8 @@ namespace RocketWelder.SDK
         private bool _disposed = false;
 
         /// <summary>
-        /// Creates a writer that writes to stream with varint length-prefix framing.
-        /// This is the consistent approach across both protocols.
+        /// Creates a writer that writes to stream WITH varint length-prefix framing.
+        /// ALL protocols use framing - this is mandatory for frame boundary detection.
         /// </summary>
         public SegmentationResultWriter(ulong frameId, uint width, uint height, Stream destination, bool leaveOpen = false)
         {
