@@ -52,7 +52,7 @@ import numpy as np
 import numpy.typing as npt
 from typing_extensions import TypeAlias
 
-from .transport import IFrameSink, StreamFrameSink
+from .transport import IFrameSink, StreamFrameSink, StreamFrameSource
 
 # Type aliases
 Point = Tuple[int, int]
@@ -548,13 +548,24 @@ class KeyPointsSink(IKeyPointsSink):
         compute_module_name = definition_dict.get("compute_module_name", "")
         points = definition_dict.get("points", {})
 
+        # Use StreamFrameSource to handle varint-prefixed frames
+        frame_source = StreamFrameSource(blob_stream, leave_open=True)
+
         # Read all frames from binary stream
         index: Dict[int, Dict[int, Tuple[Point, float]]] = {}
         current_frame: Dict[int, Tuple[Point, int]] = {}
 
         while True:
-            # Try to read frame type
-            frame_type_bytes = blob_stream.read(1)
+            # Read next frame (handles varint length prefix)
+            frame_data = frame_source.read_frame()
+            if frame_data is None or len(frame_data) == 0:
+                break  # End of stream
+
+            # Parse frame from bytes
+            frame_stream = io.BytesIO(frame_data)
+
+            # Read frame type
+            frame_type_bytes = frame_stream.read(1)
             if not frame_type_bytes:
                 break  # End of stream
 
@@ -563,13 +574,13 @@ class KeyPointsSink(IKeyPointsSink):
                 break  # End-of-stream marker
 
             # Read frame ID
-            frame_id_bytes = blob_stream.read(8)
+            frame_id_bytes = frame_stream.read(8)
             if len(frame_id_bytes) != 8:
                 raise EOFError("Failed to read frame ID")
             frame_id = struct.unpack("<Q", frame_id_bytes)[0]
 
             # Read keypoint count
-            keypoint_count = _read_varint(blob_stream)
+            keypoint_count = _read_varint(frame_stream)
 
             frame_keypoints: Dict[int, Tuple[Point, float]] = {}
 
@@ -577,11 +588,11 @@ class KeyPointsSink(IKeyPointsSink):
                 # Master frame - read absolute coordinates
                 current_frame.clear()
                 for _ in range(keypoint_count):
-                    keypoint_id = _read_varint(blob_stream)
+                    keypoint_id = _read_varint(frame_stream)
 
                     # Read absolute coordinates
-                    x_bytes = blob_stream.read(4)
-                    y_bytes = blob_stream.read(4)
+                    x_bytes = frame_stream.read(4)
+                    y_bytes = frame_stream.read(4)
                     if len(x_bytes) != 4 or len(y_bytes) != 4:
                         raise EOFError("Failed to read coordinates")
 
@@ -589,7 +600,7 @@ class KeyPointsSink(IKeyPointsSink):
                     y = struct.unpack("<i", y_bytes)[0]
 
                     # Read confidence
-                    conf_bytes = blob_stream.read(2)
+                    conf_bytes = frame_stream.read(2)
                     if len(conf_bytes) != 2:
                         raise EOFError("Failed to read confidence")
                     conf_ushort = struct.unpack("<H", conf_bytes)[0]
@@ -601,11 +612,11 @@ class KeyPointsSink(IKeyPointsSink):
             elif frame_type == DELTA_FRAME_TYPE:
                 # Delta frame - read deltas and reconstruct
                 for _ in range(keypoint_count):
-                    keypoint_id = _read_varint(blob_stream)
+                    keypoint_id = _read_varint(frame_stream)
 
-                    delta_x = _zigzag_decode(_read_varint(blob_stream))
-                    delta_y = _zigzag_decode(_read_varint(blob_stream))
-                    delta_conf = _zigzag_decode(_read_varint(blob_stream))
+                    delta_x = _zigzag_decode(_read_varint(frame_stream))
+                    delta_y = _zigzag_decode(_read_varint(frame_stream))
+                    delta_conf = _zigzag_decode(_read_varint(frame_stream))
 
                     if keypoint_id in current_frame:
                         # Apply delta to previous

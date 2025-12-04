@@ -146,7 +146,7 @@ class StreamFrameSource(IFrameSource):
             return None
 
         # Check if stream has data (for seekable streams)
-        if hasattr(self._stream, 'tell') and hasattr(self._stream, 'seek'):
+        if hasattr(self._stream, "tell") and hasattr(self._stream, "seek"):
             try:
                 current_pos = self._stream.tell()
                 self._stream.seek(0, 2)  # Seek to end
@@ -164,12 +164,14 @@ class StreamFrameSource(IFrameSource):
             return None
 
         if frame_length == 0:
-            return b''
+            return b""
 
         # Read frame data
         frame_data = self._stream.read(frame_length)
         if len(frame_data) != frame_length:
-            raise EOFError(f"Unexpected end of stream while reading frame. Expected {frame_length} bytes, got {len(frame_data)}")
+            raise EOFError(
+                f"Unexpected end of stream while reading frame. Expected {frame_length} bytes, got {len(frame_data)}"
+            )
 
         return frame_data
 

@@ -3,6 +3,7 @@
 Tests interoperability between C# and Python implementations.
 """
 
+import io
 import tempfile
 from pathlib import Path
 
@@ -13,6 +14,16 @@ from rocket_welder_sdk.segmentation_result import (
     SegmentationResultReader,
     SegmentationResultWriter,
 )
+from rocket_welder_sdk.transport import StreamFrameSource
+
+
+def _read_frame_via_transport(stream: io.IOBase) -> SegmentationResultReader:
+    """Helper to read a single frame via transport layer (handles varint framing)."""
+    frame_source = StreamFrameSource(stream, leave_open=True)  # type: ignore[arg-type]
+    frame_data = frame_source.read_frame()
+    if frame_data is None:
+        raise ValueError("No frame data found")
+    return SegmentationResultReader(io.BytesIO(frame_data))
 
 
 class TestCrossPlatform:
@@ -43,8 +54,9 @@ class TestCrossPlatform:
                 f"C# test file not found: {test_file}. " "Run C# tests first to generate test file."
             )
 
-        # Act - Python reads C# file
-        with open(test_file, "rb") as f, SegmentationResultReader(f) as reader:
+        # Act - Python reads C# file (via transport layer for framing)
+        with open(test_file, "rb") as f:
+            reader = _read_frame_via_transport(f)
             metadata = reader.metadata
 
             # Verify metadata
@@ -119,8 +131,9 @@ class TestCrossPlatform:
             for class_id, instance_id, points in instances:
                 writer.append(class_id, instance_id, points)
 
-        # Act - Read
-        with open(test_file, "rb") as f, SegmentationResultReader(f) as reader:
+        # Act - Read (via transport layer for framing)
+        with open(test_file, "rb") as f:
+            reader = _read_frame_via_transport(f)
             metadata = reader.metadata
             assert metadata.frame_id == frame_id
             assert metadata.width == width

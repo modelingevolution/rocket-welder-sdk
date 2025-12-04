@@ -804,6 +804,164 @@ Python transports mirror C# design:
 - Python writes → C# reads
 - Test files in `/tmp/rocket-welder-test/` shared directory
 
+## C# vs Python Implementation Differences
+
+### Overview
+
+Both implementations follow the same architecture and binary protocols, ensuring full cross-platform compatibility. However, they differ in language-specific patterns and optimizations.
+
+### Binary Protocol Compatibility
+
+| Aspect | C# | Python | Status |
+|--------|----|----|--------|
+| Varint encoding | ✓ Identical | ✓ Identical | **Compatible** |
+| ZigZag encoding | ✓ Identical | ✓ Identical | **Compatible** |
+| Little-endian encoding | ✓ | ✓ | **Compatible** |
+| Frame type (Master=0x00, Delta=0x01) | ✓ | ✓ | **Compatible** |
+| Confidence scaling (0-10000 → 0.0-1.0) | ✓ | ✓ | **Compatible** |
+
+### Transport Implementations
+
+| Transport | C# | Python | Framing |
+|-----------|-----|--------|---------|
+| Stream (File) | `StreamFrameSink`/`Source` | `StreamFrameSink`/`Source` | Varint length-prefix |
+| TCP | `TcpFrameSink`/`Source` | `TcpFrameSink`/`Source` | 4-byte LE length-prefix |
+| Unix Socket | `UnixSocketFrameSink`/`Source` | `UnixSocketTransport` | 4-byte LE length-prefix |
+| NNG | `NngFrameSink`/`Source` | `NngFrameSink`/`Source` | Native message boundaries |
+| WebSocket | `WebSocketFrameSink`/`Source` | Not implemented | Native message boundaries |
+
+### API Design Differences
+
+#### Async Patterns
+
+**C# (Async-first):**
+```csharp
+await foreach (var frame in source.ReadFramesAsync(cancellationToken))
+{
+    // Process frame
+}
+```
+
+**Python (Mixed sync/async):**
+```python
+async for frame in source.read_frames_async():
+    # Process frame
+```
+
+#### Resource Cleanup
+
+**C#:** Uses `IDisposable` pattern with `using` statements
+```csharp
+using var sink = new KeyPointsSink(frameSink);
+```
+
+**Python:** Uses context managers with explicit `close()` methods
+```python
+with KeyPointsSink(frame_sink) as sink:
+    # Use sink
+# or
+sink = KeyPointsSink(frame_sink)
+try:
+    # Use sink
+finally:
+    sink.close()
+```
+
+#### Data Context Visibility
+
+**C#:** `Commit()` is `internal` - called automatically by the framework
+```csharp
+internal void Commit();  // Users cannot call this
+```
+
+**Python:** `commit()` is public - users can call it (but shouldn't need to)
+```python
+def commit(self) -> None:  # Available but auto-called
+```
+
+### Memory Optimization Patterns
+
+#### C# Specific (Not in Python)
+
+1. **Stack allocation:**
+   ```csharp
+   Span<byte> lengthPrefix = stackalloc byte[4];
+   ```
+
+2. **Zero-copy memory access:**
+   ```csharp
+   if (MemoryMarshal.TryGetArray(data, out var segment))
+   ```
+
+3. **ValueTask for low-allocation async:**
+   ```csharp
+   public ValueTask WriteFrameAsync(ReadOnlyMemory<byte> frameData);
+   ```
+
+4. **Readonly structs:**
+   ```csharp
+   public readonly record struct KeyPoint(int Id, string Name);
+   ```
+
+#### Python Specific (Not in C#)
+
+1. **NumPy integration:**
+   ```python
+   def to_normalized(self, width: int, height: int) -> npt.NDArray[np.float32]:
+       normalized = self.points.astype(np.float32)
+       normalized[:, 0] /= width
+       normalized[:, 1] /= height
+       return normalized
+   ```
+
+2. **Frozen dataclasses:**
+   ```python
+   @dataclass(frozen=True)
+   class KeyPoint:
+       id: int
+       name: str
+   ```
+
+### Reader Pattern Difference
+
+**C#:** Streaming reader with `IAsyncEnumerable<T>`
+- Reads one frame at a time
+- Ideal for real-time streaming
+- Memory efficient
+
+**Python:** Batch loading via `KeyPointsSink.read()`
+- Loads entire series into memory as `KeyPointsSeries`
+- Ideal for post-processing analysis
+- Provides fast random access by frame ID
+
+### Type Safety
+
+| Feature | C# | Python |
+|---------|-----|--------|
+| Interface contracts | `interface` | `ABC` |
+| Nullable safety | Built-in (C# 8+) | Type hints + mypy |
+| Immutable returns | `IReadOnlyList<T>` | `List[T]` (mutable) |
+| Parsing pattern | `IParsable<T>` | Static methods |
+
+### Naming Conventions
+
+| Concept | C# | Python |
+|---------|-----|--------|
+| Method names | `DefinePoint()` | `define_point()` |
+| Properties | `FrameId` | `frame_id` |
+| Constants | `MasterFrameInterval` | `MASTER_FRAME_TYPE` |
+
+### Cross-Platform Testing
+
+All combinations are tested:
+- C# writes KeyPoints → Python reads ✓
+- Python writes KeyPoints → C# reads ✓
+- C# writes Segmentation → Python reads ✓
+- Python writes Segmentation → C# reads ✓
+- All transports (NNG Push/Pull, NNG Pub/Sub, TCP, Unix Socket) ✓
+
+---
+
 ## Future Extensions
 
 ### Additional Transports

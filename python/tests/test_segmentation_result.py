@@ -167,7 +167,9 @@ class TestRoundTrip:
         # Frame 1
         frame1_points = [(1, 1, np.array([[10, 20], [30, 40]], dtype=np.int32))]
 
-        with SegmentationResultWriter(1, 640, 480, frame_sink=StreamFrameSink(stream, leave_open=True)) as writer:
+        with SegmentationResultWriter(
+            1, 640, 480, frame_sink=StreamFrameSink(stream, leave_open=True)
+        ) as writer:
             for class_id, instance_id, points in frame1_points:
                 writer.append(class_id, instance_id, points)
 
@@ -177,7 +179,9 @@ class TestRoundTrip:
             (3, 1, np.array([[500, 600], [510, 610], [520, 620]], dtype=np.int32)),
         ]
 
-        with SegmentationResultWriter(2, 1920, 1080, frame_sink=StreamFrameSink(stream, leave_open=True)) as writer:
+        with SegmentationResultWriter(
+            2, 1920, 1080, frame_sink=StreamFrameSink(stream, leave_open=True)
+        ) as writer:
             for class_id, instance_id, points in frame2_points:
                 writer.append(class_id, instance_id, points)
 
