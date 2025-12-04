@@ -5,6 +5,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -132,7 +133,7 @@ public class KeyPointsSource : IKeyPointsSource
     {
         while (!cancellationToken.IsCancellationRequested && !_disposed)
         {
-            var frameData = await _frameSource.ReadFrameAsync(cancellationToken);
+            var frameData = await _frameSource.ReadFrameAsync(cancellationToken).ConfigureAwait(false);
             if (frameData.IsEmpty)
                 yield break;
 
@@ -143,7 +144,11 @@ public class KeyPointsSource : IKeyPointsSource
 
     private KeyPointsFrame ParseFrame(ReadOnlyMemory<byte> frameData)
     {
-        using var stream = new MemoryStream(frameData.ToArray());
+        // Zero-copy: get underlying array segment without allocation
+        if (!MemoryMarshal.TryGetArray(frameData, out var segment))
+            throw new InvalidOperationException("Cannot get array segment from memory");
+
+        using var stream = new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false);
 
         // Read frame type
         int frameTypeByte = stream.ReadByte();
@@ -240,7 +245,7 @@ public class KeyPointsSource : IKeyPointsSource
     {
         if (_disposed) return;
         _disposed = true;
-        await _frameSource.DisposeAsync();
+        await _frameSource.DisposeAsync().ConfigureAwait(false);
     }
 }
 
@@ -427,20 +432,11 @@ internal class KeyPointsWriter : IKeyPointsWriter
         // Write frame to buffer
         WriteFrame();
 
-        // Send complete frame via sink (atomic operation)
-        _buffer.Seek(0, SeekOrigin.Begin);
-        _frameSink.WriteFrame(_buffer.ToArray());
+        // Send complete frame via sink (zero-copy using GetBuffer)
+        _frameSink.WriteFrame(new ReadOnlySpan<byte>(_buffer.GetBuffer(), 0, (int)_buffer.Length));
 
         // Update previous frame state
-        if (_onFrameWritten != null)
-        {
-            var frameState = new Dictionary<int, (Point, ushort)>();
-            foreach (var (id, point, confidence) in _keypoints)
-            {
-                frameState[id] = (point, confidence);
-            }
-            _onFrameWritten(frameState);
-        }
+        UpdatePreviousFrameState();
 
         _buffer.Dispose();
     }
@@ -450,14 +446,20 @@ internal class KeyPointsWriter : IKeyPointsWriter
         if (_disposed) return;
         _disposed = true;
 
-        // Write frame to buffer asynchronously
-        await WriteFrameAsync();
+        // Write frame to buffer (sync - buffer writes are fast)
+        WriteFrame();
 
-        // Send complete frame via sink (atomic operation)
-        _buffer.Seek(0, SeekOrigin.Begin);
-        await _frameSink.WriteFrameAsync(_buffer.ToArray());
+        // Send complete frame via sink (zero-copy using GetBuffer)
+        await _frameSink.WriteFrameAsync(new ReadOnlyMemory<byte>(_buffer.GetBuffer(), 0, (int)_buffer.Length)).ConfigureAwait(false);
 
         // Update previous frame state
+        UpdatePreviousFrameState();
+
+        await _buffer.DisposeAsync().ConfigureAwait(false);
+    }
+
+    private void UpdatePreviousFrameState()
+    {
         if (_onFrameWritten != null)
         {
             var frameState = new Dictionary<int, (Point, ushort)>();
@@ -467,8 +469,6 @@ internal class KeyPointsWriter : IKeyPointsWriter
             }
             _onFrameWritten(frameState);
         }
-
-        await _buffer.DisposeAsync();
     }
 
     private void WriteFrame()
@@ -491,30 +491,6 @@ internal class KeyPointsWriter : IKeyPointsWriter
         else
         {
             WriteMasterKeypoints();
-        }
-    }
-
-    private async Task WriteFrameAsync()
-    {
-        // Write frame type
-        byte frameType = _isDelta ? DeltaFrameType : MasterFrameType;
-        await _buffer.WriteAsync(new byte[] { frameType }, 0, 1);
-
-        // Write frame ID
-        byte[] frameIdBytes = new byte[8];
-        BinaryPrimitives.WriteUInt64LittleEndian(frameIdBytes, _frameId);
-        await _buffer.WriteAsync(frameIdBytes, 0, 8);
-
-        // Write keypoint count
-        await _buffer.WriteVarintAsync((uint)_keypoints.Count);
-
-        if (_isDelta && _previousFrame != null)
-        {
-            await WriteDeltaKeypointsAsync();
-        }
-        else
-        {
-            await WriteMasterKeypointsAsync();
         }
     }
 
@@ -562,54 +538,6 @@ internal class KeyPointsWriter : IKeyPointsWriter
                 _buffer.WriteVarint(point.X.ZigZagEncode());
                 _buffer.WriteVarint(point.Y.ZigZagEncode());
                 _buffer.WriteVarint(((int)confidence).ZigZagEncode());
-            }
-        }
-    }
-
-    private async Task WriteMasterKeypointsAsync()
-    {
-        foreach (var (id, point, confidence) in _keypoints)
-        {
-            // Write keypoint ID
-            await _buffer.WriteVarintAsync((uint)id);
-
-            // Write absolute coordinates
-            byte[] coords = new byte[8];
-            BinaryPrimitives.WriteInt32LittleEndian(coords, point.X);
-            BinaryPrimitives.WriteInt32LittleEndian(coords.AsSpan(4), point.Y);
-            await _buffer.WriteAsync(coords, 0, 8);
-
-            // Write confidence
-            byte[] confBytes = new byte[2];
-            BinaryPrimitives.WriteUInt16LittleEndian(confBytes, confidence);
-            await _buffer.WriteAsync(confBytes, 0, 2);
-        }
-    }
-
-    private async Task WriteDeltaKeypointsAsync()
-    {
-        foreach (var (id, point, confidence) in _keypoints)
-        {
-            // Write keypoint ID
-            await _buffer.WriteVarintAsync((uint)id);
-
-            // Calculate deltas
-            if (_previousFrame!.TryGetValue(id, out var prev))
-            {
-                int deltaX = point.X - prev.point.X;
-                int deltaY = point.Y - prev.point.Y;
-                int deltaConf = confidence - prev.confidence;
-
-                await _buffer.WriteVarintAsync(deltaX.ZigZagEncode());
-                await _buffer.WriteVarintAsync(deltaY.ZigZagEncode());
-                await _buffer.WriteVarintAsync(deltaConf.ZigZagEncode());
-            }
-            else
-            {
-                // Keypoint didn't exist in previous frame - write as absolute
-                await _buffer.WriteVarintAsync(point.X.ZigZagEncode());
-                await _buffer.WriteVarintAsync(point.Y.ZigZagEncode());
-                await _buffer.WriteVarintAsync(((int)confidence).ZigZagEncode());
             }
         }
     }

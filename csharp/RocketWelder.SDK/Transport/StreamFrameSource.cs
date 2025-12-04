@@ -95,7 +95,7 @@ namespace RocketWelder.SDK.Transport
             int totalRead = 0;
             while (totalRead < frameLength)
             {
-                int bytesRead = await _stream.ReadAsync(buffer, totalRead, (int)frameLength - totalRead, cancellationToken);
+                int bytesRead = await _stream.ReadAsync(buffer, totalRead, (int)frameLength - totalRead, cancellationToken).ConfigureAwait(false);
                 if (bytesRead == 0)
                     throw new EndOfStreamException($"Unexpected end of stream while reading frame. Expected {frameLength} bytes, got {totalRead}");
                 totalRead += bytesRead;
@@ -119,7 +119,7 @@ namespace RocketWelder.SDK.Transport
             _disposed = true;
 
             if (!_leaveOpen)
-                await _stream.DisposeAsync();
+                await _stream.DisposeAsync().ConfigureAwait(false);
         }
     }
 }

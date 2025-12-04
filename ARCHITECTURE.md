@@ -257,7 +257,7 @@ await foreach (var frame in source.ReadFramesAsync(cancellationToken))
 
 ### Writer Implementation Pattern
 
-All protocol writers follow the same pattern:
+All protocol writers follow the same pattern with **zero-copy buffer access**:
 
 ```csharp
 internal class ProtocolWriter : IProtocolWriter
@@ -273,16 +273,19 @@ internal class ProtocolWriter : IProtocolWriter
 
     public void Dispose()
     {
-        // Send complete frame atomically
-        _frameSink.WriteFrame(_buffer.ToArray());
+        // Send complete frame atomically (zero-copy using GetBuffer)
+        _frameSink.WriteFrame(new ReadOnlySpan<byte>(
+            _buffer.GetBuffer(), 0, (int)_buffer.Length));
         _buffer.Dispose();
     }
 }
 ```
 
+**Note**: Use `GetBuffer()` instead of `ToArray()` to avoid memory allocation.
+
 ### Reader Implementation Pattern
 
-All protocol readers follow the same pattern:
+All protocol readers follow the same pattern with **zero-copy memory access**:
 
 ```csharp
 internal class ProtocolSource : IProtocolSource
@@ -295,7 +298,7 @@ internal class ProtocolSource : IProtocolSource
         while (!ct.IsCancellationRequested)
         {
             // Read next frame from transport
-            var frameData = await _frameSource.ReadFrameAsync(ct);
+            var frameData = await _frameSource.ReadFrameAsync(ct).ConfigureAwait(false);
             if (frameData.IsEmpty) yield break;
 
             // Parse frame
@@ -306,12 +309,20 @@ internal class ProtocolSource : IProtocolSource
 
     private Frame ParseFrame(ReadOnlyMemory<byte> data)
     {
-        // Decode binary protocol from frame bytes
-        using var stream = new MemoryStream(data.ToArray());
+        // Zero-copy: get underlying array segment without allocation
+        if (!MemoryMarshal.TryGetArray(data, out var segment))
+            throw new InvalidOperationException("Cannot get array segment");
+
+        using var stream = new MemoryStream(
+            segment.Array!, segment.Offset, segment.Count, writable: false);
         // ... parse and return Frame
     }
 }
 ```
+
+**Notes**:
+- Use `MemoryMarshal.TryGetArray()` instead of `ToArray()` for zero-copy memory access
+- Use `ConfigureAwait(false)` in all async library code to avoid deadlocks
 
 ## Usage Examples
 
@@ -546,11 +557,42 @@ using var sink = new KeyPointsSink(frameSink);
 - **Con**: Temporary memory overhead per frame
 - **Mitigation**: Frames are typically small (< 10 KB for keypoints)
 
-### Zero-Copy Where Possible
+### Zero-Copy Optimizations
 
-- `ReadOnlySpan<byte>` and `ReadOnlyMemory<byte>` for efficient data handling
-- `stackalloc` for small buffers (frame headers)
-- `ArrayPool<byte>` for larger temporary buffers (WebSocket)
+The SDK uses several techniques to minimize memory allocations:
+
+1. **Writers**: Use `MemoryStream.GetBuffer()` instead of `ToArray()`:
+   ```csharp
+   // BAD: allocates new array
+   _frameSink.WriteFrame(_buffer.ToArray());
+
+   // GOOD: zero-copy using existing buffer
+   _frameSink.WriteFrame(new ReadOnlySpan<byte>(
+       _buffer.GetBuffer(), 0, (int)_buffer.Length));
+   ```
+
+2. **Readers**: Use `MemoryMarshal.TryGetArray()` instead of `ToArray()`:
+   ```csharp
+   // BAD: allocates new array
+   using var stream = new MemoryStream(data.ToArray());
+
+   // GOOD: zero-copy using underlying array
+   if (MemoryMarshal.TryGetArray(data, out var segment))
+       using var stream = new MemoryStream(
+           segment.Array!, segment.Offset, segment.Count, writable: false);
+   ```
+
+3. **Span/Memory types**:
+   - `ReadOnlySpan<byte>` for synchronous write operations
+   - `ReadOnlyMemory<byte>` for async operations and storage
+   - `stackalloc` for small buffers (frame headers)
+   - `ArrayPool<byte>` for larger temporary buffers (WebSocket)
+
+### Async Best Practices
+
+All async library code uses `ConfigureAwait(false)` to:
+- Avoid deadlocks when called from UI contexts
+- Improve performance by avoiding context switching
 
 ## Cross-Platform Compatibility
 

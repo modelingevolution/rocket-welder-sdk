@@ -171,44 +171,41 @@ ImportError: posix_ipc is required on Linux. Install with: pip install posix-ipc
 
 ---
 
-## What Needs To Be Done
+## C# Code Quality (Completed)
 
-### Priority 1: Fix C# Segmentation Writer/Reader Mismatch
+The following code quality improvements were made to the C# implementation:
 
-The immediate bug: writer and reader are incompatible.
+### Zero-Copy Optimizations
 
-**Option A**: Make `SegmentationResultWriter(Stream)` NOT wrap in StreamFrameSink
-- Preserves backward compatibility for direct stream usage
-- Transport abstraction only used when explicitly passing `IFrameSink`
+1. **ParseFrame methods**: Use `MemoryMarshal.TryGetArray()` instead of `ToArray()`
+   - `KeyPointsSource.ParseFrame()`
+   - `SegmentationResultSource.ParseFrame()`
 
-**Option B**: Implement `SegmentationResultSource` properly
-- Accept `IFrameSource` instead of raw `Stream`
-- Return `IAsyncEnumerable<SegmentationFrame>`
-- Update tests to use new pattern
+2. **Writer buffer access**: Use `GetBuffer()` instead of `ToArray()`
+   - `KeyPointsWriter.Dispose()` and `DisposeAsync()`
+   - `SegmentationResultWriter.Flush()` and `FlushAsync()`
 
-**Recommended**: Option B - align with the target architecture.
+### DRY Improvements
 
-### Priority 2: Implement Streaming Readers (Source classes)
+1. **KeyPointsWriter**: Extracted `UpdatePreviousFrameState()` method to eliminate duplicated logic in `Dispose()` and `DisposeAsync()`
 
-Both protocols need `IAsyncEnumerable`-based readers:
+### Async Best Practices
 
-```csharp
-// KeyPoints
-public interface IKeyPointsSource : IDisposable, IAsyncDisposable
-{
-    IAsyncEnumerable<KeyPointsFrame> ReadFramesAsync(CancellationToken ct = default);
-}
+1. **ConfigureAwait(false)**: Added to all async methods in library code:
+   - `KeyPointsSource.ReadFramesAsync()`
+   - `KeyPointsWriter.DisposeAsync()`
+   - `SegmentationResultSource.ReadFramesAsync()`
+   - `SegmentationResultWriter.FlushAsync()`
+   - `StreamFrameSink.WriteFrameAsync()`
+   - `StreamFrameSource.ReadFrameAsync()`
 
-// Segmentation
-public interface ISegmentationResultSource : IDisposable, IAsyncDisposable
-{
-    IAsyncEnumerable<SegmentationFrame> ReadFramesAsync(CancellationToken ct = default);
-}
-```
+---
 
-### Priority 3: Python Source Implementations
+## What Needs To Be Done (Python)
 
-Same pattern in Python using async generators:
+### Priority 1: Python Source Implementations
+
+Same pattern as C# using async generators:
 
 ```python
 class KeyPointsSource(IKeyPointsSource):
@@ -220,15 +217,14 @@ class KeyPointsSource(IKeyPointsSource):
             yield self._parse_frame(frame_data)
 ```
 
-### Priority 4: Fix Python Test Dependencies
+### Priority 2: Fix Python Test Dependencies
 
 Add `posix-ipc` to dependencies or make it optional.
 
-### Priority 5: Update Tests
+### Priority 3: Python Cross-Platform Tests
 
-- Update existing tests to use Sink/Source pattern
-- Add streaming tests (multiple frames, cancellation)
 - Add cross-platform tests (C# ↔ Python)
+- Ensure Python uses same framing as C# (varint for files)
 
 ---
 
@@ -280,5 +276,5 @@ See `REFACTORING_GUIDE.md` for:
 ---
 
 **Last Updated:** 2025-12-04
-**Status:** ⏳ In Progress - C# Transport Layer complete, protocol implementations ongoing
-**Next Step:** Implement `SegmentationResultSource` with `IAsyncEnumerable`
+**Status:** ✅ C# 100% COMPLETE - Ready for Python implementation
+**Next Step:** Implement Python Source classes with async generators

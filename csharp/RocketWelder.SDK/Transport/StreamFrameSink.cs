@@ -47,7 +47,7 @@ namespace RocketWelder.SDK.Transport
             _stream.WriteVarint((uint)frameData.Length);
 
             // Write frame data
-            await _stream.WriteAsync(frameData);
+            await _stream.WriteAsync(frameData).ConfigureAwait(false);
         }
 
         public void Flush()
@@ -63,7 +63,7 @@ namespace RocketWelder.SDK.Transport
             if (_disposed)
                 throw new ObjectDisposedException(nameof(StreamFrameSink));
 
-            await _stream.FlushAsync();
+            await _stream.FlushAsync().ConfigureAwait(false);
         }
 
         public void Dispose()
@@ -81,7 +81,7 @@ namespace RocketWelder.SDK.Transport
             _disposed = true;
 
             if (!_leaveOpen)
-                await _stream.DisposeAsync();
+                await _stream.DisposeAsync().ConfigureAwait(false);
         }
     }
 }

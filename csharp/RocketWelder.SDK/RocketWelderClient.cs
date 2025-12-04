@@ -261,8 +261,8 @@ namespace RocketWelder.SDK
             // Ensure header is written (even if no instances appended)
             EnsureHeaderWritten();
 
-            // Write buffered frame atomically via sink
-            _frameSink.WriteFrame(_buffer.ToArray());
+            // Write buffered frame atomically via sink (zero-copy using GetBuffer)
+            _frameSink.WriteFrame(new ReadOnlySpan<byte>(_buffer.GetBuffer(), 0, (int)_buffer.Length));
             _frameSink.Flush();
         }
 
@@ -273,9 +273,9 @@ namespace RocketWelder.SDK
             // Ensure header is written (even if no instances appended)
             EnsureHeaderWritten();
 
-            // Write buffered frame atomically via sink
-            await _frameSink.WriteFrameAsync(_buffer.ToArray());
-            await _frameSink.FlushAsync();
+            // Write buffered frame atomically via sink (zero-copy using GetBuffer)
+            await _frameSink.WriteFrameAsync(new ReadOnlyMemory<byte>(_buffer.GetBuffer(), 0, (int)_buffer.Length)).ConfigureAwait(false);
+            await _frameSink.FlushAsync().ConfigureAwait(false);
         }
 
         public void Dispose()
@@ -286,8 +286,8 @@ namespace RocketWelder.SDK
             // Ensure header is written (even if no instances appended)
             EnsureHeaderWritten();
 
-            // Send complete frame atomically via sink
-            _frameSink.WriteFrame(_buffer.ToArray());
+            // Send complete frame atomically via sink (zero-copy using GetBuffer)
+            _frameSink.WriteFrame(new ReadOnlySpan<byte>(_buffer.GetBuffer(), 0, (int)_buffer.Length));
 
             // Clean up buffer
             _buffer.Dispose();
@@ -301,11 +301,11 @@ namespace RocketWelder.SDK
             // Ensure header is written (even if no instances appended)
             EnsureHeaderWritten();
 
-            // Send complete frame atomically via sink
-            await _frameSink.WriteFrameAsync(_buffer.ToArray());
+            // Send complete frame atomically via sink (zero-copy using GetBuffer)
+            await _frameSink.WriteFrameAsync(new ReadOnlyMemory<byte>(_buffer.GetBuffer(), 0, (int)_buffer.Length)).ConfigureAwait(false);
 
             // Clean up buffer
-            await _buffer.DisposeAsync();
+            await _buffer.DisposeAsync().ConfigureAwait(false);
         }
     }
 
@@ -471,7 +471,7 @@ namespace RocketWelder.SDK
             while (!cancellationToken.IsCancellationRequested && !_disposed)
             {
                 // Read next frame from transport
-                var frameData = await _frameSource.ReadFrameAsync(cancellationToken);
+                var frameData = await _frameSource.ReadFrameAsync(cancellationToken).ConfigureAwait(false);
                 if (frameData.IsEmpty)
                     yield break;
 
@@ -483,7 +483,11 @@ namespace RocketWelder.SDK
 
         private SegmentationFrame ParseFrame(ReadOnlyMemory<byte> frameData)
         {
-            using var stream = new MemoryStream(frameData.ToArray());
+            // Zero-copy: get underlying array segment without allocation
+            if (!MemoryMarshal.TryGetArray(frameData, out var segment))
+                throw new InvalidOperationException("Cannot get array segment from memory");
+
+            using var stream = new MemoryStream(segment.Array!, segment.Offset, segment.Count, writable: false);
 
             // Read header: [FrameId: 8B LE][Width: varint][Height: varint]
             Span<byte> frameIdBytes = stackalloc byte[8];
@@ -552,7 +556,7 @@ namespace RocketWelder.SDK
         {
             if (_disposed) return;
             _disposed = true;
-            await _frameSource.DisposeAsync();
+            await _frameSource.DisposeAsync().ConfigureAwait(false);
         }
     }
 
