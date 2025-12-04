@@ -7,6 +7,7 @@ using System.Linq;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
+using RocketWelder.SDK.Transport;
 using CliWrap;
 using CliWrap.Buffered;
 using Xunit;
@@ -17,8 +18,26 @@ namespace RocketWelder.SDK.Tests;
 public class SegmentationResultTests(ITestOutputHelper output)
 {
     private readonly ITestOutputHelper _output = output;
+
+    /// <summary>
+    /// Helper to read a single frame from a stream using the new Source API.
+    /// </summary>
+    private async Task<SegmentationFrame> ReadSingleFrameAsync(Stream stream)
+    {
+        stream.Position = 0;
+        var source = new StreamFrameSource(stream, leaveOpen: true);
+        var segSource = new SegmentationResultSource(source);
+
+        await foreach (var frame in segSource.ReadFramesAsync())
+        {
+            return frame;
+        }
+
+        throw new EndOfStreamException("No frame available");
+    }
+
     [Fact]
-    public void RoundTrip_SingleInstance_PreservesData()
+    public async Task RoundTrip_SingleInstance_PreservesData()
     {
         // Arrange
         ulong frameId = 42;
@@ -37,38 +56,32 @@ public class SegmentationResultTests(ITestOutputHelper output)
         using var stream = new MemoryStream();
 
         // Act - Write
-        using (var writer = new SegmentationResultWriter(frameId, width, height, stream))
+        using (var writer = new SegmentationResultWriter(frameId, width, height, stream, leaveOpen: true))
         {
             writer.Append(classId, instanceId, points);
         }
 
         // Act - Read
-        stream.Position = 0;
-        using var reader = new SegmentationResultReader(stream);
+        var frame = await ReadSingleFrameAsync(stream);
 
-        var metadata = reader.Metadata;
-        Assert.Equal(frameId, metadata.FrameId);
-        Assert.Equal(width, metadata.Width);
-        Assert.Equal(height, metadata.Height);
+        Assert.Equal(frameId, frame.FrameId);
+        Assert.Equal(width, frame.Width);
+        Assert.Equal(height, frame.Height);
+        Assert.Single(frame.Instances);
 
-        Assert.True(reader.TryReadNext(out var instance));
-        using (instance)
+        var instance = frame.Instances[0];
+        Assert.Equal(classId, instance.ClassId);
+        Assert.Equal(instanceId, instance.InstanceId);
+        Assert.Equal(points.Length, instance.Points.Length);
+
+        for (int i = 0; i < points.Length; i++)
         {
-            Assert.Equal(classId, instance.ClassId);
-            Assert.Equal(instanceId, instance.InstanceId);
-            Assert.Equal(points.Length, instance.Points.Length);
-
-            for (int i = 0; i < points.Length; i++)
-            {
-                Assert.Equal(points[i], instance.Points[i]);
-            }
+            Assert.Equal(points[i], instance.Points.Span[i]);
         }
-
-        Assert.False(reader.TryReadNext(out _));
     }
 
     [Fact]
-    public void RoundTrip_MultipleInstances_PreservesData()
+    public async Task RoundTrip_MultipleInstances_PreservesData()
     {
         // Arrange
         ulong frameId = 100;
@@ -85,7 +98,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         using var stream = new MemoryStream();
 
         // Act - Write
-        using (var writer = new SegmentationResultWriter(frameId, width, height, stream))
+        using (var writer = new SegmentationResultWriter(frameId, width, height, stream, leaveOpen: true))
         {
             foreach (var (classId, instanceId, points) in instances)
             {
@@ -94,33 +107,29 @@ public class SegmentationResultTests(ITestOutputHelper output)
         }
 
         // Act - Read
-        stream.Position = 0;
-        using var reader = new SegmentationResultReader(stream);
+        var frame = await ReadSingleFrameAsync(stream);
 
-        var metadata = reader.Metadata;
-        Assert.Equal(frameId, metadata.FrameId);
+        Assert.Equal(frameId, frame.FrameId);
+        Assert.Equal(instances.Length, frame.Instances.Count);
 
         for (int i = 0; i < instances.Length; i++)
         {
-            Assert.True(reader.TryReadNext(out var instance));
-            using (instance)
-            {
-                Assert.Equal(instances[i].ClassId, instance.ClassId);
-                Assert.Equal(instances[i].InstanceId, instance.InstanceId);
-                Assert.Equal(instances[i].Points.Length, instance.Points.Length);
+            var expected = instances[i];
+            var actual = frame.Instances[i];
 
-                for (int j = 0; j < instances[i].Points.Length; j++)
-                {
-                    Assert.Equal(instances[i].Points[j], instance.Points[j]);
-                }
+            Assert.Equal(expected.ClassId, actual.ClassId);
+            Assert.Equal(expected.InstanceId, actual.InstanceId);
+            Assert.Equal(expected.Points.Length, actual.Points.Length);
+
+            for (int j = 0; j < expected.Points.Length; j++)
+            {
+                Assert.Equal(expected.Points[j], actual.Points.Span[j]);
             }
         }
-
-        Assert.False(reader.TryReadNext(out _));
     }
 
     [Fact]
-    public void RoundTrip_EmptyPoints_PreservesData()
+    public async Task RoundTrip_EmptyPoints_PreservesData()
     {
         // Arrange
         ulong frameId = 1;
@@ -133,23 +142,23 @@ public class SegmentationResultTests(ITestOutputHelper output)
         using var stream = new MemoryStream();
 
         // Act - Write
-        using (var writer = new SegmentationResultWriter(frameId, width, height, stream))
+        using (var writer = new SegmentationResultWriter(frameId, width, height, stream, leaveOpen: true))
         {
             writer.Append(classId, instanceId, points);
         }
 
         // Act - Read
-        stream.Position = 0;
-        using var reader = new SegmentationResultReader(stream);
+        var frame = await ReadSingleFrameAsync(stream);
 
-        Assert.True(reader.TryReadNext(out var instance));
+        Assert.Single(frame.Instances);
+        var instance = frame.Instances[0];
         Assert.Equal(classId, instance.ClassId);
         Assert.Equal(instanceId, instance.InstanceId);
         Assert.Equal(0, instance.Points.Length);
     }
 
     [Fact]
-    public void RoundTrip_LargeContour_PreservesData()
+    public async Task RoundTrip_LargeContour_PreservesData()
     {
         // Arrange
         ulong frameId = 999;
@@ -171,37 +180,34 @@ public class SegmentationResultTests(ITestOutputHelper output)
         using var stream = new MemoryStream();
 
         // Act - Write
-        using (var writer = new SegmentationResultWriter(frameId, width, height, stream))
+        using (var writer = new SegmentationResultWriter(frameId, width, height, stream, leaveOpen: true))
         {
             writer.Append(classId, instanceId, points);
         }
-        
-        output.WriteLine($"Wrote {points.Count} is {stream.Position}B in size");
+
+        output.WriteLine($"Wrote {points.Count} points in {stream.Position}B");
+
         // Act - Read
-        stream.Position = 0;
-        using var reader = new SegmentationResultReader(stream);
+        var frame = await ReadSingleFrameAsync(stream);
 
-        var metadata = reader.Metadata;
-        Assert.Equal(frameId, metadata.FrameId);
-        Assert.Equal(width, metadata.Width);
-        Assert.Equal(height, metadata.Height);
+        Assert.Equal(frameId, frame.FrameId);
+        Assert.Equal(width, frame.Width);
+        Assert.Equal(height, frame.Height);
+        Assert.Single(frame.Instances);
 
-        Assert.True(reader.TryReadNext(out var instance));
-        using (instance)
+        var instance = frame.Instances[0];
+        Assert.Equal(classId, instance.ClassId);
+        Assert.Equal(instanceId, instance.InstanceId);
+        Assert.Equal(points.Count, instance.Points.Length);
+
+        for (int i = 0; i < points.Count; i++)
         {
-            Assert.Equal(classId, instance.ClassId);
-            Assert.Equal(instanceId, instance.InstanceId);
-            Assert.Equal(points.Count, instance.Points.Length);
-
-            for (int i = 0; i < points.Count; i++)
-            {
-                Assert.Equal(points[i], instance.Points[i]);
-            }
+            Assert.Equal(points[i], instance.Points.Span[i]);
         }
     }
 
     [Fact]
-    public void RoundTrip_NegativeDeltas_PreservesData()
+    public async Task RoundTrip_NegativeDeltas_PreservesData()
     {
         // Arrange - Test points with negative deltas
         Point[] points = new[]
@@ -216,29 +222,26 @@ public class SegmentationResultTests(ITestOutputHelper output)
         using var stream = new MemoryStream();
 
         // Act - Write
-        using (var writer = new SegmentationResultWriter(1, 200, 200, stream))
+        using (var writer = new SegmentationResultWriter(1, 200, 200, stream, leaveOpen: true))
         {
             writer.Append(1, 1, points);
         }
 
         // Act - Read
-        stream.Position = 0;
-        using var reader = new SegmentationResultReader(stream);
+        var frame = await ReadSingleFrameAsync(stream);
 
-        Assert.True(reader.TryReadNext(out var instance));
-        using (instance)
+        Assert.Single(frame.Instances);
+        var instance = frame.Instances[0];
+        Assert.Equal(points.Length, instance.Points.Length);
+
+        for (int i = 0; i < points.Length; i++)
         {
-            Assert.Equal(points.Length, instance.Points.Length);
-
-            for (int i = 0; i < points.Length; i++)
-            {
-                Assert.Equal(points[i], instance.Points[i]);
-            }
+            Assert.Equal(points[i], instance.Points.Span[i]);
         }
     }
 
     [Fact]
-    public void ToNormalized_ConvertsToFloatRange()
+    public async Task ToNormalized_ConvertsToFloatRange()
     {
         // Arrange
         uint width = 1920;
@@ -251,128 +254,32 @@ public class SegmentationResultTests(ITestOutputHelper output)
         };
 
         using var stream = new MemoryStream();
-        using (var writer = new SegmentationResultWriter(1, width, height, stream))
+        using (var writer = new SegmentationResultWriter(1, width, height, stream, leaveOpen: true))
         {
             writer.Append(1, 1, points);
         }
 
-        stream.Position = 0;
-        using var reader = new SegmentationResultReader(stream);
-        reader.TryReadNext(out var instance);
-
-        using (instance)
-        {
-            // Act
-            var normalized = instance.ToNormalized(width, height);
-
-            // Assert
-            Assert.Equal(3, normalized.Length);
-            Assert.Equal(0f, normalized[0].X, precision: 5);
-            Assert.Equal(0f, normalized[0].Y, precision: 5);
-            Assert.Equal(1f, normalized[1].X, precision: 5);
-            Assert.Equal(1f, normalized[1].Y, precision: 5);
-            Assert.Equal(0.5f, normalized[2].X, precision: 5);
-            Assert.Equal(0.5f, normalized[2].Y, precision: 5);
-        }
-    }
-
-    [Fact]
-    public void ToArray_CopiesPoints()
-    {
-        // Arrange
-        Point[] originalPoints = new[]
-        {
-            new Point(10, 20),
-            new Point(30, 40)
-        };
-
-        using var stream = new MemoryStream();
-        using (var writer = new SegmentationResultWriter(1, 100, 100, stream))
-        {
-            writer.Append(1, 1, originalPoints);
-        }
-
-        stream.Position = 0;
-        using var reader = new SegmentationResultReader(stream);
-        reader.TryReadNext(out var instance);
-
-        using (instance)
-        {
-            // Act
-            var copiedPoints = instance.ToArray();
-
-            // Assert
-            Assert.Equal(originalPoints.Length, copiedPoints.Length);
-            for (int i = 0; i < originalPoints.Length; i++)
-            {
-                Assert.Equal(originalPoints[i], copiedPoints[i]);
-            }
-        }
-    }
-
-    [Fact]
-    public void Reader_DisposesMemoryPoolBuffer()
-    {
-        // Arrange
-        Point[] points = new[] { new Point(1, 2), new Point(3, 4) };
-        using var stream = new MemoryStream();
-
-        using (var writer = new SegmentationResultWriter(1, 100, 100, stream))
-        {
-            writer.Append(1, 1, points);
-        }
-
-        stream.Position = 0;
-
-        // Act & Assert - Should not throw
-        using (var reader = new SegmentationResultReader(stream))
-        {
-            reader.TryReadNext(out var instance);
-            using (instance)
-            {
-                // Use instance
-                Assert.Equal(2, instance.Points.Length);
-            } // Dispose should return buffer to pool
-        }
-    }
-
-    [Fact]
-    public void Reader_EachInstanceGetsOwnBuffer()
-    {
-        // Arrange
-        using var stream = new MemoryStream();
-
-        using (var writer = new SegmentationResultWriter(1, 100, 100, stream))
-        {
-            writer.Append(1, 1, new[] { new Point(1, 2) });
-            writer.Append(2, 1, new[] { new Point(3, 4) });
-        }
-
-        stream.Position = 0;
+        var frame = await ReadSingleFrameAsync(stream);
+        var instance = frame.Instances[0];
 
         // Act
-        using var reader = new SegmentationResultReader(stream);
+        var normalized = instance.ToNormalized(width, height);
 
-        reader.TryReadNext(out var instance1);
-        using (instance1)
-        {
-            Assert.Equal(1, instance1.Points.Length);
-            Assert.Equal(new Point(1, 2), instance1.Points[0]);
-        }
-
-        reader.TryReadNext(out var instance2);
-        using (instance2)
-        {
-            Assert.Equal(1, instance2.Points.Length);
-            Assert.Equal(new Point(3, 4), instance2.Points[0]);
-        }
+        // Assert
+        Assert.Equal(3, normalized.Length);
+        Assert.Equal(0f, normalized[0].X, precision: 5);
+        Assert.Equal(0f, normalized[0].Y, precision: 5);
+        Assert.Equal(1f, normalized[1].X, precision: 5);
+        Assert.Equal(1f, normalized[1].Y, precision: 5);
+        Assert.Equal(0.5f, normalized[2].X, precision: 5);
+        Assert.Equal(0.5f, normalized[2].Y, precision: 5);
     }
 
     [Fact]
-    public void Write_UsingSpan_WorksCorrectly()
+    public async Task Write_UsingSpan_WorksCorrectly()
     {
         // Arrange
-        Span<Point> points = stackalloc Point[]
+        Point[] points = new[]
         {
             new Point(1, 2),
             new Point(3, 4)
@@ -381,25 +288,22 @@ public class SegmentationResultTests(ITestOutputHelper output)
         using var stream = new MemoryStream();
 
         // Act
-        using (var writer = new SegmentationResultWriter(1, 100, 100, stream))
+        using (var writer = new SegmentationResultWriter(1, 100, 100, stream, leaveOpen: true))
         {
-            writer.Append(1, 1, points);
+            writer.Append(1, 1, points.AsSpan());
         }
 
         // Assert
-        stream.Position = 0;
-        using var reader = new SegmentationResultReader(stream);
-        Assert.True(reader.TryReadNext(out var instance));
-        using (instance)
-        {
-            Assert.Equal(2, instance.Points.Length);
-            Assert.Equal(new Point(1, 2), instance.Points[0]);
-            Assert.Equal(new Point(3, 4), instance.Points[1]);
-        }
+        var frame = await ReadSingleFrameAsync(stream);
+        Assert.Single(frame.Instances);
+        var instance = frame.Instances[0];
+        Assert.Equal(2, instance.Points.Length);
+        Assert.Equal(new Point(1, 2), instance.Points.Span[0]);
+        Assert.Equal(new Point(3, 4), instance.Points.Span[1]);
     }
 
     [Fact]
-    public void Write_UsingIEnumerable_WorksCorrectly()
+    public async Task Write_UsingIEnumerable_WorksCorrectly()
     {
         // Arrange
         IEnumerable<Point> points = new List<Point>
@@ -412,31 +316,27 @@ public class SegmentationResultTests(ITestOutputHelper output)
         using var stream = new MemoryStream();
 
         // Act
-        using (var writer = new SegmentationResultWriter(1, 100, 100, stream))
+        using (var writer = new SegmentationResultWriter(1, 100, 100, stream, leaveOpen: true))
         {
             writer.Append(1, 1, points);
         }
 
         // Assert
-        stream.Position = 0;
-        using var reader = new SegmentationResultReader(stream);
-        Assert.True(reader.TryReadNext(out var instance));
-        using (instance)
-        {
-            Assert.Equal(3, instance.Points.Length);
-        }
+        var frame = await ReadSingleFrameAsync(stream);
+        Assert.Single(frame.Instances);
+        Assert.Equal(3, frame.Instances[0].Points.Length);
     }
 
     [Fact]
-    public void RoundTrip_MultipleFramesInOneStream_PreservesData()
+    public async Task RoundTrip_MultipleFramesInOneStream_PreservesData()
     {
         // Arrange
-        var frame1 = (FrameId: 1ul, Width: 640u, Height: 480u, Instances: new[]
+        var frame1Data = (FrameId: 1ul, Width: 640u, Height: 480u, Instances: new[]
         {
             (ClassId: (byte)1, InstanceId: (byte)1, Points: new[] { new Point(10, 20), new Point(30, 40) })
         });
 
-        var frame2 = (FrameId: 2ul, Width: 1920u, Height: 1080u, Instances: new[]
+        var frame2Data = (FrameId: 2ul, Width: 1920u, Height: 1080u, Instances: new[]
         {
             (ClassId: (byte)2, InstanceId: (byte)1, Points: new[] { new Point(100, 200) }),
             (ClassId: (byte)3, InstanceId: (byte)1, Points: new[] { new Point(500, 600), new Point(510, 610), new Point(520, 620) })
@@ -445,167 +345,137 @@ public class SegmentationResultTests(ITestOutputHelper output)
         using var stream = new MemoryStream();
 
         // Act - Write two frames
-        using (var writer1 = new SegmentationResultWriter(frame1.FrameId, frame1.Width, frame1.Height, stream))
+        using (var writer1 = new SegmentationResultWriter(frame1Data.FrameId, frame1Data.Width, frame1Data.Height, stream, leaveOpen: true))
         {
-            foreach (var inst in frame1.Instances)
+            foreach (var inst in frame1Data.Instances)
             {
                 writer1.Append(inst.ClassId, inst.InstanceId, inst.Points);
             }
-            writer1.Flush();
         }
 
-        using (var writer2 = new SegmentationResultWriter(frame2.FrameId, frame2.Width, frame2.Height, stream))
+        using (var writer2 = new SegmentationResultWriter(frame2Data.FrameId, frame2Data.Width, frame2Data.Height, stream, leaveOpen: true))
         {
-            foreach (var inst in frame2.Instances)
+            foreach (var inst in frame2Data.Instances)
             {
                 writer2.Append(inst.ClassId, inst.InstanceId, inst.Points);
             }
         }
 
-        // Act - Read two frames
+        // Act - Read both frames using streaming API
         stream.Position = 0;
+        var source = new StreamFrameSource(stream, leaveOpen: true);
+        var segSource = new SegmentationResultSource(source);
 
-        // Read frame 1
-        using (var reader1 = new SegmentationResultReader(stream))
+        var frames = new List<SegmentationFrame>();
+        await foreach (var frame in segSource.ReadFramesAsync())
         {
-            var metadata1 = reader1.Metadata;
-            _output.WriteLine($"Frame 1: {metadata1.FrameId}, {metadata1.Width}x{metadata1.Height}");
-            Assert.Equal(frame1.FrameId, metadata1.FrameId);
-            Assert.Equal(frame1.Width, metadata1.Width);
-            Assert.Equal(frame1.Height, metadata1.Height);
-
-            for (int i = 0; i < frame1.Instances.Length; i++)
-            {
-                Assert.True(reader1.TryReadNext(out var instance));
-                using (instance)
-                {
-                    Assert.Equal(frame1.Instances[i].ClassId, instance.ClassId);
-                    Assert.Equal(frame1.Instances[i].InstanceId, instance.InstanceId);
-                    Assert.Equal(frame1.Instances[i].Points.Length, instance.Points.Length);
-                }
-            }
-
-            Assert.False(reader1.TryReadNext(out _));
+            frames.Add(frame);
         }
 
-        // Read frame 2
-        using (var reader2 = new SegmentationResultReader(stream))
-        {
-            var metadata2 = reader2.Metadata;
-            _output.WriteLine($"Frame 2: {metadata2.FrameId}, {metadata2.Width}x{metadata2.Height}");
-            Assert.Equal(frame2.FrameId, metadata2.FrameId);
-            Assert.Equal(frame2.Width, metadata2.Width);
-            Assert.Equal(frame2.Height, metadata2.Height);
+        // Assert
+        Assert.Equal(2, frames.Count);
 
-            for (int i = 0; i < frame2.Instances.Length; i++)
-            {
-                Assert.True(reader2.TryReadNext(out var instance));
-                using (instance)
-                {
-                    Assert.Equal(frame2.Instances[i].ClassId, instance.ClassId);
-                    Assert.Equal(frame2.Instances[i].InstanceId, instance.InstanceId);
-                    Assert.Equal(frame2.Instances[i].Points.Length, instance.Points.Length);
-                }
-            }
+        // Verify frame 1
+        var frame1 = frames[0];
+        _output.WriteLine($"Frame 1: {frame1.FrameId}, {frame1.Width}x{frame1.Height}");
+        Assert.Equal(frame1Data.FrameId, frame1.FrameId);
+        Assert.Equal(frame1Data.Width, frame1.Width);
+        Assert.Equal(frame1Data.Height, frame1.Height);
+        Assert.Single(frame1.Instances);
+        Assert.Equal(frame1Data.Instances[0].ClassId, frame1.Instances[0].ClassId);
 
-            Assert.False(reader2.TryReadNext(out _));
-        }
+        // Verify frame 2
+        var frame2 = frames[1];
+        _output.WriteLine($"Frame 2: {frame2.FrameId}, {frame2.Width}x{frame2.Height}");
+        Assert.Equal(frame2Data.FrameId, frame2.FrameId);
+        Assert.Equal(frame2Data.Width, frame2.Width);
+        Assert.Equal(frame2Data.Height, frame2.Height);
+        Assert.Equal(2, frame2.Instances.Count);
     }
 
     [Fact]
-    public void Points_CachingPattern_AvoidOverhead()
-    {
-        // Arrange
-        var points = Enumerable.Range(0, 100).Select(i => new Point(i, i * 2)).ToArray();
-
-        using var stream = new MemoryStream();
-        using (var writer = new SegmentationResultWriter(1, 1920, 1080, stream))
-        {
-            writer.Append(1, 1, points);
-        }
-
-        stream.Position = 0;
-        using var reader = new SegmentationResultReader(stream);
-        reader.TryReadNext(out var instance);
-
-        using (instance)
-        {
-            // Demonstrate correct caching pattern to avoid repeated property access overhead
-            var cachedPoints = instance.Points;  // Cache span - IMPORTANT for performance!
-
-            int sum = 0;
-            for (int i = 0; i < cachedPoints.Length; i++)
-            {
-                sum += cachedPoints[i].X;  // Use cached span
-            }
-
-            _output.WriteLine($"Sum of X coordinates: {sum}");
-            Assert.Equal(points.Sum(p => p.X), sum);
-        }
-    }
-
-    [Fact]
-    public void ToNormalized_SpanOverload_ZeroAllocation()
-    {
-        // Arrange
-        var points = new[] { new Point(0, 0), new Point(1920, 1080), new Point(960, 540) };
-        uint width = 1920;
-        uint height = 1080;
-
-        using var stream = new MemoryStream();
-        using (var writer = new SegmentationResultWriter(1, width, height, stream))
-        {
-            writer.Append(1, 1, points);
-        }
-
-        stream.Position = 0;
-        using var reader = new SegmentationResultReader(stream);
-        reader.TryReadNext(out var instance);
-
-        using (instance)
-        {
-            // Act - Use span-based overload (zero allocation)
-            Span<PointF> buffer = stackalloc PointF[points.Length];
-            instance.ToNormalized(width, height, buffer);
-
-            // Assert
-            Assert.Equal(0f, buffer[0].X, precision: 5);
-            Assert.Equal(0f, buffer[0].Y, precision: 5);
-            Assert.Equal(1f, buffer[1].X, precision: 5);
-            Assert.Equal(1f, buffer[1].Y, precision: 5);
-            Assert.Equal(0.5f, buffer[2].X, precision: 5);
-            Assert.Equal(0.5f, buffer[2].Y, precision: 5);
-
-            _output.WriteLine($"Normalized points (zero-allocation): ({buffer[0].X}, {buffer[0].Y}), ({buffer[1].X}, {buffer[1].Y}), ({buffer[2].X}, {buffer[2].Y})");
-        }
-    }
-
-    [Fact]
-    public void Flush_WithoutDispose_FlushesStream()
+    public async Task Flush_WithoutDispose_FlushesStream()
     {
         // Arrange
         var points = new[] { new Point(10, 20) };
         using var stream = new MemoryStream();
-        using var writer = new SegmentationResultWriter(1, 100, 100, stream);
+        using var writer = new SegmentationResultWriter(1, 100, 100, stream, leaveOpen: true);
 
         // Act
         writer.Append(1, 1, points);
-        writer.Flush();  // Flush without disposing
-
-        // Assert - Data should be written
-        Assert.True(stream.Length > 0);
-        _output.WriteLine($"Stream length after flush: {stream.Length} bytes");
-
-        // Can still write more
-        writer.Append(2, 1, points);
         writer.Flush();
 
+        // Assert - Data should be written (including length prefix)
         Assert.True(stream.Length > 0);
-        _output.WriteLine($"Stream length after second flush: {stream.Length} bytes");
+        _output.WriteLine($"Stream length after flush: {stream.Length} bytes");
     }
 
     [Fact]
-    public void CrossPlatform_CSharpWritesPythonReads_PreservesData()
+    public async Task Sink_CreatesMultipleWriters()
+    {
+        // Arrange
+        using var stream = new MemoryStream();
+        var frameSink = new StreamFrameSink(stream, leaveOpen: true);
+        using var sink = new SegmentationResultSink(frameSink);
+
+        // Act - Write multiple frames via sink
+        using (var writer1 = sink.CreateWriter(1, 640, 480))
+        {
+            writer1.Append(1, 1, new[] { new Point(10, 20) });
+        }
+
+        using (var writer2 = sink.CreateWriter(2, 1920, 1080))
+        {
+            writer2.Append(2, 1, new[] { new Point(100, 200) });
+        }
+
+        // Assert - Read back
+        stream.Position = 0;
+        var source = new StreamFrameSource(stream, leaveOpen: true);
+        var segSource = new SegmentationResultSource(source);
+
+        var frames = new List<SegmentationFrame>();
+        await foreach (var frame in segSource.ReadFramesAsync())
+        {
+            frames.Add(frame);
+        }
+
+        Assert.Equal(2, frames.Count);
+        Assert.Equal(1ul, frames[0].FrameId);
+        Assert.Equal(2ul, frames[1].FrameId);
+    }
+
+    [Fact]
+    public async Task Source_StreamsFramesAsyncEnumerable()
+    {
+        // Arrange
+        using var stream = new MemoryStream();
+
+        // Write 3 frames
+        for (int i = 0; i < 3; i++)
+        {
+            using var writer = new SegmentationResultWriter((ulong)i, 640, 480, stream, leaveOpen: true);
+            writer.Append(1, 1, new[] { new Point(i * 10, i * 20) });
+        }
+
+        // Act - Stream frames
+        stream.Position = 0;
+        var source = new StreamFrameSource(stream, leaveOpen: true);
+        var segSource = new SegmentationResultSource(source);
+
+        int frameCount = 0;
+        await foreach (var frame in segSource.ReadFramesAsync())
+        {
+            Assert.Equal((ulong)frameCount, frame.FrameId);
+            frameCount++;
+        }
+
+        // Assert
+        Assert.Equal(3, frameCount);
+    }
+
+    [Fact]
+    public async Task CrossPlatform_CSharpWritesPythonReads_PreservesData()
     {
         // Arrange
         var testDir = Path.Combine(Path.GetTempPath(), "rocket-welder-test");
@@ -625,7 +495,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
 
         try
         {
-            // Act - C# writes
+            // Act - C# writes (using StreamFrameSink for framing)
             using (var stream = File.Create(testFile))
             using (var writer = new SegmentationResultWriter(frameId, width, height, stream))
             {
@@ -654,7 +524,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
     }
 
     [Fact]
-    public void CrossPlatform_PythonWritesCSharpReads_PreservesData()
+    public async Task CrossPlatform_PythonWritesCSharpReads_PreservesData()
     {
         // Arrange
         var testDir = Path.Combine(Path.GetTempPath(), "rocket-welder-test");
@@ -677,55 +547,55 @@ public class SegmentationResultTests(ITestOutputHelper output)
         {
             _output.WriteLine($"Python test file not found: {testFile}");
             _output.WriteLine("Run Python tests first to generate test file.");
-            // Skip test instead of failing
             return;
         }
 
         try
         {
-            // Act - C# reads Python file
+            // Act - C# reads Python file using streaming API
             using var stream = File.OpenRead(testFile);
-            using var reader = new SegmentationResultReader(stream);
+            var source = new StreamFrameSource(stream, leaveOpen: false);
+            var segSource = new SegmentationResultSource(source);
 
-            var metadata = reader.Metadata;
+            SegmentationFrame? readFrame = null;
+            await foreach (var frame in segSource.ReadFramesAsync())
+            {
+                readFrame = frame;
+                break; // Only read first frame
+            }
+
+            Assert.NotNull(readFrame);
+            var actualFrame = readFrame.Value;
 
             // Verify metadata
-            Assert.Equal(expectedFrameId, metadata.FrameId);
-            Assert.Equal(expectedWidth, metadata.Width);
-            Assert.Equal(expectedHeight, metadata.Height);
+            Assert.Equal(expectedFrameId, actualFrame.FrameId);
+            Assert.Equal(expectedWidth, actualFrame.Width);
+            Assert.Equal(expectedHeight, actualFrame.Height);
 
-            _output.WriteLine($"Read frame: {metadata.FrameId}, Size: {metadata.Width}x{metadata.Height}");
+            _output.WriteLine($"Read frame: {actualFrame.FrameId}, Size: {actualFrame.Width}x{actualFrame.Height}");
 
-            // Verify instances - process one at a time (ref structs can't be stored in List)
-            int instanceCount = 0;
+            // Verify instances
+            Assert.Equal(expectedInstances.Length, actualFrame.Instances.Count);
+
             for (int i = 0; i < expectedInstances.Length; i++)
             {
                 var expected = expectedInstances[i];
-
-                Assert.True(reader.TryReadNext(out var actual), $"Expected instance {i} but got end of stream");
+                var actual = actualFrame.Instances[i];
 
                 Assert.Equal(expected.ClassId, actual.ClassId);
                 Assert.Equal(expected.InstanceId, actual.InstanceId);
-
-                var actualPoints = actual.Points;
-                Assert.Equal(expected.Points.Length, actualPoints.Length);
+                Assert.Equal(expected.Points.Length, actual.Points.Length);
 
                 for (int j = 0; j < expected.Points.Length; j++)
                 {
-                    Assert.Equal(expected.Points[j].X, actualPoints[j].X);
-                    Assert.Equal(expected.Points[j].Y, actualPoints[j].Y);
+                    Assert.Equal(expected.Points[j].X, actual.Points.Span[j].X);
+                    Assert.Equal(expected.Points[j].Y, actual.Points.Span[j].Y);
                 }
 
-                _output.WriteLine($"Instance {i}: class={actual.ClassId}, instance={actual.InstanceId}, points={actualPoints.Length}");
-
-                actual.Dispose();
-                instanceCount++;
+                _output.WriteLine($"Instance {i}: class={actual.ClassId}, instance={actual.InstanceId}, points={actual.Points.Length}");
             }
 
-            // Verify no more instances
-            Assert.False(reader.TryReadNext(out var extraInstance), "Expected end of stream but got another instance");
-
-            _output.WriteLine($"Successfully read Python-written file! Verified {instanceCount} instances.");
+            _output.WriteLine($"Successfully read Python-written file! Verified {expectedInstances.Length} instances.");
         }
         catch (FileNotFoundException)
         {
@@ -842,37 +712,43 @@ public class SegmentationResultTests(ITestOutputHelper output)
         Assert.Equal(0, result.ExitCode);
         Assert.True(File.Exists(testFile), "Python should create file");
 
-        // Act - C# reads
+        // Act - C# reads using streaming API
         using var stream = File.OpenRead(testFile);
-        using var reader = new SegmentationResultReader(stream);
+        var source = new StreamFrameSource(stream, leaveOpen: false);
+        var segSource = new SegmentationResultSource(source);
 
-        var metadata = reader.Metadata;
+        SegmentationFrame? readFrame = null;
+        await foreach (var frame in segSource.ReadFramesAsync())
+        {
+            readFrame = frame;
+            break;
+        }
+
+        Assert.NotNull(readFrame);
+        var actualFrame = readFrame.Value;
 
         // Assert
-        Assert.Equal(frameId, metadata.FrameId);
-        Assert.Equal(width, metadata.Width);
-        Assert.Equal(height, metadata.Height);
+        Assert.Equal(frameId, actualFrame.FrameId);
+        Assert.Equal(width, actualFrame.Width);
+        Assert.Equal(height, actualFrame.Height);
 
         // Read first instance
-        Assert.True(reader.TryReadNext(out var inst1));
+        Assert.Equal(2, actualFrame.Instances.Count);
+
+        var inst1 = actualFrame.Instances[0];
         Assert.Equal(7, inst1.ClassId);
         Assert.Equal(1, inst1.InstanceId);
         Assert.Equal(3, inst1.Points.Length);
-        Assert.Equal(new Point(5, 10), inst1.Points[0]);
-        Assert.Equal(new Point(15, 20), inst1.Points[1]);
-        Assert.Equal(new Point(25, 30), inst1.Points[2]);
-        inst1.Dispose();
+        Assert.Equal(new Point(5, 10), inst1.Points.Span[0]);
+        Assert.Equal(new Point(15, 20), inst1.Points.Span[1]);
+        Assert.Equal(new Point(25, 30), inst1.Points.Span[2]);
 
         // Read second instance
-        Assert.True(reader.TryReadNext(out var inst2));
+        var inst2 = actualFrame.Instances[1];
         Assert.Equal(8, inst2.ClassId);
         Assert.Equal(1, inst2.InstanceId);
         Assert.Equal(1, inst2.Points.Length);
-        Assert.Equal(new Point(100, 100), inst2.Points[0]);
-        inst2.Dispose();
-
-        // No more instances
-        Assert.False(reader.TryReadNext(out var _));
+        Assert.Equal(new Point(100, 100), inst2.Points.Span[0]);
 
         _output.WriteLine("✓ C# successfully read Python-written file!");
     }
@@ -885,10 +761,10 @@ public class SegmentationResultTests(ITestOutputHelper output)
         Directory.CreateDirectory(testDir);
         var testFile = Path.Combine(testDir, "multiframe_test.bin");
 
-        var frame1 = (FrameId: (ulong)1, Width: (uint)640, Height: (uint)480,
+        var frame1Data = (FrameId: (ulong)1, Width: (uint)640, Height: (uint)480,
             Instances: new[] { (ClassId: (byte)1, InstanceId: (byte)1, Points: new[] { new Point(10, 20), new Point(30, 40) }) });
 
-        var frame2 = (FrameId: (ulong)2, Width: (uint)1920, Height: (uint)1080,
+        var frame2Data = (FrameId: (ulong)2, Width: (uint)1920, Height: (uint)1080,
             Instances: new[]
             {
                 (ClassId: (byte)2, InstanceId: (byte)1, Points: new[] { new Point(100, 200), new Point(150, 250) }),
@@ -898,15 +774,15 @@ public class SegmentationResultTests(ITestOutputHelper output)
         // Act - C# writes both frames
         using (var stream = File.Create(testFile))
         {
-            using (var writer1 = new SegmentationResultWriter(frame1.FrameId, frame1.Width, frame1.Height, stream))
+            using (var writer1 = new SegmentationResultWriter(frame1Data.FrameId, frame1Data.Width, frame1Data.Height, stream, leaveOpen: true))
             {
-                foreach (var (classId, instanceId, points) in frame1.Instances)
+                foreach (var (classId, instanceId, points) in frame1Data.Instances)
                     writer1.Append(classId, instanceId, points);
             }
 
-            using (var writer2 = new SegmentationResultWriter(frame2.FrameId, frame2.Width, frame2.Height, stream))
+            using (var writer2 = new SegmentationResultWriter(frame2Data.FrameId, frame2Data.Width, frame2Data.Height, stream, leaveOpen: true))
             {
-                foreach (var (classId, instanceId, points) in frame2.Instances)
+                foreach (var (classId, instanceId, points) in frame2Data.Instances)
                     writer2.Append(classId, instanceId, points);
             }
         }
@@ -919,55 +795,40 @@ public class SegmentationResultTests(ITestOutputHelper output)
 
         Assert.Equal(0, result1.ExitCode);
         var json1 = JsonDocument.Parse(result1.Output);
-        Assert.Equal(frame1.FrameId, json1.RootElement.GetProperty("frame_id").GetUInt64());
-        Assert.Equal(frame1.Width, json1.RootElement.GetProperty("width").GetUInt32());
-        Assert.Equal(frame1.Height, json1.RootElement.GetProperty("height").GetUInt32());
+        Assert.Equal(frame1Data.FrameId, json1.RootElement.GetProperty("frame_id").GetUInt64());
+        Assert.Equal(frame1Data.Width, json1.RootElement.GetProperty("width").GetUInt32());
+        Assert.Equal(frame1Data.Height, json1.RootElement.GetProperty("height").GetUInt32());
         Assert.Equal(1, json1.RootElement.GetProperty("instances").GetArrayLength());
 
         _output.WriteLine("✓ Python read frame 1 successfully");
 
-        // Now read frame 2 - Python should continue reading from the stream
-        // Note: Current Python CLI reads one frame at a time, so we need to call it again
-        // For a true multi-frame test, we'd need to track stream position
-
-        // Alternative: Have C# re-read to verify the write was correct
+        // Verify C# can also read both frames using streaming API
         using var readStream = File.OpenRead(testFile);
+        var source = new StreamFrameSource(readStream, leaveOpen: false);
+        var segSource = new SegmentationResultSource(source);
 
-        using (var reader1 = new SegmentationResultReader(readStream))
+        var frames = new List<SegmentationFrame>();
+        await foreach (var frame in segSource.ReadFramesAsync())
         {
-            var metadata1 = reader1.Metadata;
-            Assert.Equal(frame1.FrameId, metadata1.FrameId);
-            Assert.Equal(frame1.Width, metadata1.Width);
-            Assert.Equal(frame1.Height, metadata1.Height);
-
-            Assert.True(reader1.TryReadNext(out var inst));
-            Assert.Equal(1, inst.ClassId);
-            inst.Dispose();
-
-            Assert.False(reader1.TryReadNext(out var _));
+            frames.Add(frame);
         }
 
-        using (var reader2 = new SegmentationResultReader(readStream))
-        {
-            var metadata2 = reader2.Metadata;
-            Assert.Equal(frame2.FrameId, metadata2.FrameId);
-            Assert.Equal(frame2.Width, metadata2.Width);
-            Assert.Equal(frame2.Height, metadata2.Height);
+        Assert.Equal(2, frames.Count);
 
-            // Read first instance
-            Assert.True(reader2.TryReadNext(out var inst1));
-            Assert.Equal(2, inst1.ClassId);
-            Assert.Equal(2, inst1.Points.Length);
-            inst1.Dispose();
+        var frame1 = frames[0];
+        Assert.Equal(frame1Data.FrameId, frame1.FrameId);
+        Assert.Equal(frame1Data.Width, frame1.Width);
+        Assert.Equal(frame1Data.Height, frame1.Height);
+        Assert.Single(frame1.Instances);
+        Assert.Equal(1, frame1.Instances[0].ClassId);
 
-            // Read second instance
-            Assert.True(reader2.TryReadNext(out var inst2));
-            Assert.Equal(3, inst2.ClassId);
-            Assert.Equal(3, inst2.Points.Length);
-            inst2.Dispose();
-
-            Assert.False(reader2.TryReadNext(out var _));
-        }
+        var frame2 = frames[1];
+        Assert.Equal(frame2Data.FrameId, frame2.FrameId);
+        Assert.Equal(frame2Data.Width, frame2.Width);
+        Assert.Equal(frame2Data.Height, frame2.Height);
+        Assert.Equal(2, frame2.Instances.Count);
+        Assert.Equal(2, frame2.Instances[0].ClassId);
+        Assert.Equal(3, frame2.Instances[1].ClassId);
 
         _output.WriteLine("✓ C# verified both frames successfully - multi-frame round-trip works!");
     }

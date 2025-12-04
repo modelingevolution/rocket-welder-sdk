@@ -130,141 +130,6 @@ namespace RocketWelder.SDK
         }
     }
 
-    /// <summary>
-    /// Metadata for a segmentation frame.
-    /// </summary>
-    public readonly struct SegmentationFrameMetadata
-    {
-        public readonly ulong FrameId;
-        public readonly uint Width;
-        public readonly uint Height;
-
-        public SegmentationFrameMetadata(ulong frameId, uint width, uint height)
-        {
-            FrameId = frameId;
-            Width = width;
-            Height = height;
-        }
-    }
-
-    /// <summary>
-    /// A single instance in a segmentation result (class + instance + contour points).
-    /// MUST be disposed to return memory to pool. Similar to SKBitmap in SkiaSharp.
-    /// Ref struct ensures stack-only allocation and prevents accidental storage in heap collections.
-    /// </summary>
-    public readonly ref struct SegmentationInstance
-    {
-        public readonly byte ClassId;
-        public readonly byte InstanceId;
-        private readonly IMemoryOwner<Point>? _memoryOwner;  // Null if empty
-        private readonly int _count;
-
-        public ReadOnlySpan<Point> Points => _memoryOwner != null
-            ? _memoryOwner.Memory.Span.Slice(0, _count)
-            : ReadOnlySpan<Point>.Empty;
-
-        internal SegmentationInstance(byte classId, byte instanceId, IMemoryOwner<Point>? memoryOwner, int count)
-        {
-            ClassId = classId;
-            InstanceId = instanceId;
-            _memoryOwner = memoryOwner;
-            _count = count;
-        }
-
-        /// <summary>
-        /// Converts points to normalized coordinates [0-1] range into caller-provided buffer.
-        /// Zero-allocation version.
-        /// </summary>
-        public void ToNormalized(uint width, uint height, Span<PointF> destination)
-        {
-            if (width == 0 || height == 0)
-                throw new ArgumentException("Width and height must be greater than zero");
-
-            var points = Points;  // Cache span to avoid repeated property access
-            if (destination.Length < points.Length)
-                throw new ArgumentException($"Destination buffer too small. Required: {points.Length}, Available: {destination.Length}");
-
-            float widthF = width;
-            float heightF = height;
-
-            for (int i = 0; i < points.Length; i++)
-            {
-                destination[i] = new PointF(points[i].X / widthF, points[i].Y / heightF);
-            }
-        }
-
-        /// <summary>
-        /// Converts points to normalized coordinates [0-1] range.
-        /// Allocates new array.
-        /// </summary>
-        public PointF[] ToNormalized(uint width, uint height)
-        {
-            var result = new PointF[Points.Length];
-            ToNormalized(width, height, result);
-            return result;
-        }
-
-        /// <summary>
-        /// Copies points to array in original pixel coordinates.
-        /// </summary>
-        public Point[] ToArray()
-        {
-            return Points.ToArray();
-        }
-
-        /// <summary>
-        /// Returns rented memory to pool. MUST be called when done with instance.
-        /// After Dispose(), Points span is invalid and must not be accessed.
-        /// </summary>
-        public void Dispose()
-        {
-            _memoryOwner?.Dispose();
-        }
-    }
-
-
-    /// <summary>
-    /// Simple frame sink that writes directly to stream without length-prefix framing.
-    /// Used for backward compatibility with direct stream usage (e.g., MemoryStream tests).
-    /// </summary>
-    internal class RawStreamSink : IFrameSink
-    {
-        private readonly Stream _stream;
-        private bool _disposed;
-
-        public RawStreamSink(Stream stream)
-        {
-            _stream = stream ?? throw new ArgumentNullException(nameof(stream));
-        }
-
-        public void WriteFrame(ReadOnlySpan<byte> frameData)
-        {
-            if (_disposed) throw new ObjectDisposedException(nameof(RawStreamSink));
-            _stream.Write(frameData);
-        }
-
-        public async ValueTask WriteFrameAsync(ReadOnlyMemory<byte> frameData)
-        {
-            if (_disposed) throw new ObjectDisposedException(nameof(RawStreamSink));
-            await _stream.WriteAsync(frameData);
-        }
-
-        public void Flush() => _stream.Flush();
-        public Task FlushAsync() => _stream.FlushAsync();
-
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _disposed = true;
-            // Don't dispose stream - leave open for caller
-        }
-
-        public ValueTask DisposeAsync()
-        {
-            Dispose();
-            return ValueTask.CompletedTask;
-        }
-    }
 
     class SegmentationResultWriter : ISegmentationResultWriter
     {
@@ -283,17 +148,15 @@ namespace RocketWelder.SDK
         private bool _disposed = false;
 
         /// <summary>
-        /// Creates a writer that writes directly to stream WITHOUT length-prefix framing.
-        /// Use this for backward compatibility with direct stream usage (e.g., tests with MemoryStream).
-        /// For transport-agnostic usage, use the IFrameSink constructor.
+        /// Creates a writer that writes to stream with varint length-prefix framing.
+        /// This is the consistent approach across both protocols.
         /// </summary>
-        public SegmentationResultWriter(ulong frameId, uint width, uint height, Stream destination)
+        public SegmentationResultWriter(ulong frameId, uint width, uint height, Stream destination, bool leaveOpen = false)
         {
             _frameId = frameId;
             _width = width;
             _height = height;
-            // Write directly to stream without framing for backward compatibility
-            _frameSink = new RawStreamSink(destination);
+            _frameSink = new StreamFrameSink(destination, leaveOpen);
         }
 
         /// <summary>
@@ -446,120 +309,6 @@ namespace RocketWelder.SDK
         }
     }
 
-    class SegmentationResultReader(Stream source) : ISegmentationResultReader
-    {
-        // ReadNext: We read [classId: 1B][instanceId: 1B][pointCount: varint][points: delta+varint...]
-        // Reconstruct points from delta + varint encoding
-        // Frame boundaries handled by transport layer
-        // Zero-allocation design: MemoryPool for buffers, caller must Dispose() instances
-
-        private readonly Stream _stream = source;
-        private readonly MemoryPool<Point> _memoryPool = MemoryPool<Point>.Shared;
-        private SegmentationFrameMetadata _metadata;
-        private bool _headerRead = false;
-        private bool _disposed = false;
-
-        // Max points per instance - prevents OOM attacks
-        private const int MaxPointsPerInstance = 10_000_000; // 10M points = ~80MB
-
-        private void EnsureHeaderRead()
-        {
-            if (_headerRead) return;
-
-            // Read FrameId (8 bytes, explicit little-endian for cross-platform compatibility)
-            Span<byte> frameIdBytes = stackalloc byte[8];
-            int read = _stream.Read(frameIdBytes);
-            if (read != 8) throw new EndOfStreamException("Failed to read FrameId");
-            ulong frameId = BinaryPrimitives.ReadUInt64LittleEndian(frameIdBytes);
-
-            // Read Width and Height as varints
-            uint width = _stream.ReadVarint();
-            uint height = _stream.ReadVarint();
-
-            _metadata = new SegmentationFrameMetadata(frameId, width, height);
-            _headerRead = true;
-        }
-
-        public SegmentationFrameMetadata Metadata
-        {
-            get
-            {
-                EnsureHeaderRead();
-                return _metadata;
-            }
-        }
-
-        public bool TryReadNext(out SegmentationInstance instance)
-        {
-            EnsureHeaderRead();
-
-            // Try to read classId and instanceId (buffered for performance)
-            Span<byte> header = stackalloc byte[2];
-            int bytesRead = _stream.Read(header);
-
-            if (bytesRead == 0)
-            {
-                // End of stream - no more instances
-                instance = default;
-                return false;
-            }
-
-            if (bytesRead != 2)
-                throw new EndOfStreamException("Unexpected end of stream reading instance header");
-
-            byte classId = header[0];
-            byte instanceId = header[1];
-
-            // Read point count with validation
-            uint pointCount = _stream.ReadVarint();
-            if (pointCount > MaxPointsPerInstance)
-                throw new InvalidDataException($"Point count {pointCount} exceeds maximum {MaxPointsPerInstance}");
-
-            if (pointCount == 0)
-            {
-                instance = new SegmentationInstance(classId, instanceId, null, 0);
-                return true;
-            }
-
-            // Rent buffer from MemoryPool
-            var memoryOwner = _memoryPool.Rent((int)pointCount);
-            var buffer = memoryOwner.Memory.Span;
-
-            try
-            {
-                // Read first point (absolute coordinates)
-                int x = _stream.ReadVarint().ZigZagDecode();
-                int y = _stream.ReadVarint().ZigZagDecode();
-                buffer[0] = new Point(x, y);
-
-                // Read remaining points (delta encoded)
-                for (int i = 1; i < pointCount; i++)
-                {
-                    int deltaX = _stream.ReadVarint().ZigZagDecode();
-                    int deltaY = _stream.ReadVarint().ZigZagDecode();
-                    x += deltaX;
-                    y += deltaY;
-                    buffer[i] = new Point(x, y);
-                }
-
-                // Return instance - caller MUST dispose to return memory to pool
-                instance = new SegmentationInstance(classId, instanceId, memoryOwner, (int)pointCount);
-                return true;
-            }
-            catch
-            {
-                // On error, return memory to pool immediately
-                memoryOwner.Dispose();
-                throw;
-            }
-        }
-
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _disposed = true;
-        }
-    }
 
     /// <summary>
     /// Writes segmentation results for a single frame.
@@ -602,27 +351,12 @@ namespace RocketWelder.SDK
         Task FlushAsync();
     }
 
-    /// <summary>
-    /// Reads segmentation results for a single frame.
-    /// Zero-allocation design using struct enumerators and buffer reuse.
-    /// </summary>
-    public interface ISegmentationResultReader : IDisposable
-    {
-        /// <summary>
-        /// Gets the frame metadata (frameId, width, height).
-        /// </summary>
-        SegmentationFrameMetadata Metadata { get; }
-
-        /// <summary>
-        /// Try to read the next instance. Returns false when no more instances available.
-        /// The Points buffer in the instance may be reused on next call - consume immediately.
-        /// </summary>
-        bool TryReadNext(out SegmentationInstance instance);
-    }
 
     /// <summary>
-    /// Factory for creating segmentation result writers per frame.
+    /// [DEPRECATED] Use ISegmentationResultSink instead.
+    /// Legacy factory interface for backward compatibility.
     /// </summary>
+    [Obsolete("Use ISegmentationResultSink instead. This interface will be removed in a future version.")]
     public interface ISegmentationResultStorage
     {
         /// <summary>
@@ -664,9 +398,9 @@ namespace RocketWelder.SDK
         public ulong FrameId { get; }
         public uint Width { get; }
         public uint Height { get; }
-        public IReadOnlyList<SegmentationInstanceData> Instances { get; }
+        public IReadOnlyList<SegmentationInstance> Instances { get; }
 
-        public SegmentationFrame(ulong frameId, uint width, uint height, IReadOnlyList<SegmentationInstanceData> instances)
+        public SegmentationFrame(ulong frameId, uint width, uint height, IReadOnlyList<SegmentationInstance> instances)
         {
             FrameId = frameId;
             Width = width;
@@ -676,16 +410,16 @@ namespace RocketWelder.SDK
     }
 
     /// <summary>
-    /// A single instance in a segmentation frame (heap-allocated version for streaming).
-    /// Unlike SegmentationInstance (ref struct), this can be stored in collections.
+    /// A single instance in a segmentation frame.
+    /// Contains class ID, instance ID, and contour points.
     /// </summary>
-    public readonly struct SegmentationInstanceData
+    public readonly struct SegmentationInstance
     {
         public byte ClassId { get; }
         public byte InstanceId { get; }
         public ReadOnlyMemory<Point> Points { get; }
 
-        public SegmentationInstanceData(byte classId, byte instanceId, Point[] points)
+        public SegmentationInstance(byte classId, byte instanceId, Point[] points)
         {
             ClassId = classId;
             InstanceId = instanceId;
@@ -761,7 +495,7 @@ namespace RocketWelder.SDK
             uint height = stream.ReadVarint();
 
             // Read instances until end of frame
-            var instances = new List<SegmentationInstanceData>();
+            var instances = new List<SegmentationInstance>();
 
             while (stream.Position < stream.Length)
             {
@@ -801,7 +535,7 @@ namespace RocketWelder.SDK
                     }
                 }
 
-                instances.Add(new SegmentationInstanceData(classId, instanceId, points));
+                instances.Add(new SegmentationInstance(classId, instanceId, points));
             }
 
             return new SegmentationFrame(frameId, width, height, instances);

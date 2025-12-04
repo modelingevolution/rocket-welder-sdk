@@ -11,24 +11,30 @@ namespace RocketWelder.SDK.Tests;
 
 public class KeyPointsProtocolTests
 {
-    private const string TestDefinitionJson = @"{
-  ""version"": ""1.0"",
-  ""compute_module_name"": ""TestModel"",
-  ""points"": {
-    ""nose"": 0,
-    ""left_eye"": 1,
-    ""right_eye"": 2,
-    ""left_shoulder"": 3,
-    ""right_shoulder"": 4
-  }
-}";
+    /// <summary>
+    /// Helper to read all frames from a stream using the streaming API.
+    /// </summary>
+    private async Task<List<KeyPointsFrame>> ReadAllFramesAsync(Stream stream)
+    {
+        stream.Position = 0;
+        var source = new StreamFrameSource(stream, leaveOpen: true);
+        var kpSource = new KeyPointsSource(source);
+
+        var frames = new List<KeyPointsFrame>();
+        await foreach (var frame in kpSource.ReadFramesAsync())
+        {
+            frames.Add(frame);
+        }
+
+        return frames;
+    }
 
     [Fact]
     public async Task SingleFrame_RoundTrip_PreservesData()
     {
         // Arrange
-        var stream = new MemoryStream();
-        var storage = new KeyPointsSink(stream);
+        using var stream = new MemoryStream();
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         var expectedKeypoints = new[]
         {
@@ -49,26 +55,21 @@ public class KeyPointsProtocolTests
         }
 
         // Act - Read
-        stream.Position = 0;
-        using var frameSource = new StreamFrameSource(stream);
-        var series = await storage.Read(TestDefinitionJson, frameSource);
+        var frames = await ReadAllFramesAsync(stream);
 
         // Assert
-        Assert.Equal("1.0", series.Version);
-        Assert.Equal("TestModel", series.ComputeModuleName);
-        Assert.Equal(5, series.Points.Count);
-        Assert.True(series.ContainsFrame(1));
-
-        var frame = series.GetFrame(1);
-        Assert.NotNull(frame);
-        Assert.Equal(5, frame!.Count);
+        Assert.Single(frames);
+        var frame = frames[0];
+        Assert.Equal(1ul, frame.FrameId);
+        Assert.False(frame.IsDelta);
+        Assert.Equal(5, frame.KeyPoints.Count);
 
         foreach (var (id, expectedPoint, expectedConfidence) in expectedKeypoints)
         {
-            Assert.True(frame.ContainsKey(id));
-            var result = frame[id];
-            Assert.Equal(expectedPoint, result.point);
-            Assert.Equal(expectedConfidence, result.confidence, precision: 4); // 0.0001 precision due to ushort encoding
+            var kp = frame.KeyPoints.First(k => k.Id == id);
+            Assert.Equal(expectedPoint.X, kp.X);
+            Assert.Equal(expectedPoint.Y, kp.Y);
+            Assert.Equal(expectedConfidence, kp.Confidence, precision: 4);
         }
     }
 
@@ -76,8 +77,8 @@ public class KeyPointsProtocolTests
     public async Task MultipleFrames_WithMasterDelta_RoundTrip()
     {
         // Arrange
-        var stream = new MemoryStream();
-        var storage = new KeyPointsSink(stream, masterFrameInterval: 2);
+        using var stream = new MemoryStream();
+        using var storage = new KeyPointsSink(stream, masterFrameInterval: 2, leaveOpen: true);
 
         // Frame 1 - Master
         var frame1 = new[]
@@ -120,38 +121,42 @@ public class KeyPointsProtocolTests
         }
 
         // Act - Read
-        stream.Position = 0;
-        using var frameSource = new StreamFrameSource(stream);
-        var series = await storage.Read(TestDefinitionJson, frameSource);
+        var frames = await ReadAllFramesAsync(stream);
 
         // Assert
-        Assert.Equal(3, series.FrameIds.Count);
-        Assert.True(series.ContainsFrame(0));
-        Assert.True(series.ContainsFrame(1));
-        Assert.True(series.ContainsFrame(2));
+        Assert.Equal(3, frames.Count);
 
-        // Verify Frame 1
-        var actualFrame1 = series.GetFrame(0)!;
-        Assert.Equal(frame1[0].point, actualFrame1[0].point);
-        Assert.Equal(frame1[0].confidence, actualFrame1[0].confidence, precision: 4);
+        // Verify Frame 1 (master)
+        Assert.Equal(0ul, frames[0].FrameId);
+        Assert.False(frames[0].IsDelta);
+        var actualFrame1 = frames[0].KeyPoints.First(k => k.Id == 0);
+        Assert.Equal(frame1[0].point.X, actualFrame1.X);
+        Assert.Equal(frame1[0].point.Y, actualFrame1.Y);
+        Assert.Equal(frame1[0].confidence, actualFrame1.Confidence, precision: 4);
 
         // Verify Frame 2 (delta decoded correctly)
-        var actualFrame2 = series.GetFrame(1)!;
-        Assert.Equal(frame2[0].point, actualFrame2[0].point);
-        Assert.Equal(frame2[0].confidence, actualFrame2[0].confidence, precision: 4);
+        Assert.Equal(1ul, frames[1].FrameId);
+        Assert.True(frames[1].IsDelta);
+        var actualFrame2 = frames[1].KeyPoints.First(k => k.Id == 0);
+        Assert.Equal(frame2[0].point.X, actualFrame2.X);
+        Assert.Equal(frame2[0].point.Y, actualFrame2.Y);
+        Assert.Equal(frame2[0].confidence, actualFrame2.Confidence, precision: 4);
 
-        // Verify Frame 3 (master frame)
-        var actualFrame3 = series.GetFrame(2)!;
-        Assert.Equal(frame3[0].point, actualFrame3[0].point);
-        Assert.Equal(frame3[0].confidence, actualFrame3[0].confidence, precision: 4);
+        // Verify Frame 3 (master)
+        Assert.Equal(2ul, frames[2].FrameId);
+        Assert.False(frames[2].IsDelta);
+        var actualFrame3 = frames[2].KeyPoints.First(k => k.Id == 0);
+        Assert.Equal(frame3[0].point.X, actualFrame3.X);
+        Assert.Equal(frame3[0].point.Y, actualFrame3.Y);
+        Assert.Equal(frame3[0].confidence, actualFrame3.Confidence, precision: 4);
     }
 
     [Fact]
-    public async Task GetKeyPointTrajectory_ById_ReturnsCorrectSequence()
+    public async Task StreamingApi_ReturnsFramesAsTheyArrive()
     {
         // Arrange
-        var stream = new MemoryStream();
-        var storage = new KeyPointsSink(stream);
+        using var stream = new MemoryStream();
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         // Write 3 frames with nose (keypointId=0) moving
         for (ulong frameId = 0; frameId < 3; frameId++)
@@ -161,56 +166,27 @@ public class KeyPointsProtocolTests
             writer.Append(keypointId: 1, x: 150, y: 250, confidence: 0.90f); // Static point
         }
 
-        stream.Position = 0;
-        using var frameSource = new StreamFrameSource(stream);
-        var series = await storage.Read(TestDefinitionJson, frameSource);
-
-        // Act
-        var noseTrajectory = series.GetKeyPointTrajectory(keypointId: 0).ToList();
+        // Act - Read using streaming API
+        var frames = await ReadAllFramesAsync(stream);
 
         // Assert
-        Assert.Equal(3, noseTrajectory.Count);
-        Assert.Equal(100, noseTrajectory[0].point.X);
-        Assert.Equal(200, noseTrajectory[0].point.Y);
-        Assert.Equal(110, noseTrajectory[1].point.X);
-        Assert.Equal(205, noseTrajectory[1].point.Y);
-        Assert.Equal(120, noseTrajectory[2].point.X);
-        Assert.Equal(210, noseTrajectory[2].point.Y);
+        Assert.Equal(3, frames.Count);
+
+        // Verify trajectory - nose moving
+        Assert.Equal(100, frames[0].KeyPoints.First(k => k.Id == 0).X);
+        Assert.Equal(200, frames[0].KeyPoints.First(k => k.Id == 0).Y);
+        Assert.Equal(110, frames[1].KeyPoints.First(k => k.Id == 0).X);
+        Assert.Equal(205, frames[1].KeyPoints.First(k => k.Id == 0).Y);
+        Assert.Equal(120, frames[2].KeyPoints.First(k => k.Id == 0).X);
+        Assert.Equal(210, frames[2].KeyPoints.First(k => k.Id == 0).Y);
     }
 
     [Fact]
-    public async Task GetKeyPointTrajectory_ByName_ReturnsCorrectSequence()
+    public async Task KeyPoint_HasCorrectProperties()
     {
         // Arrange
-        var stream = new MemoryStream();
-        var storage = new KeyPointsSink(stream);
-
-        for (ulong frameId = 0; frameId < 2; frameId++)
-        {
-            using var writer = storage.CreateWriter(frameId);
-            writer.Append(keypointId: 0, x: (int)(100 + frameId * 10), y: 200, confidence: 0.95f); // nose
-            writer.Append(keypointId: 1, x: 150, y: 190, confidence: 0.90f); // left_eye
-        }
-
-        stream.Position = 0;
-        using var frameSource = new StreamFrameSource(stream);
-        var series = await storage.Read(TestDefinitionJson, frameSource);
-
-        // Act
-        var noseTrajectory = series.GetKeyPointTrajectory("nose").ToList();
-
-        // Assert
-        Assert.Equal(2, noseTrajectory.Count);
-        Assert.Equal(100, noseTrajectory[0].point.X);
-        Assert.Equal(110, noseTrajectory[1].point.X);
-    }
-
-    [Fact]
-    public async Task GetKeyPoint_ByIdAndName_ReturnsCorrectValue()
-    {
-        // Arrange
-        var stream = new MemoryStream();
-        var storage = new KeyPointsSink(stream);
+        using var stream = new MemoryStream();
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         using (var writer = storage.CreateWriter(frameId: 10))
         {
@@ -218,32 +194,33 @@ public class KeyPointsProtocolTests
             writer.Append(keypointId: 1, x: 120, y: 190, confidence: 0.92f);
         }
 
-        stream.Position = 0;
-        using var frameSource = new StreamFrameSource(stream);
-        var series = await storage.Read(TestDefinitionJson, frameSource);
+        // Act
+        var frames = await ReadAllFramesAsync(stream);
 
-        // Act & Assert - By ID
-        var resultById = series.GetKeyPoint(frameId: 10, keypointId: 0);
-        Assert.NotNull(resultById);
-        Assert.Equal(new Point(100, 200), resultById!.Value.point);
-        Assert.Equal(0.95f, resultById.Value.confidence, precision: 4);
+        // Assert
+        Assert.Single(frames);
+        var frame = frames[0];
+        Assert.Equal(10ul, frame.FrameId);
+        Assert.Equal(2, frame.KeyPoints.Count);
 
-        // Act & Assert - By Name
-        var resultByName = series.GetKeyPoint(frameId: 10, keypointName: "nose");
-        Assert.NotNull(resultByName);
-        Assert.Equal(new Point(100, 200), resultByName!.Value.point);
+        var kp0 = frame.KeyPoints.First(k => k.Id == 0);
+        Assert.Equal(100, kp0.X);
+        Assert.Equal(200, kp0.Y);
+        Assert.Equal(0.95f, kp0.Confidence, precision: 4);
+        Assert.Equal(new Point(100, 200), kp0.ToPoint());
 
-        // Act & Assert - Non-existent
-        var notFound = series.GetKeyPoint(frameId: 999, keypointId: 0);
-        Assert.Null(notFound);
+        var kp1 = frame.KeyPoints.First(k => k.Id == 1);
+        Assert.Equal(120, kp1.X);
+        Assert.Equal(190, kp1.Y);
+        Assert.Equal(0.92f, kp1.Confidence, precision: 4);
     }
 
     [Fact]
     public async Task ConfidenceEncoding_PreservesFloatPrecision()
     {
         // Arrange
-        var stream = new MemoryStream();
-        var storage = new KeyPointsSink(stream);
+        using var stream = new MemoryStream();
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         var testConfidences = new[] { 0.0f, 0.5f, 0.9999f, 1.0f, 0.1234f };
 
@@ -255,16 +232,17 @@ public class KeyPointsProtocolTests
             }
         }
 
-        stream.Position = 0;
-        using var frameSource = new StreamFrameSource(stream);
-        var series = await storage.Read(TestDefinitionJson, frameSource);
+        // Act
+        var frames = await ReadAllFramesAsync(stream);
 
         // Assert - Check precision (should be within 0.0001 due to ushort encoding)
-        var frame = series.GetFrame(1)!;
+        Assert.Single(frames);
+        var frame = frames[0];
+
         for (int i = 0; i < testConfidences.Length; i++)
         {
-            var actual = frame[i].confidence;
-            Assert.Equal(testConfidences[i], actual, precision: 4);
+            var kp = frame.KeyPoints.First(k => k.Id == i);
+            Assert.Equal(testConfidences[i], kp.Confidence, precision: 4);
         }
     }
 
@@ -272,8 +250,8 @@ public class KeyPointsProtocolTests
     public async Task VariableKeypointCount_HandledCorrectly()
     {
         // Arrange
-        var stream = new MemoryStream();
-        var storage = new KeyPointsSink(stream);
+        using var stream = new MemoryStream();
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         // Frame 1 - 2 keypoints
         using (var writer1 = storage.CreateWriter(frameId: 0))
@@ -297,27 +275,27 @@ public class KeyPointsProtocolTests
             writer3.Append(keypointId: 0, x: 102, y: 202, confidence: 0.96f);
         }
 
-        stream.Position = 0;
-        using var frameSource = new StreamFrameSource(stream);
-        var series = await storage.Read(TestDefinitionJson, frameSource);
+        // Act
+        var frames = await ReadAllFramesAsync(stream);
 
         // Assert
-        Assert.Equal(2, series.GetFrame(0)!.Count);
-        Assert.Equal(4, series.GetFrame(1)!.Count);
-        Assert.Equal(1, series.GetFrame(2)!.Count);
+        Assert.Equal(3, frames.Count);
+        Assert.Equal(2, frames[0].KeyPoints.Count);
+        Assert.Equal(4, frames[1].KeyPoints.Count);
+        Assert.Equal(1, frames[2].KeyPoints.Count);
 
-        // Verify trajectory includes only frames where keypoint exists
-        var id3Trajectory = series.GetKeyPointTrajectory(keypointId: 3).ToList();
-        Assert.Single(id3Trajectory);
-        Assert.Equal((ulong)1, id3Trajectory[0].frameId);
+        // Verify keypoint 3 only exists in frame 2
+        Assert.DoesNotContain(frames[0].KeyPoints, k => k.Id == 3);
+        Assert.Contains(frames[1].KeyPoints, k => k.Id == 3);
+        Assert.DoesNotContain(frames[2].KeyPoints, k => k.Id == 3);
     }
 
     [Fact]
     public async Task LargeCoordinates_PreservesPrecision()
     {
         // Arrange
-        var stream = new MemoryStream();
-        var storage = new KeyPointsSink(stream);
+        using var stream = new MemoryStream();
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         var testPoints = new[]
         {
@@ -335,15 +313,17 @@ public class KeyPointsProtocolTests
             }
         }
 
-        stream.Position = 0;
-        using var frameSource = new StreamFrameSource(stream);
-        var series = await storage.Read(TestDefinitionJson, frameSource);
+        // Act
+        var frames = await ReadAllFramesAsync(stream);
 
         // Assert
-        var frame = series.GetFrame(1)!;
+        Assert.Single(frames);
+        var frame = frames[0];
+
         for (int i = 0; i < testPoints.Length; i++)
         {
-            Assert.Equal(testPoints[i], frame[i].point);
+            var kp = frame.KeyPoints.First(k => k.Id == i);
+            Assert.Equal(testPoints[i], kp.ToPoint());
         }
     }
 
@@ -351,8 +331,8 @@ public class KeyPointsProtocolTests
     public async Task AsyncWriter_RoundTrip_PreservesData()
     {
         // Arrange
-        var stream = new MemoryStream();
-        var storage = new KeyPointsSink(stream);
+        using var stream = new MemoryStream();
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         var expectedKeypoints = new[]
         {
@@ -371,21 +351,76 @@ public class KeyPointsProtocolTests
         }
 
         // Act - Read
-        stream.Position = 0;
-        using var frameSource = new StreamFrameSource(stream);
-        var series = await storage.Read(TestDefinitionJson, frameSource);
+        var frames = await ReadAllFramesAsync(stream);
 
         // Assert
-        Assert.True(series.ContainsFrame(1));
-        var frame = series.GetFrame(1)!;
-        Assert.Equal(3, frame.Count);
+        Assert.Single(frames);
+        var frame = frames[0];
+        Assert.Equal(1ul, frame.FrameId);
+        Assert.Equal(3, frame.KeyPoints.Count);
 
         foreach (var (id, expectedPoint, expectedConfidence) in expectedKeypoints)
         {
-            Assert.True(frame.ContainsKey(id));
-            var result = frame[id];
-            Assert.Equal(expectedPoint, result.point);
-            Assert.Equal(expectedConfidence, result.confidence, precision: 4);
+            var kp = frame.KeyPoints.First(k => k.Id == id);
+            Assert.Equal(expectedPoint, kp.ToPoint());
+            Assert.Equal(expectedConfidence, kp.Confidence, precision: 4);
         }
+    }
+
+    [Fact]
+    public async Task Sink_CreatesMultipleWriters()
+    {
+        // Arrange
+        using var stream = new MemoryStream();
+        var frameSink = new StreamFrameSink(stream, leaveOpen: true);
+        using var sink = new KeyPointsSink(frameSink, ownsSink: true);
+
+        // Act - Write multiple frames via sink
+        using (var writer1 = sink.CreateWriter(1))
+        {
+            writer1.Append(0, 100, 200, 0.95f);
+        }
+
+        using (var writer2 = sink.CreateWriter(2))
+        {
+            writer2.Append(0, 110, 210, 0.96f);
+        }
+
+        // Assert - Read back
+        var frames = await ReadAllFramesAsync(stream);
+
+        Assert.Equal(2, frames.Count);
+        Assert.Equal(1ul, frames[0].FrameId);
+        Assert.Equal(2ul, frames[1].FrameId);
+    }
+
+    [Fact]
+    public async Task Source_StreamsFramesAsyncEnumerable()
+    {
+        // Arrange
+        using var stream = new MemoryStream();
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
+
+        // Write 3 frames
+        for (int i = 0; i < 3; i++)
+        {
+            using var writer = storage.CreateWriter((ulong)i);
+            writer.Append(0, i * 10, i * 20, 0.95f);
+        }
+
+        // Act - Stream frames
+        stream.Position = 0;
+        var source = new StreamFrameSource(stream, leaveOpen: true);
+        var kpSource = new KeyPointsSource(source);
+
+        int frameCount = 0;
+        await foreach (var frame in kpSource.ReadFramesAsync())
+        {
+            Assert.Equal((ulong)frameCount, frame.FrameId);
+            frameCount++;
+        }
+
+        // Assert
+        Assert.Equal(3, frameCount);
     }
 }

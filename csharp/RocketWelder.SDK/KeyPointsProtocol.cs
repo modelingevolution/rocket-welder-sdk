@@ -18,7 +18,7 @@ namespace RocketWelder.SDK;
 // ============================================================================
 
 /// <summary>
-/// Sink for writing keypoints and reading keypoints data.
+/// Sink for writing keypoints data.
 /// Transport-agnostic: works with files, TCP, WebSocket, NNG, etc.
 /// </summary>
 public interface IKeyPointsSink : IDisposable, IAsyncDisposable
@@ -28,13 +28,6 @@ public interface IKeyPointsSink : IDisposable, IAsyncDisposable
     /// Sink decides whether to write master or delta frame.
     /// </summary>
     IKeyPointsWriter CreateWriter(ulong frameId);
-
-    /// <summary>
-    /// Read entire keypoints series into memory for efficient querying.
-    /// </summary>
-    /// <param name="json">JSON definition string mapping keypoint names to IDs</param>
-    /// <param name="frameSource">Frame source to read frames from (handles transport-specific framing)</param>
-    Task<KeyPointsSeries> Read(string json, IFrameSource frameSource);
 }
 
 /// <summary>
@@ -84,9 +77,9 @@ public readonly struct KeyPointsFrame
 {
     public ulong FrameId { get; }
     public bool IsDelta { get; }
-    public IReadOnlyList<KeyPointData> KeyPoints { get; }
+    public IReadOnlyList<KeyPoint> KeyPoints { get; }
 
-    public KeyPointsFrame(ulong frameId, bool isDelta, IReadOnlyList<KeyPointData> keyPoints)
+    public KeyPointsFrame(ulong frameId, bool isDelta, IReadOnlyList<KeyPoint> keyPoints)
     {
         FrameId = frameId;
         IsDelta = isDelta;
@@ -97,14 +90,14 @@ public readonly struct KeyPointsFrame
 /// <summary>
 /// A single keypoint with ID, position, and confidence.
 /// </summary>
-public readonly struct KeyPointData
+public readonly struct KeyPoint
 {
     public int Id { get; }
     public int X { get; }
     public int Y { get; }
     public float Confidence { get; }
 
-    public KeyPointData(int id, int x, int y, float confidence)
+    public KeyPoint(int id, int x, int y, float confidence)
     {
         Id = id;
         X = x;
@@ -171,7 +164,7 @@ public class KeyPointsSource : IKeyPointsSource
         uint keypointCount = stream.ReadVarint();
 
         // Read keypoints
-        var keypoints = new List<KeyPointData>((int)keypointCount);
+        var keypoints = new List<KeyPoint>((int)keypointCount);
         var currentFrame = new Dictionary<int, (Point point, ushort confidence)>();
 
         if (isDelta && _previousFrame != null)
@@ -202,7 +195,7 @@ public class KeyPointsSource : IKeyPointsSource
                     confidence = (ushort)deltaConfidence;
                 }
 
-                keypoints.Add(new KeyPointData(keypointId, x, y, confidence / 10000f));
+                keypoints.Add(new KeyPoint(keypointId, x, y, confidence / 10000f));
                 currentFrame[keypointId] = (new Point(x, y), confidence);
             }
         }
@@ -225,7 +218,7 @@ public class KeyPointsSource : IKeyPointsSource
                 stream.Read(confBytes);
                 ushort confidence = BinaryPrimitives.ReadUInt16LittleEndian(confBytes);
 
-                keypoints.Add(new KeyPointData(keypointId, x, y, confidence / 10000f));
+                keypoints.Add(new KeyPoint(keypointId, x, y, confidence / 10000f));
                 currentFrame[keypointId] = (new Point(x, y), confidence);
             }
         }
@@ -678,105 +671,6 @@ public class KeyPointsSink : IKeyPointsSink
             frameState => _previousFrame = frameState);
         _frameCount++;
         return writer;
-    }
-
-    public async Task<KeyPointsSeries> Read(string json, IFrameSource frameSource)
-    {
-        if (_disposed)
-            throw new ObjectDisposedException(nameof(KeyPointsSink));
-
-        // Parse JSON definition
-        var definition = JsonSerializer.Deserialize<KeyPointsDefinition>(json)
-            ?? throw new InvalidDataException("Invalid keypoints definition JSON");
-
-        // Read all frames from frame source (handles transport-specific framing)
-        var index = new Dictionary<ulong, SortedDictionary<int, (Point, float)>>();
-        var currentFrame = new Dictionary<int, (Point point, ushort confidence)>();
-
-        while (frameSource.HasMoreFrames)
-        {
-            // Read complete frame (frame source handles length prefixes, etc.)
-            var frameBytes = await frameSource.ReadFrameAsync();
-            if (frameBytes.Length == 0) break;
-
-            using var frameStream = new MemoryStream(frameBytes.ToArray());
-
-            // Read frame type
-            int frameTypeByte = frameStream.ReadByte();
-            if (frameTypeByte == -1) break;
-
-            byte frameType = (byte)frameTypeByte;
-
-            // Read frame ID
-            Span<byte> frameIdBytes = stackalloc byte[8];
-            frameStream.Read(frameIdBytes);
-            ulong frameId = BinaryPrimitives.ReadUInt64LittleEndian(frameIdBytes);
-
-            // Read keypoint count
-            uint keypointCount = frameStream.ReadVarint();
-
-            var frameKeypoints = new SortedDictionary<int, (Point, float)>();
-
-            if (frameType == 0x00) // Master frame
-            {
-                currentFrame.Clear();
-                for (uint i = 0; i < keypointCount; i++)
-                {
-                    int id = (int)frameStream.ReadVarint();
-
-                    Span<byte> coords = stackalloc byte[8];
-                    frameStream.Read(coords);
-                    int x = BinaryPrimitives.ReadInt32LittleEndian(coords);
-                    int y = BinaryPrimitives.ReadInt32LittleEndian(coords[4..]);
-
-                    Span<byte> confBytes = stackalloc byte[2];
-                    frameStream.Read(confBytes);
-                    ushort confUshort = BinaryPrimitives.ReadUInt16LittleEndian(confBytes);
-
-                    var point = new Point(x, y);
-                    currentFrame[id] = (point, confUshort);
-                    frameKeypoints[id] = (point, confUshort / 10000f);
-                }
-            }
-            else if (frameType == 0x01) // Delta frame
-            {
-                for (uint i = 0; i < keypointCount; i++)
-                {
-                    int id = (int)frameStream.ReadVarint();
-
-                    int deltaX = frameStream.ReadVarint().ZigZagDecode();
-                    int deltaY = frameStream.ReadVarint().ZigZagDecode();
-                    int deltaConf = frameStream.ReadVarint().ZigZagDecode();
-
-                    if (currentFrame.TryGetValue(id, out var prev))
-                    {
-                        int x = prev.point.X + deltaX;
-                        int y = prev.point.Y + deltaY;
-                        ushort conf = (ushort)Math.Clamp(prev.confidence + deltaConf, 0, 10000);
-
-                        var point = new Point(x, y);
-                        currentFrame[id] = (point, conf);
-                        frameKeypoints[id] = (point, conf / 10000f);
-                    }
-                    else
-                    {
-                        // New keypoint - deltas are absolute values
-                        var point = new Point(deltaX, deltaY);
-                        ushort conf = (ushort)Math.Clamp(deltaConf, 0, 10000);
-                        currentFrame[id] = (point, conf);
-                        frameKeypoints[id] = (point, conf / 10000f);
-                    }
-                }
-            }
-
-            index[frameId] = frameKeypoints;
-        }
-
-        return new KeyPointsSeries(
-            definition.Version,
-            definition.ComputeModuleName,
-            definition.Points,
-            index);
     }
 
     public void Dispose()
