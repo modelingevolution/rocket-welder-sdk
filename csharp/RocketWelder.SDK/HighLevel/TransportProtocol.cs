@@ -110,8 +110,16 @@ public readonly record struct TransportProtocol
 
     /// <summary>
     /// Creates the NNG address from a path/host.
+    /// For IPC: adds leading "/" to make absolute path (nng+push+ipc://tmp/foo → ipc:///tmp/foo)
+    /// For TCP: uses as-is (nng+push+tcp://host:port → tcp://host:port)
     /// </summary>
-    public string CreateNngAddress(string pathOrHost) => Layer.UriPrefix + pathOrHost;
+    public string CreateNngAddress(string pathOrHost)
+    {
+        // IPC paths need leading "/" for absolute paths
+        if (Layer == TransportLayer.Ipc && !pathOrHost.StartsWith("/"))
+            return Layer.UriPrefix + "/" + pathOrHost;
+        return Layer.UriPrefix + pathOrHost;
+    }
 
     /// <summary>
     /// Checks if this is a push pattern.

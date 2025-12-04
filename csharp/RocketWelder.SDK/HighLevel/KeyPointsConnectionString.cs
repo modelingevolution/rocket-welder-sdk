@@ -6,13 +6,13 @@ namespace RocketWelder.SDK.HighLevel;
 
 /// <summary>
 /// Strongly-typed connection string for KeyPoints output.
-/// Format: protocol:path?param1=value1&amp;param2=value2
+/// Format: protocol://path?param1=value1&amp;param2=value2
 ///
 /// Supported protocols (composable with + operator):
-/// - Transport.Nng + Transport.Push + Transport.Ipc → nng+push+ipc:/path
-/// - Transport.Nng + Transport.Push + Transport.Tcp → nng+push+tcp:host:port
-/// - Transport.Nng + Transport.Pub + Transport.Ipc → nng+pub+ipc:/path
-/// - file:/path/to/file.bin - File output
+/// - Transport.Nng + Transport.Push + Transport.Ipc → nng+push+ipc://tmp/keypoints
+/// - Transport.Nng + Transport.Push + Transport.Tcp → nng+push+tcp://host:port
+/// - Transport.Nng + Transport.Pub + Transport.Ipc → nng+pub+ipc://tmp/keypoints
+/// - file://path/to/file.bin - File output
 ///
 /// Supported parameters:
 /// - masterFrameInterval: Interval between master frames (default: 300)
@@ -20,7 +20,7 @@ namespace RocketWelder.SDK.HighLevel;
 /// Example:
 /// <code>
 /// var protocol = Transport.Nng + Transport.Push + Transport.Ipc;
-/// var cs = KeyPointsConnectionString.Parse("nng+push+ipc:/tmp/keypoints", null);
+/// var cs = KeyPointsConnectionString.Parse("nng+push+ipc://tmp/keypoints", null);
 /// </code>
 /// </summary>
 public readonly record struct KeyPointsConnectionString : IParsable<KeyPointsConnectionString>
@@ -75,7 +75,7 @@ public readonly record struct KeyPointsConnectionString : IParsable<KeyPointsCon
     /// <summary>
     /// Default connection string for KeyPoints.
     /// </summary>
-    public static KeyPointsConnectionString Default => Parse("nng+push+ipc:/tmp/rocket-welder-keypoints?masterFrameInterval=300", null);
+    public static KeyPointsConnectionString Default => Parse("nng+push+ipc://tmp/rocket-welder-keypoints?masterFrameInterval=300", null);
 
     /// <summary>
     /// Creates a connection string from environment variable or uses default.
@@ -118,21 +118,21 @@ public readonly record struct KeyPointsConnectionString : IParsable<KeyPointsCon
         }
 
         // Parse protocol and address
-        // Format: protocol:path (e.g., nng+push+ipc:/tmp/foo)
+        // Format: protocol://path (e.g., nng+push+ipc://tmp/foo)
         TransportProtocol? protocol = null;
         bool isFile = false;
         string address;
 
-        var colonIndex = endpointPart.IndexOf(':');
-        if (colonIndex > 0 && !endpointPart.StartsWith("/"))
+        var schemeEnd = endpointPart.IndexOf("://", StringComparison.Ordinal);
+        if (schemeEnd > 0)
         {
-            var protocolStr = endpointPart[..colonIndex];
-            var pathPart = endpointPart[(colonIndex + 1)..];
+            var protocolStr = endpointPart[..schemeEnd];
+            var pathPart = endpointPart[(schemeEnd + 3)..]; // skip "://"
 
             if (protocolStr.Equals("file", StringComparison.OrdinalIgnoreCase))
             {
                 isFile = true;
-                address = pathPart;
+                address = "/" + pathPart; // restore absolute path
             }
             else if (TransportProtocol.TryParse(protocolStr, out var parsed))
             {
@@ -144,11 +144,15 @@ public readonly record struct KeyPointsConnectionString : IParsable<KeyPointsCon
                 return false;
             }
         }
-        else
+        else if (endpointPart.StartsWith("/"))
         {
-            // Assume file path
+            // Assume absolute file path
             isFile = true;
             address = endpointPart;
+        }
+        else
+        {
+            return false;
         }
 
         // Parse masterFrameInterval
