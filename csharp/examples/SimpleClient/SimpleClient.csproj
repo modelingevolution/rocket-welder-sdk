@@ -1,8 +1,8 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <RuntimeIdentifier>linux-x64</RuntimeIdentifier>
     <PublishSingleFile>false</PublishSingleFile>
@@ -15,10 +15,10 @@
 
   <ItemGroup>
     <ProjectReference Include="../../RocketWelder.SDK/RocketWelder.SDK.csproj" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.8" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
     <PackageReference Include="Emgu.CV" Version="4.11.0.5746" />
     <PackageReference Include="Emgu.CV.runtime.ubuntu-x64" Version="4.11.0.5746" />
-    <PackageReference Include="ModelingEvolution.Drawing" Version="1.0.58.36" />
+    <PackageReference Include="ModelingEvolution.Drawing" Version="1.0.63.45" />
   </ItemGroup>
   
   <!-- Manually include native libraries from Emgu.CV.runtime.ubuntu-x64 -->

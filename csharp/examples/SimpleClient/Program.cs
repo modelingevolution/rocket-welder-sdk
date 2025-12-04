@@ -287,11 +287,19 @@ public class VideoProcessingService : BackgroundService
 
     private async Task CheckEventStore(CancellationToken stoppingToken)
     {
-        var conn = EventStoreClientSettings.Create(_configuration["EventStore"]);
+        var eventStoreConnectionString = _configuration["EventStore"];
+        if (eventStoreConnectionString == null)
+        {
+            _logger.LogWarning("EventStore connection string is null");
+            return;
+        }
+
+        var conn = EventStoreClientSettings.Create(eventStoreConnectionString);
         await conn.WaitUntilReady(TimeSpan.FromSeconds(5));
         EventStoreClient client = new EventStoreClient(conn);
-        var evt = await client.ReadAllAsync(Direction.Forwards, Position.Start, 1, false, null)
-            .FirstAsync(cancellationToken: stoppingToken);
+        var evt = await System.Linq.AsyncEnumerable.FirstAsync(
+            client.ReadAllAsync(Direction.Forwards, Position.Start, 1, false, null),
+            stoppingToken);
         _logger.LogInformation("EventStore connected, read 1 event: "+evt.Event.EventStreamId);
     }
 

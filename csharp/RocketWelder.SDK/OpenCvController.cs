@@ -119,6 +119,12 @@ namespace RocketWelder.SDK
             _worker.Start();
         }
 
+        public void Start(Action<Mat, ISegmentationResultWriter, IKeyPointsWriter, Mat> onFrame, CancellationToken cancellationToken = default)
+        {
+            // TODO: Implement segmentation result writer and keypoints writer integration
+            throw new NotImplementedException("Segmentation result writer and keypoints writer are not yet implemented for OpenCvController");
+        }
+
         private string GetSource()
         {
             switch (_connection.Protocol)

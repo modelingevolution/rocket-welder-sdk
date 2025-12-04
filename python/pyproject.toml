@@ -38,6 +38,7 @@ dependencies = [
     "zerobuffer-ipc>=1.1.17",
     "pydantic>=2.5.0",
     "py-micro-plumberd>=0.1.8",
+    "typing-extensions>=4.0.0",
 ]
 
 [project.optional-dependencies]
@@ -76,6 +77,10 @@ namespace_packages = true
 show_error_codes = true
 show_column_numbers = true
 pretty = true
+exclude = [
+    "examples/05-traktorek",
+    "examples/rocket-welder-client-python-yolo",
+]
 
 [[tool.mypy.overrides]]
 module = [
@@ -95,10 +100,20 @@ ignore_missing_imports = true
 line-length = 100
 target-version = ['py38', 'py39', 'py310', 'py311', 'py312']
 include = '\.pyi?$'
+exclude = '''
+/(
+    examples/05-traktorek
+  | examples/rocket-welder-client-python-yolo
+)/
+'''
 
 [tool.ruff]
 line-length = 100
 target-version = "py38"
+exclude = [
+    "examples/05-traktorek",
+    "examples/rocket-welder-client-python-yolo",
+]
 
 [tool.ruff.lint]
 select = [

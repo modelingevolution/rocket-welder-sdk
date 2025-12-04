@@ -73,7 +73,7 @@ namespace RocketWelder.SDK
                 MetadataSize = (int)(long)_connection.MetadataSize
             };
             _reader = new Reader(_connection.BufferName!, config, _readerLogger);
-            _logger.LogInformation("Created shared memory buffer '{BufferName}' with size {BufferSize} and metadata {MetadataSize}, timeout {Timeout} ms", 
+            _logger.LogInformation("Created shared memory buffer '{BufferName}' with size {BufferSize} and metadata {MetadataSize}, timeout {Timeout} ms",
                 _connection.BufferName, _connection.BufferSize, _connection.MetadataSize, _connection.TimeoutMs);
 
             // Start processing on worker thread
@@ -83,6 +83,12 @@ namespace RocketWelder.SDK
                 IsBackground = false
             };
             _worker.Start();
+        }
+
+        public void Start(Action<Mat, ISegmentationResultWriter, IKeyPointsWriter, Mat> onFrame, CancellationToken cancellationToken = default)
+        {
+            // TODO: Implement segmentation result writer and keypoints writer integration
+            throw new NotImplementedException("Segmentation result writer and keypoints writer are not yet implemented for OneWayShmController");
         }
 
         private void ProcessFrames(Action<Mat> onFrame, CancellationToken cancellationToken)
