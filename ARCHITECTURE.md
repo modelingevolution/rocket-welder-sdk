@@ -4,6 +4,178 @@
 
 The RocketWelder SDK provides high-performance video streaming with support for multiple AI protocols (KeyPoints, Segmentation Results) over various transport mechanisms (File, TCP, WebSocket, NNG).
 
+## API Layers
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  High-Level API (User-facing)                                       │
+│  RocketWelderClient, Schema, DataContext                            │
+│  - Simple DX, type-safe, configuration via environment              │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              │ uses internally
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Protocol Layer (Internal)                                          │
+│  KeyPointsSink, KeyPointsWriter, SegmentationResultSink             │
+│  - Frame encoding, delta compression                                │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+                              │ uses internally
+                              ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  Transport Layer (Internal)                                         │
+│  IFrameSink, IFrameSource (Stream, TCP, WebSocket, NNG)             │
+│  - Frame boundaries, delivery                                       │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## High-Level API (RocketWelderClient)
+
+The high-level API provides a clean developer experience hiding transport, writers, and frame management.
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  RocketWelderClient (Facade)                                        │
+│                                                                     │
+│  Properties (Schema - Static):                                      │
+│  ├─ IKeyPointsSchema KeyPoints { get; }                             │
+│  └─ ISegmentationSchema Segmentation { get; }                       │
+│                                                                     │
+│  Methods:                                                           │
+│  └─ Start(Action<Mat, ISegmentationDataContext,                     │
+│                  IKeyPointsDataContext, Mat>)                       │
+└─────────────────────────────────────────────────────────────────────┘
+                              │
+           ┌──────────────────┴──────────────────┐
+           │                                     │
+           ▼                                     ▼
+┌─────────────────────────────┐   ┌─────────────────────────────┐
+│  IKeyPointsSchema           │   │  ISegmentationSchema        │
+│  (Definition - Static)      │   │  (Definition - Static)      │
+│                             │   │                             │
+│  DefinePoint(name)          │   │  DefineClass(id, name)      │
+│  → KeyPoint                 │   │  → SegmentClass             │
+└─────────────────────────────┘   └─────────────────────────────┘
+           │                                     │
+           │ creates per frame (UoW)             │ creates per frame (UoW)
+           ▼                                     ▼
+┌─────────────────────────────┐   ┌─────────────────────────────┐
+│  IKeyPointsDataContext      │   │  ISegmentationDataContext   │
+│  (UoW - Scoped to Frame)    │   │  (UoW - Scoped to Frame)    │
+│                             │   │                             │
+│  Add(KeyPoint, x, y, conf)  │   │  Add(SegmentClass,          │
+│                             │   │      instanceId, points)    │
+│  [auto-commits on dispose]  │   │  [auto-commits on dispose]  │
+└─────────────────────────────┘   └─────────────────────────────┘
+```
+
+### Value Types
+
+```csharp
+/// <summary>Defined keypoint in the schema.</summary>
+public readonly record struct KeyPoint(int Id, string Name);
+
+/// <summary>Defined segmentation class in the schema.</summary>
+public readonly record struct SegmentClass(byte ClassId, string Name);
+```
+
+### Schema Interfaces
+
+```csharp
+public interface IKeyPointsSchema
+{
+    KeyPoint DefinePoint(string name);
+    IReadOnlyList<KeyPoint> DefinedPoints { get; }
+}
+
+public interface ISegmentationSchema
+{
+    SegmentClass DefineClass(byte classId, string name);
+    IReadOnlyList<SegmentClass> DefinedClasses { get; }
+}
+```
+
+### Data Context Interfaces (Unit of Work)
+
+```csharp
+public interface IKeyPointsDataContext
+{
+    ulong FrameId { get; }
+    void Add(KeyPoint point, int x, int y, float confidence);
+}
+
+public interface ISegmentationDataContext
+{
+    ulong FrameId { get; }
+    uint Width { get; }
+    uint Height { get; }
+    void Add(SegmentClass segmentClass, byte instanceId, ReadOnlySpan<Point> points);
+}
+```
+
+### Usage Example
+
+```csharp
+using var client = RocketWelderClient.FromEnvironment();
+
+// Define schema (static, once)
+var nose = client.KeyPoints.DefinePoint("nose");
+var leftEye = client.KeyPoints.DefinePoint("left_eye");
+var personClass = client.Segmentation.DefineClass(1, "person");
+
+// Start processing loop
+await client.StartAsync((inputFrame, segmentation, keypoints, outputFrame) =>
+{
+    // Detect and add keypoints
+    var detected = detector.Detect(inputFrame);
+    keypoints.Add(nose, detected.Nose.X, detected.Nose.Y, detected.Nose.Confidence);
+    keypoints.Add(leftEye, detected.LeftEye.X, detected.LeftEye.Y, detected.LeftEye.Confidence);
+
+    // Segment and add instances
+    var masks = segmenter.Segment(inputFrame);
+    foreach (var mask in masks.Where(m => m.ClassId == 1))
+        segmentation.Add(personClass, mask.InstanceId, mask.ContourPoints);
+
+    // Draw visualization
+    inputFrame.CopyTo(outputFrame);
+    DrawDetections(outputFrame, detected, masks);
+
+    // Data contexts auto-commit when delegate returns
+});
+```
+
+### Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `ROCKET_WELDER_VIDEO_SOURCE` | Video source | `0` (camera) |
+| `ROCKET_WELDER_KEYPOINTS_ENDPOINT` | KeyPoints endpoint | `ipc:///tmp/rocket-welder-keypoints` |
+| `ROCKET_WELDER_SEGMENTATION_ENDPOINT` | Segmentation endpoint | `ipc:///tmp/rocket-welder-segmentation` |
+| `ROCKET_WELDER_MASTER_FRAME_INTERVAL` | Master frame interval | `300` |
+| `ROCKET_WELDER_TRANSPORT` | Transport type | `nng` |
+
+### Metadata Format
+
+Schemas emit metadata as JSON for readers/consumers:
+
+```json
+{
+    "version": 1,
+    "type": "keypoints",
+    "points": [
+        {"id": 0, "name": "nose"},
+        {"id": 1, "name": "left_eye"}
+    ]
+}
+```
+
+---
+
 ## Core Architectural Principles
 
 ### ⚠️ MANDATORY: ALL Data Uses Framing
