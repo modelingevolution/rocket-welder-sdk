@@ -42,6 +42,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+nng = [
+    "pynng>=0.7.2",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -50,6 +53,7 @@ dev = [
     "mypy>=1.0",
     "ruff>=0.1.0",
     "types-setuptools",
+    "pynng>=0.7.2",
 ]
 
 [project.urls]
@@ -93,6 +97,8 @@ module = [
     "py_micro_plumberd.*",
     "esdbclient",
     "esdbclient.*",
+    "pynng",
+    "pynng.*",
 ]
 ignore_missing_imports = true
 

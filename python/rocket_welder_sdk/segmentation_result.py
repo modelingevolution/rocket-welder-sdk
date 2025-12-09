@@ -293,7 +293,9 @@ class SegmentationResultReader:
         Initialize reader for a single frame.
 
         Args:
-            stream: Binary stream to read from (must support read())
+            stream: Binary stream to read from (must support read()).
+                    Should contain raw frame data without length prefix.
+                    Use StreamFrameSource to strip length prefixes from transport streams.
         """
         if not hasattr(stream, "read"):
             raise TypeError("Stream must be a binary readable stream")

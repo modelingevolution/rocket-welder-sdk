@@ -10,6 +10,7 @@ import os
 from .bytes_size import BytesSize
 from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
+from .frame_metadata import FRAME_METADATA_SIZE, FrameMetadata, GstVideoFormat
 from .gst_metadata import GstCaps, GstMetadata
 from .opencv_controller import OpenCvController
 from .periodic_timer import PeriodicTimer, PeriodicTimerSync
@@ -40,23 +41,21 @@ if _log_level:
         pass  # Invalid log level, ignore
 
 __all__ = [
-    # Core types
+    "FRAME_METADATA_SIZE",
     "BytesSize",
-    "Client",  # Backward compatibility
+    "Client",
     "ConnectionMode",
     "ConnectionString",
     "DuplexShmController",
-    # GStreamer metadata
+    "FrameMetadata",
     "GstCaps",
     "GstMetadata",
-    # Controllers
+    "GstVideoFormat",
     "IController",
     "OneWayShmController",
     "OpenCvController",
-    # Timers
     "PeriodicTimer",
     "PeriodicTimerSync",
     "Protocol",
-    # Main client
     "RocketWelderClient",
 ]

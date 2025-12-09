@@ -28,3 +28,11 @@ __all__ = [
     "UnixSocketFrameSource",
     "UnixSocketServer",
 ]
+
+# NNG transport is optional (requires pynng package)
+try:
+    from .nng_transport import NngFrameSink, NngFrameSource
+
+    __all__.extend(["NngFrameSink", "NngFrameSource"])
+except ImportError:
+    pass  # pynng not installed

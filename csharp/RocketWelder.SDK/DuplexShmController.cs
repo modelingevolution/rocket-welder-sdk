@@ -18,12 +18,12 @@ namespace RocketWelder.SDK
         private GstCaps? _gstCaps;
         private GstMetadata? _metadata;
         private volatile bool _isRunning;
-        private Action<Mat, Mat>? _onFrame;
-        
+        private Action<FrameMetadata, Mat, Mat>? _onFrame;
+
         public bool IsRunning => _isRunning;
-        
+
         public GstMetadata? GetMetadata() => _metadata;
-        
+
         public event Action<IController, Exception>? OnError;
 
         public DuplexShmController(in ConnectionString connection, ILoggerFactory? loggerFactory = null)
@@ -34,7 +34,14 @@ namespace RocketWelder.SDK
             _logger = factory.CreateLogger<DuplexShmController>();
         }
 
-        public void Start(Action<Mat, Mat> onFrame, CancellationToken cancellationToken = default)
+        /// <summary>
+        /// Start processing frames with FrameMetadata.
+        /// The callback receives FrameMetadata (frame number, timestamp, dimensions),
+        /// input Mat, and output Mat.
+        /// </summary>
+        /// <param name="onFrame">Callback receiving (FrameMetadata, inputMat, outputMat)</param>
+        /// <param name="cancellationToken">Optional cancellation token</param>
+        public void Start(Action<FrameMetadata, Mat, Mat> onFrame, CancellationToken cancellationToken = default)
         {
             if (_isRunning)
                 throw new InvalidOperationException("Already running");
@@ -52,21 +59,27 @@ namespace RocketWelder.SDK
             // Create server using factory
             var factory = new DuplexChannelFactory(_loggerFactory);
             _server = factory.CreateImmutableServer(_connection.BufferName!, config, TimeSpan.FromMilliseconds(_connection.TimeoutMs));
-            
+
             // Subscribe to error events
             _server.OnError += OnServerError;
-            
-            _logger.LogInformation("Starting duplex server for channel '{ChannelName}' with size {BufferSize} and metadata {MetadataSize}", 
+
+            _logger.LogInformation("Starting duplex server for channel '{ChannelName}' with size {BufferSize} and metadata {MetadataSize}",
                 _connection.BufferName, _connection.BufferSize, _connection.MetadataSize);
 
             // Start server with request handler and metadata handler
             _server.Start(ProcessFrame, OnMetadata, ProcessingMode.SingleThread);
         }
 
+        public void Start(Action<Mat, Mat> onFrame, CancellationToken cancellationToken = default)
+        {
+            // Wrap the legacy callback - ignore FrameMetadata
+            Start((metadata, input, output) => onFrame(input, output), cancellationToken);
+        }
+
         public void Start(Action<Mat> onFrame, CancellationToken cancellationToken = default)
         {
             // For single Mat callback in duplex mode, we treat it as in-place processing.
-            Start((input, output) =>
+            Start((metadata, input, output) =>
             {
                 onFrame(input);
                 input.CopyTo(output);
@@ -90,19 +103,42 @@ namespace RocketWelder.SDK
 
         private void ProcessFrame(Frame request, Writer responseWriter)
         {
-            if (!_gstCaps.HasValue || _onFrame == null)
+            if (_onFrame == null)
                 return;
+
+            // Frame now has FrameMetadata prepended (24 bytes)
+            if (request.Size < FrameMetadata.Size)
+            {
+                _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", request.Size);
+                return;
+            }
 
             unsafe
             {
-                // Create input Mat from request frame (zero-copy)
-                using var inputMat = _gstCaps.Value.CreateMat(request.Pointer);
+                // Read FrameMetadata from the beginning of the frame
+                var frameMetadata = FrameMetadata.FromPointer((IntPtr)request.Pointer);
 
-                var b = responseWriter.GetFrameBuffer(request.Size, out var s);
-                using var outputMat = _gstCaps.Value.CreateMat(b);
-                
-                // Process frame
-                _onFrame(inputMat, outputMat);
+                // Calculate pointer to actual pixel data (after metadata)
+                byte* pixelDataPtr = request.Pointer + FrameMetadata.Size;
+                var pixelDataSize = request.Size - FrameMetadata.Size;
+
+                // Use dimensions from FrameMetadata if GstCaps not available
+                var caps = _gstCaps ?? new GstCaps
+                {
+                    Width = frameMetadata.Width,
+                    Height = frameMetadata.Height,
+                    Format = frameMetadata.FormatName
+                };
+
+                // Create input Mat from pixel data (zero-copy)
+                using var inputMat = caps.CreateMat(pixelDataPtr);
+
+                // Response doesn't need metadata prefix - just pixel data
+                var b = responseWriter.GetFrameBuffer(pixelDataSize, out var s);
+                using var outputMat = caps.CreateMat(b);
+
+                // Process frame with metadata
+                _onFrame(frameMetadata, inputMat, outputMat);
 
                 responseWriter.CommitFrame();
             }
@@ -111,24 +147,22 @@ namespace RocketWelder.SDK
         private void OnServerError(object? sender, ErrorEventArgs e)
         {
             var ex = e.Exception;
-            
+
             // Raise the IController.OnError event
             OnError?.Invoke(this, ex);
-            
-            
         }
 
         public void Stop(CancellationToken cancellationToken = default)
         {
             _logger.LogDebug("Stopping duplex controller for channel '{ChannelName}'", _connection.BufferName);
             _isRunning = false;
-            
+
             if (_server != null)
             {
                 _server.OnError -= OnServerError;
                 _server.Stop();
             }
-            
+
             _logger.LogInformation("Stopped duplex controller for channel '{ChannelName}'", _connection.BufferName);
         }
 
@@ -136,14 +170,14 @@ namespace RocketWelder.SDK
         {
             _logger.LogDebug("Disposing duplex controller for channel '{ChannelName}'", _connection.BufferName);
             _isRunning = false;
-            
+
             if (_server != null)
             {
                 _server.OnError -= OnServerError;
                 _server.Dispose();
                 _server = null;
             }
-            
+
             _onFrame = null;
             _logger.LogInformation("Disposed duplex controller for channel '{ChannelName}'", _connection.BufferName);
         }

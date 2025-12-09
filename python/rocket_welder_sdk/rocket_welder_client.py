@@ -14,6 +14,7 @@ import numpy as np
 
 from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
+from .frame_metadata import FrameMetadata  # noqa: TC001 - used at runtime in callbacks
 from .opencv_controller import OpenCvController
 
 if TYPE_CHECKING:
@@ -125,8 +126,10 @@ class RocketWelderClient:
                 # Determine if duplex or one-way
                 if self._connection.connection_mode == ConnectionMode.DUPLEX:
 
-                    def preview_wrapper_duplex(input_frame: Mat, output_frame: Mat) -> None:  # type: ignore[valid-type]
-                        # Call original callback
+                    def preview_wrapper_duplex(
+                        metadata: FrameMetadata, input_frame: Mat, output_frame: Mat  # type: ignore[valid-type]
+                    ) -> None:
+                        # Call original callback (ignoring FrameMetadata for backwards compatibility)
                         on_frame(input_frame, output_frame)  # type: ignore[call-arg]
                         # Queue the OUTPUT frame for preview
                         try:
@@ -158,7 +161,18 @@ class RocketWelderClient:
 
                     actual_callback = preview_wrapper_oneway  # type: ignore[assignment]
             else:
-                actual_callback = on_frame  # type: ignore[assignment]
+                # Wrap the callback to adapt (Mat, Mat) -> (FrameMetadata, Mat, Mat) for duplex
+                if self._connection.connection_mode == ConnectionMode.DUPLEX:
+
+                    def metadata_adapter(
+                        metadata: FrameMetadata, input_frame: Mat, output_frame: Mat  # type: ignore[valid-type]
+                    ) -> None:
+                        # Call original callback (ignoring FrameMetadata for backwards compatibility)
+                        on_frame(input_frame, output_frame)  # type: ignore[call-arg]
+
+                    actual_callback = metadata_adapter
+                else:
+                    actual_callback = on_frame  # type: ignore[assignment]
 
             # Start the controller
             self._controller.start(actual_callback, cancellation_token)  # type: ignore[arg-type]

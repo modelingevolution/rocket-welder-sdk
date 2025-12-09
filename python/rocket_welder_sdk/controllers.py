@@ -17,6 +17,7 @@ from zerobuffer.duplex import DuplexChannelFactory
 from zerobuffer.exceptions import WriterDeadException
 
 from .connection_string import ConnectionMode, ConnectionString, Protocol
+from .frame_metadata import FRAME_METADATA_SIZE, FrameMetadata
 from .gst_metadata import GstCaps, GstMetadata
 
 if TYPE_CHECKING:
@@ -553,7 +554,7 @@ class DuplexShmController(IController):
         self._gst_caps: Optional[GstCaps] = None
         self._metadata: Optional[GstMetadata] = None
         self._is_running = False
-        self._on_frame_callback: Optional[Callable[[Mat, Mat], None]] = None  # type: ignore[valid-type]
+        self._on_frame_callback: Optional[Callable[[FrameMetadata, Mat, Mat], None]] = None  # type: ignore[valid-type]
         self._frame_count = 0
 
     @property
@@ -567,14 +568,18 @@ class DuplexShmController(IController):
 
     def start(
         self,
-        on_frame: Callable[[Mat, Mat], None],  # type: ignore[override,valid-type]
+        on_frame: Callable[[FrameMetadata, Mat, Mat], None],  # type: ignore[override,valid-type]
         cancellation_token: Optional[threading.Event] = None,
     ) -> None:
         """
-        Start duplex frame processing.
+        Start duplex frame processing with FrameMetadata.
+
+        The callback receives FrameMetadata (frame number, timestamp, dimensions),
+        input Mat, and output Mat. The 24-byte metadata prefix is stripped from
+        the frame data before creating the input Mat.
 
         Args:
-            on_frame: Callback that receives input frame and output frame to fill
+            on_frame: Callback that receives (FrameMetadata, input_mat, output_mat)
             cancellation_token: Optional cancellation token
         """
         if self._is_running:
@@ -590,7 +595,6 @@ class DuplexShmController(IController):
         )
 
         # Create duplex server using factory
-        # Convert timeout from milliseconds to seconds for Python API
         if not self._connection.buffer_name:
             raise ValueError("Buffer name is required for shared memory connection")
         timeout_seconds = self._connection.timeout_ms / 1000.0
@@ -698,91 +702,96 @@ class DuplexShmController(IController):
 
     def _process_duplex_frame(self, request_frame: Frame, response_writer: Writer) -> None:
         """
-        Process a frame in duplex mode.
+        Process a frame in duplex mode with FrameMetadata.
+
+        The frame data has a 24-byte FrameMetadata prefix that is stripped
+        before creating the input Mat.
 
         Args:
-            request_frame: Input frame from the request
+            request_frame: Input frame from the request (with metadata prefix)
             response_writer: Writer for the response frame
         """
-        logger.debug(
-            "_process_duplex_frame called, frame_count=%d, has_gst_caps=%s",
-            self._frame_count,
-            self._gst_caps is not None,
-        )
         try:
             if not self._on_frame_callback:
                 logger.warning("No frame callback set")
                 return
 
-            self._frame_count += 1
-
-            # Try to read metadata if we don't have it yet
-            if (
-                self._metadata is None
-                and self._duplex_server
-                and self._duplex_server.request_reader
-            ):
-                try:
-                    metadata_bytes = self._duplex_server.request_reader.get_metadata()
-                    if metadata_bytes:
-                        # Use helper method to parse metadata
-                        metadata = self._parse_metadata_json(metadata_bytes)
-                        if metadata:
-                            self._metadata = metadata
-                            self._gst_caps = metadata.caps
-                            logger.info(
-                                "Successfully read metadata from buffer '%s': %s",
-                                self._connection.buffer_name,
-                                self._gst_caps,
-                            )
-                        else:
-                            logger.debug("Failed to parse metadata in frame processing")
-                except Exception as e:
-                    logger.debug("Failed to read metadata in frame processing: %s", e)
-
-            # Convert input frame to Mat
-            input_mat = self._frame_to_mat(request_frame)
-            if input_mat is None:
-                logger.error("Failed to convert frame to Mat, gst_caps=%s", self._gst_caps)
+            # Check frame size is sufficient for metadata
+            if request_frame.size < FRAME_METADATA_SIZE:
+                logger.warning("Frame too small for FrameMetadata: %d bytes", request_frame.size)
                 return
 
-            # Get buffer for output frame - use context manager for RAII
-            with response_writer.get_frame_buffer(request_frame.size) as output_buffer:
+            self._frame_count += 1
+
+            # Parse FrameMetadata from the beginning of the frame
+            frame_metadata = FrameMetadata.from_bytes(request_frame.data)
+
+            # Calculate pixel data offset and size
+            pixel_data_offset = FRAME_METADATA_SIZE
+            pixel_data_size = request_frame.size - FRAME_METADATA_SIZE
+
+            # Use dimensions from FrameMetadata if GstCaps not available
+            if self._gst_caps:
+                width = self._gst_caps.width or frame_metadata.width
+                height = self._gst_caps.height or frame_metadata.height
+                format_str = self._gst_caps.format or frame_metadata.format_name
+            else:
+                width = frame_metadata.width
+                height = frame_metadata.height
+                format_str = frame_metadata.format_name
+
+            # Determine channels from format
+            if format_str in ["RGB", "BGR"]:
+                channels = 3
+            elif format_str in ["RGBA", "BGRA", "ARGB", "ABGR"]:
+                channels = 4
+            elif format_str in ["GRAY8", "GRAY16_LE", "GRAY16_BE"]:
+                channels = 1
+            else:
+                channels = 3  # Default to RGB
+
+            # Create input Mat from pixel data (after metadata prefix)
+            pixel_data = np.frombuffer(request_frame.data[pixel_data_offset:], dtype=np.uint8)
+
+            expected_size = height * width * channels
+            if len(pixel_data) != expected_size:
+                logger.error(
+                    "Pixel data size mismatch. Expected %d bytes for %dx%d with %d channels, got %d",
+                    expected_size,
+                    width,
+                    height,
+                    channels,
+                    len(pixel_data),
+                )
+                return
+
+            # Reshape to image dimensions
+            if channels == 1:
+                input_mat = pixel_data.reshape((height, width))
+            else:
+                input_mat = pixel_data.reshape((height, width, channels))
+
+            # Response doesn't need metadata prefix - just pixel data
+            with response_writer.get_frame_buffer(pixel_data_size) as output_buffer:
                 # Create output Mat from buffer (zero-copy)
-                if self._gst_caps:
-                    height = self._gst_caps.height or 480
-                    width = self._gst_caps.width or 640
-
-                    if self._gst_caps.format == "RGB" or self._gst_caps.format == "BGR":
-                        output_mat = np.frombuffer(output_buffer, dtype=np.uint8).reshape(
-                            (height, width, 3)
-                        )
-                    elif self._gst_caps.format == "GRAY8":
-                        output_mat = np.frombuffer(output_buffer, dtype=np.uint8).reshape(
-                            (height, width)
-                        )
-                    else:
-                        # Default to same shape as input
-                        output_mat = np.frombuffer(output_buffer, dtype=np.uint8).reshape(
-                            input_mat.shape
-                        )
+                output_data = np.frombuffer(output_buffer, dtype=np.uint8)
+                if channels == 1:
+                    output_mat = output_data.reshape((height, width))
                 else:
-                    # Use same shape as input
-                    output_mat = np.frombuffer(output_buffer, dtype=np.uint8).reshape(
-                        input_mat.shape
-                    )
+                    output_mat = output_data.reshape((height, width, channels))
 
-                # Call user's processing function
-                self._on_frame_callback(input_mat, output_mat)
+                # Call user's processing function with metadata
+                self._on_frame_callback(frame_metadata, input_mat, output_mat)
 
             # Commit the response frame after buffer is released
             response_writer.commit_frame()
 
             logger.debug(
-                "Processed duplex frame %d (%dx%d)",
-                self._frame_count,
-                input_mat.shape[1],
-                input_mat.shape[0],
+                "Processed duplex frame %d (%dx%d %s)",
+                frame_metadata.frame_number,
+                width,
+                height,
+                format_str,
             )
 
         except Exception as e:

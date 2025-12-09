@@ -6,6 +6,7 @@ Usage:
     python segmentation_cross_platform_tool.py write <file> <frame_id> <width> <height> <instances_json>
 """
 
+import io
 import json
 import sys
 from pathlib import Path
@@ -16,13 +17,21 @@ from rocket_welder_sdk.segmentation_result import (
     SegmentationResultReader,
     SegmentationResultWriter,
 )
+from rocket_welder_sdk.transport import StreamFrameSource
 
 
 def read_file(file_path: str) -> None:
     """Read segmentation file and output JSON."""
     try:
         with open(file_path, "rb") as f:
-            with SegmentationResultReader(f) as reader:
+            # Use StreamFrameSource to strip length prefix (matches C# StreamFrameSink)
+            frame_source = StreamFrameSource(f)
+            frame_data = frame_source.read_frame()
+            if frame_data is None:
+                print("Error: No frame data found in file", file=sys.stderr)
+                sys.exit(1)
+
+            with SegmentationResultReader(io.BytesIO(frame_data)) as reader:
                 metadata = reader.metadata
                 instances = reader.read_all()
 

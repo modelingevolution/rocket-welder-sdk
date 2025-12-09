@@ -7,6 +7,7 @@ import pytest
 
 from rocket_welder_sdk import ConnectionString, DuplexShmController, OneWayShmController
 from rocket_welder_sdk.controllers import IController
+from rocket_welder_sdk.frame_metadata import FrameMetadata
 from rocket_welder_sdk.gst_metadata import GstCaps
 
 
@@ -201,7 +202,7 @@ class TestDuplexShmController:
     @patch("rocket_welder_sdk.controllers.DuplexChannelFactory")
     @patch("rocket_welder_sdk.controllers.BufferConfig")
     def test_start_creates_duplex_server(self, mock_config_class, mock_factory_class, controller):
-        """Test that start creates a duplex server."""
+        """Test that start creates a duplex server with FrameMetadata callback."""
         mock_config = MagicMock()
         mock_config_class.return_value = mock_config
 
@@ -211,6 +212,7 @@ class TestDuplexShmController:
         mock_server = MagicMock()
         mock_factory.create_immutable_server.return_value = mock_server
 
+        # Callback now receives (FrameMetadata, Mat, Mat)
         on_frame = Mock()
 
         controller.start(on_frame)
@@ -270,21 +272,40 @@ class TestDuplexShmController:
         controller.stop()  # Should not raise
 
     def test_process_duplex_frame(self, controller):
-        """Test _process_duplex_frame method."""
-        # Set up caps and callback
-        controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="RGB")
+        """Test _process_duplex_frame method with FrameMetadata."""
+        import struct
+
+        # Create FrameMetadata bytes (24 bytes)
+        frame_number = 42
+        timestamp_ns = 1234567890
+        width = 2
+        height = 2
+        fmt = 15  # RGB
+        reserved = 0
+
+        metadata_bytes = struct.pack(
+            "<QQHHHH", frame_number, timestamp_ns, width, height, fmt, reserved
+        )
+
+        # Create pixel data (2x2x3 = 12 bytes for RGB)
+        pixel_data = np.zeros((12,), dtype=np.uint8)
+        pixel_data[0] = 255  # Mark first byte
+
+        # Combine metadata + pixel data
+        full_frame_data = metadata_bytes + bytes(pixel_data)
+
+        # Set up callback
         controller._on_frame_callback = Mock()
 
-        # Create mock request frame with correct data
-        frame_data = np.zeros((12,), dtype=np.uint8)  # 2x2x3
+        # Create mock request frame
         mock_request_frame = MagicMock()
-        mock_request_frame.data = memoryview(frame_data)
-        mock_request_frame.size = 12
+        mock_request_frame.data = memoryview(full_frame_data)
+        mock_request_frame.size = len(full_frame_data)
 
         # Create mock response writer
         mock_response_writer = MagicMock()
         mock_output_buffer = np.zeros((12,), dtype=np.uint8)
-        # Create a context manager that returns the buffer
+
         from contextlib import contextmanager
 
         @contextmanager
@@ -296,11 +317,23 @@ class TestDuplexShmController:
         # Call the method
         controller._process_duplex_frame(mock_request_frame, mock_response_writer)
 
-        # Verify on_frame_callback was called with two Mats
+        # Verify callback was called with FrameMetadata and two Mats
         controller._on_frame_callback.assert_called_once()
-        input_mat, output_mat = controller._on_frame_callback.call_args[0]
+        call_args = controller._on_frame_callback.call_args[0]
+
+        # Check FrameMetadata
+        frame_metadata = call_args[0]
+        assert isinstance(frame_metadata, FrameMetadata)
+        assert frame_metadata.frame_number == 42
+
+        # Check input Mat
+        input_mat = call_args[1]
         assert input_mat is not None
         assert input_mat.shape == (2, 2, 3)
+        assert input_mat[0, 0, 0] == 255  # First byte marked
+
+        # Check output Mat
+        output_mat = call_args[2]
         assert output_mat is not None
         assert output_mat.shape == (2, 2, 3)
 
@@ -315,3 +348,20 @@ class TestDuplexShmController:
         assert controller._is_running is False
         mock_server.stop.assert_called_once()
         assert controller._duplex_server is None
+
+    def test_process_duplex_frame_too_small(self, controller):
+        """Test _process_duplex_frame with frame too small for metadata."""
+        controller._on_frame_callback = Mock()
+
+        # Create frame smaller than FRAME_METADATA_SIZE
+        mock_request_frame = MagicMock()
+        mock_request_frame.data = memoryview(b"small")
+        mock_request_frame.size = 5
+
+        mock_response_writer = MagicMock()
+
+        # Call the method - should return early without calling callback
+        controller._process_duplex_frame(mock_request_frame, mock_response_writer)
+
+        # Callback should not be called
+        controller._on_frame_callback.assert_not_called()
