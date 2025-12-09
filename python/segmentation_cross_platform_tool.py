@@ -17,7 +17,7 @@ from rocket_welder_sdk.segmentation_result import (
     SegmentationResultReader,
     SegmentationResultWriter,
 )
-from rocket_welder_sdk.transport import StreamFrameSource
+from rocket_welder_sdk.transport import StreamFrameSink, StreamFrameSource
 
 
 def read_file(file_path: str) -> None:
@@ -57,10 +57,11 @@ def read_file(file_path: str) -> None:
         sys.exit(1)
 
 
-def write_file(
-    file_path: str, frame_id: int, width: int, height: int, instances_json: str
-) -> None:
-    """Write segmentation file from JSON data (either JSON string or path to JSON file)."""
+def write_file(file_path: str, frame_id: int, width: int, height: int, instances_json: str) -> None:
+    """Write segmentation file from JSON data (either JSON string or path to JSON file).
+
+    Uses StreamFrameSink to add varint length-prefix framing, matching C# behavior.
+    """
     try:
         # Try to read as file path first
         if Path(instances_json).exists():
@@ -71,12 +72,17 @@ def write_file(
             instances_data = json.loads(instances_json)
 
         with open(file_path, "wb") as f:
-            with SegmentationResultWriter(frame_id, width, height, f) as writer:
+            # Use StreamFrameSink to add varint length-prefix framing (matches C#)
+            sink = StreamFrameSink(f, leave_open=True)
+            with SegmentationResultWriter(
+                frame_id, width, height, frame_sink=sink
+            ) as writer:
                 for inst in instances_data:
                     class_id = inst["class_id"]
                     instance_id = inst["instance_id"]
                     points = np.array(inst["points"], dtype=np.int32)
                     writer.append(class_id, instance_id, points)
+            sink.close()
 
         print(f"Successfully wrote {len(instances_data)} instances to {file_path}")
         sys.exit(0)

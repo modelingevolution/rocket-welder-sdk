@@ -192,6 +192,7 @@ public class UiService : IUiService
 
     public async ValueTask DisposeAsync()
     {
-        await _token.DisposeAsync();
+        if (_token != null)
+            await _token.DisposeAsync();
     }
 }

@@ -603,7 +603,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         }
     }
 
-    [Fact(Skip = "Requires Python to use framing - will be fixed when Python is updated")]
+    [Fact]
     public async Task CrossPlatform_Process_CSharpWritesPythonReads_ReturnsCorrectJson()
     {
         // Arrange
@@ -753,7 +753,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         _output.WriteLine("✓ C# successfully read Python-written file!");
     }
 
-    [Fact(Skip = "Requires Python to use framing - will be fixed when Python is updated")]
+    [Fact]
     public async Task CrossPlatform_Process_MultipleFrames_RoundTrip()
     {
         // Arrange

@@ -1,5 +1,12 @@
 using System;
 using System.Net.WebSockets;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Hosting;
 using RocketWelder.SDK.Transport;
 using Xunit;
 using Xunit.Abstractions;
@@ -8,8 +15,7 @@ namespace RocketWelder.SDK.Tests.Transport;
 
 /// <summary>
 /// Tests for WebSocket transport.
-/// Integration tests are skipped by default as they require a WebSocket server.
-/// The WebSocketFrameSink/Source classes are fully tested via unit tests.
+/// Integration tests use a minimal WebHost with mapped WebSocket handler.
 /// </summary>
 public class WebSocketTransportTests
 {
@@ -113,30 +119,171 @@ public class WebSocketTransportTests
         _output.WriteLine("leaveOpen=true correctly leaves WebSocket open");
     }
 
+    #region Integration Tests with Minimal WebHost
+
     /// <summary>
-    /// Integration tests require a running WebSocket server.
-    /// These are skipped in CI but can be run locally with:
-    /// dotnet test --filter "Category=Integration"
+    /// Creates a minimal WebHost with WebSocket echo handler.
     /// </summary>
-    [Trait("Category", "Integration")]
-    [Fact(Skip = "Integration test - requires WebSocket server")]
-    public void WebSocket_Integration_RoundTrip()
+    private static async Task<(IHost host, int port)> CreateWebSocketServerAsync()
     {
-        // Integration test would connect to a real WebSocket server
-        // and verify full round-trip communication
+        var port = 17000 + Random.Shared.Next(1000);
+        var host = Host.CreateDefaultBuilder()
+            .ConfigureWebHostDefaults(webBuilder =>
+            {
+                webBuilder.UseUrls($"http://localhost:{port}");
+                webBuilder.Configure(app =>
+                {
+                    app.UseWebSockets();
+                    app.Map("/ws", wsApp =>
+                    {
+                        wsApp.Run(async context =>
+                        {
+                            if (context.WebSockets.IsWebSocketRequest)
+                            {
+                                using var ws = await context.WebSockets.AcceptWebSocketAsync();
+                                await EchoHandler(ws);
+                            }
+                            else
+                            {
+                                context.Response.StatusCode = 400;
+                            }
+                        });
+                    });
+                });
+            })
+            .Build();
+
+        await host.StartAsync();
+        return (host, port);
+    }
+
+    private static async Task EchoHandler(WebSocket ws)
+    {
+        var buffer = new byte[64 * 1024];
+        while (ws.State == WebSocketState.Open)
+        {
+            var result = await ws.ReceiveAsync(buffer, CancellationToken.None);
+            if (result.MessageType == WebSocketMessageType.Close)
+            {
+                await ws.CloseAsync(WebSocketCloseStatus.NormalClosure, "Closing", CancellationToken.None);
+                break;
+            }
+            // Echo back
+            await ws.SendAsync(
+                new ArraySegment<byte>(buffer, 0, result.Count),
+                result.MessageType,
+                result.EndOfMessage,
+                CancellationToken.None);
+        }
     }
 
     [Trait("Category", "Integration")]
-    [Fact(Skip = "Integration test - requires WebSocket server")]
-    public void WebSocket_Integration_MultipleMessages()
+    [Fact]
+    public async Task WebSocket_Integration_RoundTrip()
     {
-        // Integration test for multiple message ordering
+        // Arrange
+        var (host, port) = await CreateWebSocketServerAsync();
+        try
+        {
+            var testData = Encoding.UTF8.GetBytes("Hello WebSocket!");
+
+            using var client = new ClientWebSocket();
+            await client.ConnectAsync(new Uri($"ws://localhost:{port}/ws"), CancellationToken.None);
+
+            using var sink = new WebSocketFrameSink(client, leaveOpen: true);
+            using var source = new WebSocketFrameSource(client, leaveOpen: true);
+
+            // Act
+            await sink.WriteFrameAsync(testData);
+            var received = source.ReadFrame();
+
+            // Assert
+            Assert.Equal(testData, received.ToArray());
+            _output.WriteLine($"✓ Round-trip successful: {Encoding.UTF8.GetString(received.Span)}");
+
+            await client.CloseAsync(WebSocketCloseStatus.NormalClosure, "Done", CancellationToken.None);
+        }
+        finally
+        {
+            await host.StopAsync();
+            host.Dispose();
+        }
     }
 
     [Trait("Category", "Integration")]
-    [Fact(Skip = "Integration test - requires WebSocket server")]
-    public void WebSocket_Integration_LargeMessage()
+    [Fact]
+    public async Task WebSocket_Integration_MultipleMessages()
     {
-        // Integration test for large message handling
+        // Arrange
+        var (host, port) = await CreateWebSocketServerAsync();
+        try
+        {
+            var messages = new[]
+            {
+                Encoding.UTF8.GetBytes("Message 1"),
+                Encoding.UTF8.GetBytes("Message 2"),
+                Encoding.UTF8.GetBytes("Message 3")
+            };
+
+            using var client = new ClientWebSocket();
+            await client.ConnectAsync(new Uri($"ws://localhost:{port}/ws"), CancellationToken.None);
+
+            using var sink = new WebSocketFrameSink(client, leaveOpen: true);
+            using var source = new WebSocketFrameSource(client, leaveOpen: true);
+
+            // Act & Assert - send and receive each message
+            foreach (var msg in messages)
+            {
+                await sink.WriteFrameAsync(msg);
+                var received = source.ReadFrame();
+                Assert.Equal(msg, received.ToArray());
+                _output.WriteLine($"✓ Received: {Encoding.UTF8.GetString(received.Span)}");
+            }
+
+            await client.CloseAsync(WebSocketCloseStatus.NormalClosure, "Done", CancellationToken.None);
+        }
+        finally
+        {
+            await host.StopAsync();
+            host.Dispose();
+        }
     }
+
+    [Trait("Category", "Integration")]
+    [Fact]
+    public async Task WebSocket_Integration_LargeMessage()
+    {
+        // Arrange
+        var (host, port) = await CreateWebSocketServerAsync();
+        try
+        {
+            // 1MB message
+            var largeData = new byte[1024 * 1024];
+            Random.Shared.NextBytes(largeData);
+
+            using var client = new ClientWebSocket();
+            await client.ConnectAsync(new Uri($"ws://localhost:{port}/ws"), CancellationToken.None);
+
+            using var sink = new WebSocketFrameSink(client, leaveOpen: true);
+            using var source = new WebSocketFrameSource(client, leaveOpen: true);
+
+            // Act
+            await sink.WriteFrameAsync(largeData);
+            var received = source.ReadFrame();
+
+            // Assert
+            Assert.Equal(largeData.Length, received.Length);
+            Assert.Equal(largeData, received.ToArray());
+            _output.WriteLine($"✓ Large message round-trip successful: {largeData.Length} bytes");
+
+            await client.CloseAsync(WebSocketCloseStatus.NormalClosure, "Done", CancellationToken.None);
+        }
+        finally
+        {
+            await host.StopAsync();
+            host.Dispose();
+        }
+    }
+
+    #endregion
 }
