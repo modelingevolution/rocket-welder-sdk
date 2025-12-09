@@ -8,7 +8,7 @@ Supported patterns:
 
 from typing import Any, Optional, cast
 
-import pynng  # type: ignore[import-untyped]
+import pynng
 
 from .frame_sink import IFrameSink
 from .frame_source import IFrameSource
