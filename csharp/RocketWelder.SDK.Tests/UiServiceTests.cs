@@ -119,7 +119,7 @@ namespace RocketWelder.SDK.Tests
             _eventStore = eventStore;
         }
 
-        [Fact(Skip = "Requires EventStore configuration")]
+        [Fact]
         public async Task FromSessionId_WithInitializeHost_ShouldProperlyConfigureDI()
         {
             // Arrange
@@ -174,7 +174,7 @@ namespace RocketWelder.SDK.Tests
             }
         }
 
-        [Fact(Skip = "Requires EventStore configuration")]
+        [Fact]
         public async Task FromSessionId_WithInitializeHost_AndCustomConfiguration_ShouldApplyConfiguration()
         {
             // Arrange
