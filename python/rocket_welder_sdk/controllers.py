@@ -337,6 +337,9 @@ class OneWayShmController(IController):
         Create OpenCV Mat from frame data using GstCaps.
         Matches C# CreateMat behavior - creates Mat wrapping the data.
 
+        Frame data layout from GStreamer zerosink:
+        [FrameMetadata (16 bytes)][Pixel Data (W×H×C bytes)]
+
         Args:
             frame: ZeroBuffer frame
 
@@ -360,31 +363,40 @@ class OneWayShmController(IController):
                 else:
                     channels = 3  # Default to RGB
 
-                # Get frame data directly as numpy array (zero-copy view)
-                # Frame.data is already a memoryview/buffer that can be wrapped
-                data = np.frombuffer(frame.data, dtype=np.uint8)
-
-                # Check data size matches expected
-                expected_size = height * width * channels
-                if len(data) != expected_size:
+                # Frame data has 16-byte FrameMetadata prefix that must be stripped
+                # Layout: [FrameMetadata (16 bytes)][Pixel Data]
+                if frame.size < FRAME_METADATA_SIZE:
                     logger.error(
-                        "Data size mismatch. Expected %d bytes for %dx%d with %d channels, got %d",
+                        "Frame too small for FrameMetadata: %d bytes (need at least %d)",
+                        frame.size,
+                        FRAME_METADATA_SIZE,
+                    )
+                    return None
+
+                # Get pixel data (skip 16-byte FrameMetadata prefix)
+                pixel_data = np.frombuffer(frame.data[FRAME_METADATA_SIZE:], dtype=np.uint8)
+
+                # Check pixel data size matches expected
+                expected_size = height * width * channels
+                if len(pixel_data) != expected_size:
+                    logger.error(
+                        "Pixel data size mismatch. Expected %d bytes for %dx%d with %d channels, got %d",
                         expected_size,
                         width,
                         height,
                         channels,
-                        len(data),
+                        len(pixel_data),
                     )
                     return None
 
                 # Reshape to image dimensions - this is zero-copy, just changes the view
                 # This matches C#: new Mat(Height, Width, Depth, Channels, ptr, Width * Channels)
                 if channels == 3:
-                    mat = data.reshape((height, width, 3))
+                    mat = pixel_data.reshape((height, width, 3))
                 elif channels == 1:
-                    mat = data.reshape((height, width))
+                    mat = pixel_data.reshape((height, width))
                 elif channels == 4:
-                    mat = data.reshape((height, width, 4))
+                    mat = pixel_data.reshape((height, width, 4))
                 else:
                     logger.error("Unsupported channel count: %d", channels)
                     return None
@@ -394,41 +406,51 @@ class OneWayShmController(IController):
             # No caps available - try to infer from frame size
             logger.warning("No GstCaps available, attempting to infer from frame size")
 
-            # Try common resolutions
-            frame_size = len(frame.data)
+            # Frame data has 16-byte FrameMetadata prefix
+            if frame.size < FRAME_METADATA_SIZE:
+                logger.error(
+                    "Frame too small for FrameMetadata: %d bytes (need at least %d)",
+                    frame.size,
+                    FRAME_METADATA_SIZE,
+                )
+                return None
+
+            # Calculate pixel data size (frame size minus 16-byte metadata prefix)
+            pixel_data_size = frame.size - FRAME_METADATA_SIZE
 
             # First, check if it's a perfect square (square frame)
             import math
 
-            sqrt_size = math.sqrt(frame_size)
+            sqrt_size = math.sqrt(pixel_data_size)
             if sqrt_size == int(sqrt_size):
                 # Perfect square - assume square grayscale image
                 dimension = int(sqrt_size)
                 logger.info(
-                    f"Frame size {frame_size} is a perfect square, assuming {dimension}x{dimension} grayscale"
+                    f"Pixel data size {pixel_data_size} is a perfect square, "
+                    f"assuming {dimension}x{dimension} grayscale"
                 )
-                data = np.frombuffer(frame.data, dtype=np.uint8)
-                return data.reshape((dimension, dimension))  # type: ignore[no-any-return]
+                pixel_data = np.frombuffer(frame.data[FRAME_METADATA_SIZE:], dtype=np.uint8)
+                return pixel_data.reshape((dimension, dimension))  # type: ignore[no-any-return]
 
             # Also check for square RGB (size = width * height * 3)
-            if frame_size % 3 == 0:
-                pixels = frame_size // 3
+            if pixel_data_size % 3 == 0:
+                pixels = pixel_data_size // 3
                 sqrt_pixels = math.sqrt(pixels)
                 if sqrt_pixels == int(sqrt_pixels):
                     dimension = int(sqrt_pixels)
-                    logger.info(f"Frame size {frame_size} suggests {dimension}x{dimension} RGB")
-                    data = np.frombuffer(frame.data, dtype=np.uint8)
-                    return data.reshape((dimension, dimension, 3))  # type: ignore[no-any-return]
+                    logger.info(f"Pixel data size {pixel_data_size} suggests {dimension}x{dimension} RGB")
+                    pixel_data = np.frombuffer(frame.data[FRAME_METADATA_SIZE:], dtype=np.uint8)
+                    return pixel_data.reshape((dimension, dimension, 3))  # type: ignore[no-any-return]
 
             # Check for square RGBA (size = width * height * 4)
-            if frame_size % 4 == 0:
-                pixels = frame_size // 4
+            if pixel_data_size % 4 == 0:
+                pixels = pixel_data_size // 4
                 sqrt_pixels = math.sqrt(pixels)
                 if sqrt_pixels == int(sqrt_pixels):
                     dimension = int(sqrt_pixels)
-                    logger.info(f"Frame size {frame_size} suggests {dimension}x{dimension} RGBA")
-                    data = np.frombuffer(frame.data, dtype=np.uint8)
-                    return data.reshape((dimension, dimension, 4))  # type: ignore[no-any-return]
+                    logger.info(f"Pixel data size {pixel_data_size} suggests {dimension}x{dimension} RGBA")
+                    pixel_data = np.frombuffer(frame.data[FRAME_METADATA_SIZE:], dtype=np.uint8)
+                    return pixel_data.reshape((dimension, dimension, 4))  # type: ignore[no-any-return]
 
             common_resolutions = [
                 (640, 480, 3),  # VGA RGB
@@ -439,7 +461,7 @@ class OneWayShmController(IController):
             ]
 
             for width, height, channels in common_resolutions:
-                if frame_size == width * height * channels:
+                if pixel_data_size == width * height * channels:
                     logger.info(f"Inferred resolution: {width}x{height} with {channels} channels")
 
                     # Create caps for future use
@@ -448,16 +470,16 @@ class OneWayShmController(IController):
                         width=width, height=height, format=format_str
                     )
 
-                    # Create Mat
-                    data = np.frombuffer(frame.data, dtype=np.uint8)
+                    # Create Mat from pixel data (skip 16-byte FrameMetadata prefix)
+                    pixel_data = np.frombuffer(frame.data[FRAME_METADATA_SIZE:], dtype=np.uint8)
                     if channels == 3:
-                        return data.reshape((height, width, 3))  # type: ignore[no-any-return]
+                        return pixel_data.reshape((height, width, 3))  # type: ignore[no-any-return]
                     elif channels == 1:
-                        return data.reshape((height, width))  # type: ignore[no-any-return]
+                        return pixel_data.reshape((height, width))  # type: ignore[no-any-return]
                     elif channels == 4:
-                        return data.reshape((height, width, 4))  # type: ignore[no-any-return]
+                        return pixel_data.reshape((height, width, 4))  # type: ignore[no-any-return]
 
-            logger.error(f"Could not infer resolution for frame size {frame_size}")
+            logger.error(f"Could not infer resolution for pixel data size {pixel_data_size}")
             return None
 
         except Exception as e:
@@ -730,15 +752,17 @@ class DuplexShmController(IController):
             pixel_data_offset = FRAME_METADATA_SIZE
             pixel_data_size = request_frame.size - FRAME_METADATA_SIZE
 
-            # Use dimensions from FrameMetadata if GstCaps not available
-            if self._gst_caps:
-                width = self._gst_caps.width or frame_metadata.width
-                height = self._gst_caps.height or frame_metadata.height
-                format_str = self._gst_caps.format or frame_metadata.format_name
-            else:
-                width = frame_metadata.width
-                height = frame_metadata.height
-                format_str = frame_metadata.format_name
+            # GstCaps must be available for width/height/format
+            # (FrameMetadata no longer contains these - they're stream-level, not per-frame)
+            if not self._gst_caps:
+                logger.warning(
+                    "GstCaps not available, skipping frame %d", frame_metadata.frame_number
+                )
+                return
+
+            width = self._gst_caps.width
+            height = self._gst_caps.height
+            format_str = self._gst_caps.format
 
             # Determine channels from format
             if format_str in ["RGB", "BGR"]:

@@ -4,13 +4,12 @@ Test memory barrier implementation for shared memory synchronization.
 This test demonstrates the need for memory barriers in multiprocess shared memory access.
 """
 
-import multiprocessing
-import mmap
-import os
-import time
 import ctypes
+import mmap
+import multiprocessing
+import os
 import sys
-from typing import Optional
+import time
 
 # Constants for test
 ITERATIONS = 1000000
@@ -139,7 +138,7 @@ def run_test(use_barrier: bool) -> dict:
     Run the test with or without memory barriers.
     """
     print(f"\n{'='*60}")
-    print(f"Running test WITH memory barriers" if use_barrier else "Running test WITHOUT memory barriers")
+    print("Running test WITH memory barriers" if use_barrier else "Running test WITHOUT memory barriers")
     print(f"{'='*60}")
 
     # Create shared memory file

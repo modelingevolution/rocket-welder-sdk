@@ -3,6 +3,7 @@
 
 import json
 import logging
+
 from rocket_welder_sdk.gst_metadata import GstCaps, GstMetadata
 
 # Set up logging
@@ -25,7 +26,7 @@ for caps_str in test_cases:
     print(f"\nTesting: {caps_str}")
     try:
         caps = GstCaps.parse(caps_str)
-        print(f"✓ Parsed successfully:")
+        print("✓ Parsed successfully:")
         print(f"  Width: {caps.width}, Height: {caps.height}")
         print(f"  Format: {caps.format}, Framerate: {caps.framerate}")
     except Exception as e:
@@ -55,7 +56,7 @@ for meta_dict in metadata_jsons:
     print(f"\nTesting JSON: {json_str[:80]}...")
     try:
         metadata = GstMetadata.from_json(json_str)
-        print(f"✓ Metadata parsed successfully:")
+        print("✓ Metadata parsed successfully:")
         print(f"  Type: {metadata.type}, Element: {metadata.element_name}")
         print(f"  Caps: {metadata.caps.width}x{metadata.caps.height} {metadata.caps.format}")
     except Exception as e:
@@ -86,6 +87,6 @@ if json_start >= 0 and json_end > json_start:
     print(f"Cleaned JSON: {cleaned[:80]}...")
     try:
         metadata = GstMetadata.from_json(cleaned)
-        print(f"✓ Parsed padded JSON successfully")
+        print("✓ Parsed padded JSON successfully")
     except Exception as e:
         print(f"✗ Failed to parse cleaned JSON: {e}")

@@ -5,15 +5,16 @@ namespace RocketWelder.SDK
 {
     /// <summary>
     /// Frame metadata prepended to each frame in zerobuffer shared memory.
-    /// This structure is 24 bytes, 8-byte aligned.
+    /// This structure is 16 bytes, 8-byte aligned.
     ///
     /// Layout:
     ///   [0-7]   frame_number    - Sequential frame index (0-based)
     ///   [8-15]  timestamp_ns    - GStreamer PTS in nanoseconds (UInt64.MaxValue if unavailable)
-    ///   [16-17] width           - Frame width in pixels
-    ///   [18-19] height          - Frame height in pixels
-    ///   [20-21] format          - Pixel format (GstVideoFormat enum value)
-    ///   [22-23] reserved        - Alignment padding (must be 0)
+    ///
+    /// Note: Width, height, and format are NOT included here because they are
+    /// stream-level properties that never change per-frame. They are stored once
+    /// in the ZeroBuffer metadata section as GstCaps (via GstMetadata).
+    /// This avoids redundant data and follows single-source-of-truth principle.
     /// </summary>
     [StructLayout(LayoutKind.Sequential, Pack = 8)]
     public readonly struct FrameMetadata
@@ -21,7 +22,7 @@ namespace RocketWelder.SDK
         /// <summary>
         /// Size of the FrameMetadata structure in bytes.
         /// </summary>
-        public const int Size = 24;
+        public const int Size = 16;
 
         /// <summary>
         /// Value indicating timestamp is unavailable.
@@ -40,37 +41,12 @@ namespace RocketWelder.SDK
         public readonly ulong TimestampNs;
 
         /// <summary>
-        /// Frame width in pixels.
-        /// </summary>
-        public readonly ushort Width;
-
-        /// <summary>
-        /// Frame height in pixels.
-        /// </summary>
-        public readonly ushort Height;
-
-        /// <summary>
-        /// Pixel format (GstVideoFormat enum value).
-        /// Common values: 15=RGB, 16=BGR, 11=RGBA, 12=BGRA, 2=I420, 23=NV12, 25=GRAY8
-        /// </summary>
-        public readonly ushort Format;
-
-        /// <summary>
-        /// Reserved for future use (must be 0).
-        /// </summary>
-        public readonly ushort Reserved;
-
-        /// <summary>
         /// Creates a new FrameMetadata instance.
         /// </summary>
-        public FrameMetadata(ulong frameNumber, ulong timestampNs, ushort width, ushort height, ushort format)
+        public FrameMetadata(ulong frameNumber, ulong timestampNs)
         {
             FrameNumber = frameNumber;
             TimestampNs = timestampNs;
-            Width = width;
-            Height = height;
-            Format = format;
-            Reserved = 0;
         }
 
         /// <summary>
@@ -84,24 +60,6 @@ namespace RocketWelder.SDK
         public TimeSpan? Timestamp => HasTimestamp
             ? TimeSpan.FromTicks((long)(TimestampNs / 100)) // 1 tick = 100 ns
             : null;
-
-        /// <summary>
-        /// Gets the format as a GstVideoFormat name.
-        /// </summary>
-        public string FormatName => Format switch
-        {
-            0 => "UNKNOWN",
-            2 => "I420",
-            11 => "RGBA",
-            12 => "BGRA",
-            13 => "ARGB",
-            14 => "ABGR",
-            15 => "RGB",
-            16 => "BGR",
-            23 => "NV12",
-            25 => "GRAY8",
-            _ => $"FORMAT_{Format}"
-        };
 
         /// <summary>
         /// Reads FrameMetadata from a pointer.
@@ -130,7 +88,7 @@ namespace RocketWelder.SDK
             var timestamp = HasTimestamp
                 ? $"{TimestampNs / 1_000_000.0:F3}ms"
                 : "N/A";
-            return $"Frame {FrameNumber}: {Width}x{Height} {FormatName} @ {timestamp}";
+            return $"Frame {FrameNumber} @ {timestamp}";
         }
     }
 }

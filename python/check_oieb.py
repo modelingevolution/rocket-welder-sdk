@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
 """Check OIEB structure in shared memory buffer"""
 
-import sys
-import posix_ipc
 import mmap
 import struct
+import sys
+
+import posix_ipc
+
 
 def check_oieb(buffer_name):
     """Read and display OIEB structure from shared memory"""
     try:
         # Open shared memory
         shm = posix_ipc.SharedMemory(buffer_name)
-        
+
         # Map it to memory
         mem = mmap.mmap(shm.fd, shm.size)
-        
+
         # Read first 128 bytes (OIEB)
         oieb_data = mem[:128]
-        
+
         # Parse OIEB fields
         oieb_size = struct.unpack('<I', oieb_data[0:4])[0]
         version = struct.unpack('4B', oieb_data[4:8])
@@ -32,7 +34,7 @@ def check_oieb(buffer_name):
         payload_read_count = struct.unpack('<Q', oieb_data[72:80])[0]
         writer_pid = struct.unpack('<Q', oieb_data[80:88])[0]
         reader_pid = struct.unpack('<Q', oieb_data[88:96])[0]
-        
+
         print(f"Buffer: {buffer_name}")
         print(f"OIEB size field: {oieb_size} (should be 128)")
         print(f"Actual OIEB size: {len(oieb_data)} bytes")
@@ -48,11 +50,11 @@ def check_oieb(buffer_name):
         for i in range(0, 128, 16):
             hex_str = ' '.join(f'{b:02x}' for b in oieb_data[i:i+16])
             print(f"  {i:03d}: {hex_str}")
-        
+
         # Clean up
         mem.close()
         shm.close_fd()
-        
+
     except Exception as e:
         print(f"Error reading buffer '{buffer_name}': {e}")
         sys.exit(1)
@@ -61,5 +63,5 @@ if __name__ == "__main__":
     if len(sys.argv) != 2:
         print("Usage: python check_oieb.py <buffer_name>")
         sys.exit(1)
-    
+
     check_oieb(sys.argv[1])

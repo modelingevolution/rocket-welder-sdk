@@ -86,12 +86,6 @@ namespace RocketWelder.SDK
             }, cancellationToken);
         }
 
-        public void Start(Action<Mat, ISegmentationResultWriter, IKeyPointsWriter, Mat> onFrame, CancellationToken cancellationToken = default)
-        {
-            // TODO: Implement segmentation result writer and keypoints writer integration
-            throw new NotImplementedException("Segmentation result writer and keypoints writer are not yet implemented for DuplexShmController");
-        }
-
         private void OnMetadata(ReadOnlySpan<byte> metadataBytes)
         {
             // Parse metadata on first frame
@@ -106,31 +100,33 @@ namespace RocketWelder.SDK
             if (_onFrame == null)
                 return;
 
-            // Frame now has FrameMetadata prepended (24 bytes)
+            // Frame now has FrameMetadata prepended (16 bytes: frame_number + timestamp_ns)
             if (request.Size < FrameMetadata.Size)
             {
                 _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", request.Size);
                 return;
             }
 
+            // GstCaps must be available (set via OnMetadata)
+            if (_gstCaps == null)
+            {
+                _logger.LogWarning("GstCaps not available, skipping frame");
+                return;
+            }
+
+            var caps = _gstCaps.Value;
+
             unsafe
             {
-                // Read FrameMetadata from the beginning of the frame
+                // Read FrameMetadata from the beginning of the frame (16 bytes)
                 var frameMetadata = FrameMetadata.FromPointer((IntPtr)request.Pointer);
 
                 // Calculate pointer to actual pixel data (after metadata)
                 byte* pixelDataPtr = request.Pointer + FrameMetadata.Size;
                 var pixelDataSize = request.Size - FrameMetadata.Size;
 
-                // Use dimensions from FrameMetadata if GstCaps not available
-                var caps = _gstCaps ?? new GstCaps
-                {
-                    Width = frameMetadata.Width,
-                    Height = frameMetadata.Height,
-                    Format = frameMetadata.FormatName
-                };
-
                 // Create input Mat from pixel data (zero-copy)
+                // Width/height/format come from GstCaps (stream-level, not per-frame)
                 using var inputMat = caps.CreateMat(pixelDataPtr);
 
                 // Response doesn't need metadata prefix - just pixel data

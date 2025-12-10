@@ -604,11 +604,48 @@ namespace RocketWelder.SDK
         bool IsRunning { get; }
         GstMetadata? GetMetadata();
         event Action<IController, Exception>? OnError;
-        void Start(Action<Mat, ISegmentationResultWriter, IKeyPointsWriter, Mat> onFrame, CancellationToken cancellationToken = default);
+        void Start(Action<FrameMetadata, Mat, Mat> onFrame, CancellationToken cancellationToken = default);
         void Start(Action<Mat, Mat> onFrame, CancellationToken cancellationToken = default);
         void Start(Action<Mat> onFrame, CancellationToken cancellationToken = default);
         void Stop(CancellationToken cancellationToken = default);
         void Dispose();
+    }
+
+    /// <summary>
+    /// No-op segmentation writer used when GstCaps are not yet available.
+    /// All operations are ignored silently.
+    /// </summary>
+    internal sealed class NoOpSegmentationWriter : ISegmentationResultWriter
+    {
+        public static readonly NoOpSegmentationWriter Instance = new();
+        private NoOpSegmentationWriter() { }
+
+        public void Append(byte classId, byte instanceId, in ReadOnlySpan<Point> points) { }
+        public void Append(byte classId, byte instanceId, Point[] points) { }
+        public void Append(byte classId, byte instanceId, IEnumerable<Point> points) { }
+        public Task AppendAsync(byte classId, byte instanceId, Point[] points) => Task.CompletedTask;
+        public Task AppendAsync(byte classId, byte instanceId, IEnumerable<Point> points) => Task.CompletedTask;
+        public void Flush() { }
+        public Task FlushAsync() => Task.CompletedTask;
+        public void Dispose() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// No-op keypoints writer used when GstCaps are not yet available.
+    /// All operations are ignored silently.
+    /// </summary>
+    internal sealed class NoOpKeyPointsWriter : IKeyPointsWriter
+    {
+        public static readonly NoOpKeyPointsWriter Instance = new();
+        private NoOpKeyPointsWriter() { }
+
+        public void Append(int keypointId, int x, int y, float confidence) { }
+        public void Append(int keypointId, Point p, float confidence) { }
+        public Task AppendAsync(int keypointId, int x, int y, float confidence) => Task.CompletedTask;
+        public Task AppendAsync(int keypointId, Point p, float confidence) => Task.CompletedTask;
+        public void Dispose() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
     internal static class ControllerFactory
     {
@@ -626,13 +663,91 @@ namespace RocketWelder.SDK
     }
 
     /// <summary>
+    /// Configuration keys for NNG Pub/Sub URLs used by RocketWelderClient.
+    /// These URLs are used by rocket-welder2 to connect to the Python AI container's output channels.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>NNG IPC URL Format:</b> <c>ipc:///tmp/{container-name}-{channel}.ipc</c>
+    /// </para>
+    /// <para>
+    /// <b>Example URLs:</b>
+    /// <list type="bullet">
+    ///   <item><description>Segmentation: <c>ipc:///tmp/ai-container-segmentation.ipc</c></description></item>
+    ///   <item><description>KeyPoints: <c>ipc:///tmp/ai-container-keypoints.ipc</c></description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// <b>Configuration in appsettings.json:</b>
+    /// <code>
+    /// {
+    ///   "RocketWelder": {
+    ///     "ConnectionString": "shm://video-buffer?mode=duplex",
+    ///     "SegmentationSinkUrl": "ipc:///tmp/ai-segmentation.ipc",
+    ///     "KeyPointsSinkUrl": "ipc:///tmp/ai-keypoints.ipc"
+    ///   }
+    /// }
+    /// </code>
+    /// </para>
+    /// <para>
+    /// <b>Environment Variables (alternative):</b>
+    /// <list type="bullet">
+    ///   <item><description><c>SEGMENTATION_SINK_URL</c></description></item>
+    ///   <item><description><c>KEYPOINTS_SINK_URL</c></description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
+    public static class RocketWelderConfigKeys
+    {
+        /// <summary>
+        /// Configuration key for the segmentation results NNG Pub URL.
+        /// The Python AI container publishes segmentation results to this URL.
+        /// rocket-welder2 subscribes to receive the results.
+        /// </summary>
+        public const string SegmentationSinkUrl = "RocketWelder:SegmentationSinkUrl";
+
+        /// <summary>
+        /// Configuration key for the keypoints NNG Pub URL.
+        /// The Python AI container publishes keypoints to this URL.
+        /// rocket-welder2 subscribes to receive the results.
+        /// </summary>
+        public const string KeyPointsSinkUrl = "RocketWelder:KeyPointsSinkUrl";
+
+        /// <summary>
+        /// Environment variable name for segmentation sink URL (alternative to config).
+        /// </summary>
+        public const string SegmentationSinkUrlEnv = "SEGMENTATION_SINK_URL";
+
+        /// <summary>
+        /// Environment variable name for keypoints sink URL (alternative to config).
+        /// </summary>
+        public const string KeyPointsSinkUrlEnv = "KEYPOINTS_SINK_URL";
+    }
+
+    /// <summary>
     /// Main client for connecting to RocketWelder video streams.
     /// Supports multiple protocols: ZeroBuffer (shared memory), MJPEG over HTTP, and MJPEG over TCP.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>NNG Pub/Sub Integration:</b>
+    /// When using the Start overload with ISegmentationResultWriter and IKeyPointsWriter,
+    /// the client creates NNG Publisher sinks for streaming AI results.
+    /// </para>
+    /// <para>
+    /// <b>Configuration:</b> Set sink URLs via IConfiguration or environment variables:
+    /// <list type="bullet">
+    ///   <item><description><c>RocketWelder:SegmentationSinkUrl</c> or <c>SEGMENTATION_SINK_URL</c></description></item>
+    ///   <item><description><c>RocketWelder:KeyPointsSinkUrl</c> or <c>KEYPOINTS_SINK_URL</c></description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     public class RocketWelderClient : IDisposable
     {
         private readonly IController _controller;
         private readonly ILogger<RocketWelderClient> _logger;
+        private readonly IConfiguration? _configuration;
+        private readonly ILoggerFactory? _loggerFactory;
 
         // Preview support
         private readonly bool _previewEnabled;
@@ -640,6 +755,10 @@ namespace RocketWelder.SDK
         private readonly string _previewWindowName = "RocketWelder Preview";
         private Action<Mat>? _originalOneWayCallback;
         private Action<Mat, Mat>? _originalDuplexCallback;
+
+        // NNG Sinks for AI output (lazily created when needed)
+        private ISegmentationResultSink? _segmentationSink;
+        private IKeyPointsSink? _keyPointsSink;
 
         /// <summary>
         /// Gets the connection configuration.
@@ -655,26 +774,28 @@ namespace RocketWelder.SDK
         /// Gets the metadata from the stream (if available).
         /// </summary>
         public GstMetadata? Metadata => _controller.GetMetadata();
-        
+
         /// <summary>
         /// Raised when the client has successfully started.
         /// </summary>
         public event EventHandler? Started;
-        
+
         /// <summary>
         /// Raised when the client has stopped.
         /// </summary>
         public event EventHandler? Stopped;
-        
+
         /// <summary>
         /// Raised when the client encounters an error.
         /// </summary>
         public event EventHandler<ErrorEventArgs>? OnError;
 
 
-        private RocketWelderClient(ConnectionString connection, ILoggerFactory? loggerFactory = null)
+        private RocketWelderClient(ConnectionString connection, ILoggerFactory? loggerFactory = null, IConfiguration? configuration = null)
         {
             Connection = connection;
+            _configuration = configuration;
+            _loggerFactory = loggerFactory;
             var factory = loggerFactory ?? NullLoggerFactory.Instance;
             _logger = factory.CreateLogger<RocketWelderClient>();
             _controller = ControllerFactory.Create(connection, loggerFactory);
@@ -691,6 +812,66 @@ namespace RocketWelder.SDK
 
             // Subscribe to controller errors
             _controller.OnError += OnControllerError;
+        }
+
+        /// <summary>
+        /// Gets the segmentation sink URL from configuration or environment.
+        /// </summary>
+        private string? GetSegmentationSinkUrl()
+        {
+            return _configuration?[RocketWelderConfigKeys.SegmentationSinkUrl]
+                ?? Environment.GetEnvironmentVariable(RocketWelderConfigKeys.SegmentationSinkUrlEnv);
+        }
+
+        /// <summary>
+        /// Gets the keypoints sink URL from configuration or environment.
+        /// </summary>
+        private string? GetKeyPointsSinkUrl()
+        {
+            return _configuration?[RocketWelderConfigKeys.KeyPointsSinkUrl]
+                ?? Environment.GetEnvironmentVariable(RocketWelderConfigKeys.KeyPointsSinkUrlEnv);
+        }
+
+        /// <summary>
+        /// Creates or returns the segmentation result sink.
+        /// </summary>
+        private ISegmentationResultSink GetOrCreateSegmentationSink()
+        {
+            if (_segmentationSink != null)
+                return _segmentationSink;
+
+            var url = GetSegmentationSinkUrl();
+            if (string.IsNullOrWhiteSpace(url))
+                throw new InvalidOperationException(
+                    $"Segmentation sink URL not configured. Set '{RocketWelderConfigKeys.SegmentationSinkUrl}' in configuration " +
+                    $"or '{RocketWelderConfigKeys.SegmentationSinkUrlEnv}' environment variable. " +
+                    $"Example: ipc:///tmp/ai-segmentation.ipc");
+
+            _logger.LogInformation("Creating NNG Publisher for segmentation at: {Url}", url);
+            var frameSink = Transport.NngFrameSink.CreatePublisher(url);
+            _segmentationSink = new SegmentationResultSink(frameSink);
+            return _segmentationSink;
+        }
+
+        /// <summary>
+        /// Creates or returns the keypoints sink.
+        /// </summary>
+        private IKeyPointsSink GetOrCreateKeyPointsSink()
+        {
+            if (_keyPointsSink != null)
+                return _keyPointsSink;
+
+            var url = GetKeyPointsSinkUrl();
+            if (string.IsNullOrWhiteSpace(url))
+                throw new InvalidOperationException(
+                    $"KeyPoints sink URL not configured. Set '{RocketWelderConfigKeys.KeyPointsSinkUrl}' in configuration " +
+                    $"or '{RocketWelderConfigKeys.KeyPointsSinkUrlEnv}' environment variable. " +
+                    $"Example: ipc:///tmp/ai-keypoints.ipc");
+
+            _logger.LogInformation("Creating NNG Publisher for keypoints at: {Url}", url);
+            var frameSink = Transport.NngFrameSink.CreatePublisher(url);
+            _keyPointsSink = new KeyPointsSink(frameSink, masterFrameInterval: 300, ownsSink: true);
+            return _keyPointsSink;
         }
         
         private void OnControllerError(IController controller, Exception exception)
@@ -746,23 +927,24 @@ namespace RocketWelder.SDK
         /// <summary>
         /// Creates a client from IConfiguration with logger factory.
         /// Looks for "RocketWelder:ConnectionString" in configuration.
+        /// Also reads NNG sink URLs from configuration for AI output streaming.
         /// </summary>
         public static RocketWelderClient From(IConfiguration configuration, ILoggerFactory? loggerFactory)
         {
             ArgumentNullException.ThrowIfNull(configuration);
-            
+
             // Try to get connection string from configuration
-            string? connectionString = 
+            string? connectionString =
                 configuration["CONNECTION_STRING"] ??
                 configuration["RocketWelder:ConnectionString"] ??
                 configuration["ConnectionString"] ??
                 configuration.GetConnectionString("RocketWelder");
-                
+
             if (string.IsNullOrWhiteSpace(connectionString))
                 throw new ArgumentException("No connection string found in configuration");
-                
+
             var connection = ConnectionString.Parse(connectionString);
-            return new RocketWelderClient(connection, loggerFactory);
+            return new RocketWelderClient(connection, loggerFactory, configuration);
         }
         
         /// <summary>
@@ -884,7 +1066,107 @@ namespace RocketWelder.SDK
                 throw;
             }
         }
-        
+
+        /// <summary>
+        /// Starts receiving frames with segmentation and keypoints output support.
+        /// Creates NNG Publishers for streaming AI results to rocket-welder2.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This overload enables AI models to write segmentation results and keypoints
+        /// that are automatically published via NNG Pub/Sub to rocket-welder2 for storage
+        /// and comparison.
+        /// </para>
+        /// <para>
+        /// <b>Configuration Required:</b>
+        /// <list type="bullet">
+        ///   <item><description><c>RocketWelder:SegmentationSinkUrl</c> or <c>SEGMENTATION_SINK_URL</c></description></item>
+        ///   <item><description><c>RocketWelder:KeyPointsSinkUrl</c> or <c>KEYPOINTS_SINK_URL</c></description></item>
+        /// </list>
+        /// </para>
+        /// <para>
+        /// <b>Example:</b>
+        /// <code>
+        /// client.Start((input, segWriter, kpWriter, output) =>
+        /// {
+        ///     // Run AI inference
+        ///     var result = aiModel.Infer(input);
+        ///
+        ///     // Write segmentation results
+        ///     foreach (var instance in result.Instances)
+        ///         segWriter.Append(instance.ClassId, instance.InstanceId, instance.ContourPoints);
+        ///
+        ///     // Write keypoints
+        ///     foreach (var kp in result.KeyPoints)
+        ///         kpWriter.Append(kp.Id, kp.X, kp.Y, kp.Confidence);
+        ///
+        ///     // Draw output
+        ///     result.DrawTo(output);
+        /// });
+        /// </code>
+        /// </para>
+        /// </remarks>
+        /// <param name="onFrame">Callback receiving input Mat, segmentation writer, keypoints writer, and output Mat</param>
+        /// <param name="cancellationToken">Optional cancellation token</param>
+        public void Start(Action<Mat, ISegmentationResultWriter, IKeyPointsWriter, Mat> onFrame, CancellationToken cancellationToken = default)
+        {
+            if (IsRunning)
+                throw new InvalidOperationException("Client is already running");
+
+            try
+            {
+                _logger.LogInformation("Starting RocketWelder client with AI output support: {Connection}", Connection);
+
+                // Initialize sinks (will throw if not configured)
+                var segSink = GetOrCreateSegmentationSink();
+                var kpSink = GetOrCreateKeyPointsSink();
+
+                // Wrapper callback that creates per-frame writers
+                // Controller provides FrameMetadata (frame number, timestamp) and Mats
+                // We create writers from sinks and pass to user callback
+                _controller.Start((FrameMetadata frameMetadata, Mat inputMat, Mat outputMat) =>
+                {
+                    // Get caps from controller metadata (width/height for segmentation)
+                    var caps = _controller.GetMetadata()?.Caps;
+                    if (caps == null)
+                    {
+                        _logger.LogWarning("GstCaps not available for frame {FrameNumber}, skipping AI output", frameMetadata.FrameNumber);
+                        onFrame(inputMat, NoOpSegmentationWriter.Instance, NoOpKeyPointsWriter.Instance, outputMat);
+                        return;
+                    }
+
+                    // Create per-frame writers from sinks
+                    using var segWriter = segSink.CreateWriter(frameMetadata.FrameNumber, (uint)caps.Value.Width, (uint)caps.Value.Height);
+                    using var kpWriter = kpSink.CreateWriter(frameMetadata.FrameNumber);
+
+                    // Call user callback with writers
+                    onFrame(inputMat, segWriter, kpWriter, outputMat);
+
+                    // Writers auto-flush on dispose
+                }, cancellationToken);
+
+                Started?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to start RocketWelder client with AI output support");
+                OnError?.Invoke(this, new ErrorEventArgs(ex));
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Gets the segmentation sink for external use (e.g., custom frame processing).
+        /// Returns null if not configured.
+        /// </summary>
+        public ISegmentationResultSink? SegmentationSink => _segmentationSink;
+
+        /// <summary>
+        /// Gets the keypoints sink for external use (e.g., custom frame processing).
+        /// Returns null if not configured.
+        /// </summary>
+        public IKeyPointsSink? KeyPointsSink => _keyPointsSink;
+
         /// <summary>
         /// Stops receiving frames and disconnects from the stream.
         /// </summary>
@@ -1005,13 +1287,26 @@ namespace RocketWelder.SDK
             {
                 Stop();
             }
-            
+
+            // Dispose NNG sinks
+            if (_segmentationSink != null)
+            {
+                _segmentationSink.Dispose();
+                _segmentationSink = null;
+            }
+
+            if (_keyPointsSink != null)
+            {
+                _keyPointsSink.Dispose();
+                _keyPointsSink = null;
+            }
+
             if (_controller != null)
             {
                 _controller.OnError -= OnControllerError;
                 _controller.Dispose();
             }
-            
+
             _logger.LogDebug("Disposed RocketWelder client");
         }
     }

@@ -1,6 +1,5 @@
 import mmap
 import os
-import time
 
 # Create a file-backed mmap to test
 with open('/tmp/test_mmap', 'wb') as f:
@@ -21,7 +20,7 @@ m.flush()  # This calls msync(addr, length, MS_SYNC)
 print("After flush - data guaranteed to be on disk")
 
 # For POSIX shared memory (not file-backed):
-# flush() still calls msync() but it may be a no-op since 
+# flush() still calls msync() but it may be a no-op since
 # shared memory is already coherent in RAM
 
 m.close()

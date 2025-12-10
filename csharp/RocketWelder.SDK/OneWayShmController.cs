@@ -85,10 +85,30 @@ namespace RocketWelder.SDK
             _worker.Start();
         }
 
-        public void Start(Action<Mat, ISegmentationResultWriter, IKeyPointsWriter, Mat> onFrame, CancellationToken cancellationToken = default)
+        public void Start(Action<FrameMetadata, Mat, Mat> onFrame, CancellationToken cancellationToken = default)
         {
-            // TODO: Implement segmentation result writer and keypoints writer integration
-            throw new NotImplementedException("Segmentation result writer and keypoints writer are not yet implemented for OneWayShmController");
+            if (_isRunning)
+                throw new InvalidOperationException("Already running");
+
+            _isRunning = true;
+
+            // Create buffer - we are the server, GStreamer connects to us
+            var config = new BufferConfig
+            {
+                PayloadSize = (int)(long)_connection.BufferSize,
+                MetadataSize = (int)(long)_connection.MetadataSize
+            };
+            _reader = new Reader(_connection.BufferName!, config, _readerLogger);
+            _logger.LogInformation("Created shared memory buffer '{BufferName}' with size {BufferSize} and metadata {MetadataSize}",
+                _connection.BufferName, _connection.BufferSize, _connection.MetadataSize);
+
+            // Start processing on worker thread with FrameMetadata callback
+            _worker = new Thread(() => ProcessFramesWithMetadata(onFrame, cancellationToken))
+            {
+                Name = $"RocketWelder-{_connection.BufferName}",
+                IsBackground = false
+            };
+            _worker.Start();
         }
 
         private void ProcessFrames(Action<Mat> onFrame, CancellationToken cancellationToken)
@@ -105,11 +125,18 @@ namespace RocketWelder.SDK
                     if (!frame.IsValid)
                         continue; // Skip invalid frames
 
+                    // Frame has 16-byte FrameMetadata prefix that must be skipped
+                    if (frame.Size < FrameMetadata.Size)
+                    {
+                        _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", frame.Size);
+                        continue;
+                    }
 
-                    // Create Mat wrapping frame data (zero-copy)
+                    // Create Mat wrapping pixel data (skip 16-byte FrameMetadata prefix)
                     unsafe
                     {
-                        using var mat = _gstCaps!.Value.CreateMat(frame.Pointer);
+                        byte* pixelDataPtr = frame.Pointer + FrameMetadata.Size;
+                        using var mat = _gstCaps!.Value.CreateMat(pixelDataPtr);
                         onFrame(mat);
                     }
                 }
@@ -156,14 +183,12 @@ namespace RocketWelder.SDK
             _isRunning = false;
         }
 
-        private void ProcessFramesDuplex(Action<Mat, Mat> onFrame, CancellationToken cancellationToken)
+        private void ProcessFramesWithMetadata(Action<FrameMetadata, Mat, Mat> onFrame, CancellationToken cancellationToken)
         {
-            // Get first frame to initialize caps
-            OnFirstFrameDuplex(onFrame, cancellationToken);
+            // Get first frame to initialize caps (using duplex first frame handler)
+            OnFirstFrameWithMetadata(onFrame, cancellationToken);
 
             // Allocate output Mat once - will be reused (though we ignore it in OneWay mode)
-
-
             using var outputMat = new Mat(_gstCaps!.Value.Height, _gstCaps.Value.Width, _gstCaps.Value.Depth, _gstCaps.Value.Channels);
 
             while (_isRunning && !cancellationToken.IsCancellationRequested)
@@ -176,10 +201,157 @@ namespace RocketWelder.SDK
                     if (!frame.IsValid)
                         continue; // Skip invalid frames
 
-                    // Create Mat wrapping frame data (zero-copy)
+                    // Frame has 16-byte FrameMetadata prefix
+                    if (frame.Size < FrameMetadata.Size)
+                    {
+                        _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", frame.Size);
+                        continue;
+                    }
+
+                    // Read FrameMetadata from frame and create Mat from pixel data
                     unsafe
                     {
-                        using var mat = _gstCaps!.Value.CreateMat(frame.Pointer);
+                        var frameMetadata = FrameMetadata.FromPointer((IntPtr)frame.Pointer);
+                        byte* pixelDataPtr = frame.Pointer + FrameMetadata.Size;
+                        using var mat = _gstCaps!.Value.CreateMat(pixelDataPtr);
+                        onFrame(frameMetadata, mat, outputMat);
+                        // We ignore the output Mat in OneWay mode
+                    }
+                }
+                catch (ReaderDeadException ex)
+                {
+                    _logger.LogInformation("Writer disconnected from buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    _isRunning = false;
+                    break;
+                }
+                catch (WriterDeadException ex)
+                {
+                    _logger.LogInformation("Writer disconnected from buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    _isRunning = false;
+                    break;
+                }
+                catch (BufferFullException ex)
+                {
+                    _logger.LogError(ex, "Buffer full on '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    if (!_isRunning) break;
+                }
+                catch (FrameTooLargeException ex)
+                {
+                    _logger.LogError(ex, "Frame too large on '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    if (!_isRunning) break;
+                }
+                catch (ZeroBufferException ex)
+                {
+                    _logger.LogError(ex, "ZeroBuffer error on '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    if (!_isRunning) break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Unexpected error processing frame from buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    if (!_isRunning) break;
+                }
+            }
+            _isRunning = false;
+        }
+
+        private void OnFirstFrameWithMetadata(Action<FrameMetadata, Mat, Mat> onFrame, CancellationToken cancellationToken)
+        {
+            while (_isRunning && !cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    // ReadFrame blocks until frame available
+                    using var frame = _reader!.ReadFrame(TimeSpan.FromMilliseconds(_connection.TimeoutMs));
+
+                    if (!frame.IsValid)
+                        continue; // Skip invalid frames
+
+                    // Frame has 16-byte FrameMetadata prefix that must be read
+                    if (frame.Size < FrameMetadata.Size)
+                    {
+                        _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", frame.Size);
+                        continue;
+                    }
+
+                    // Read GstMetadata from buffer metadata section
+                    var metadataBytes = _reader.GetMetadata();
+                    _metadata = JsonSerializer.Deserialize<GstMetadata>(metadataBytes);
+                    _gstCaps = _metadata!.Caps;
+                    _logger.LogInformation("Received metadata from buffer '{BufferName}': {Caps}", _connection.BufferName, _gstCaps);
+
+                    // Allocate output Mat for first frame
+                    using var outputMat = new Mat(_gstCaps!.Value.Height, _gstCaps.Value.Width, _gstCaps.Value.Depth, _gstCaps.Value.Channels);
+
+                    // Read FrameMetadata and create Mat from pixel data
+                    unsafe
+                    {
+                        var frameMetadata = FrameMetadata.FromPointer((IntPtr)frame.Pointer);
+                        byte* pixelDataPtr = frame.Pointer + FrameMetadata.Size;
+                        using var mat = _gstCaps!.Value.CreateMat(pixelDataPtr);
+                        onFrame(frameMetadata, mat, outputMat);
+                    }
+
+                    return; // Successfully processed first frame
+                }
+                catch (ReaderDeadException ex)
+                {
+                    _isRunning = false;
+                    _logger.LogInformation("Writer disconnected while waiting for first frame on buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    throw;
+                }
+                catch (WriterDeadException ex)
+                {
+                    _isRunning = false;
+                    _logger.LogInformation("Writer disconnected while waiting for first frame on buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Error waiting for first frame on buffer '{BufferName}'", _connection.BufferName);
+                    OnError?.Invoke(this, ex);
+                    if (!_isRunning) break;
+                }
+            }
+        }
+
+        private void ProcessFramesDuplex(Action<Mat, Mat> onFrame, CancellationToken cancellationToken)
+        {
+            // Get first frame to initialize caps
+            OnFirstFrameDuplex(onFrame, cancellationToken);
+
+            // Allocate output Mat once - will be reused (though we ignore it in OneWay mode)
+            using var outputMat = new Mat(_gstCaps!.Value.Height, _gstCaps.Value.Width, _gstCaps.Value.Depth, _gstCaps.Value.Channels);
+
+            while (_isRunning && !cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    // ReadFrame blocks until frame available
+                    using var frame = _reader!.ReadFrame(TimeSpan.FromMilliseconds(_connection.TimeoutMs));
+
+                    if (!frame.IsValid)
+                        continue; // Skip invalid frames
+
+                    // Frame has 16-byte FrameMetadata prefix that must be skipped
+                    if (frame.Size < FrameMetadata.Size)
+                    {
+                        _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", frame.Size);
+                        continue;
+                    }
+
+                    // Create Mat wrapping pixel data (skip 16-byte FrameMetadata prefix)
+                    unsafe
+                    {
+                        byte* pixelDataPtr = frame.Pointer + FrameMetadata.Size;
+                        using var mat = _gstCaps!.Value.CreateMat(pixelDataPtr);
                         onFrame(mat, outputMat);
                         // We ignore the output Mat in OneWay mode
                     }
@@ -239,6 +411,13 @@ namespace RocketWelder.SDK
                     if (!frame.IsValid)
                         continue; // Skip invalid frames
 
+                    // Frame has 16-byte FrameMetadata prefix that must be skipped
+                    if (frame.Size < FrameMetadata.Size)
+                    {
+                        _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", frame.Size);
+                        continue;
+                    }
+
                     // Read metadata - we ALWAYS expect metadata
                     var metadataBytes = _reader.GetMetadata();
                     _metadata = JsonSerializer.Deserialize<GstMetadata>(metadataBytes);
@@ -248,9 +427,11 @@ namespace RocketWelder.SDK
                     // Allocate output Mat for first frame
                     using var outputMat = new Mat(_gstCaps!.Value.Height, _gstCaps.Value.Width, _gstCaps.Value.Depth, _gstCaps.Value.Channels);
 
+                    // Create Mat wrapping pixel data (skip 16-byte FrameMetadata prefix)
                     unsafe
                     {
-                        using var mat = _gstCaps!.Value.CreateMat(frame.Pointer);
+                        byte* pixelDataPtr = frame.Pointer + FrameMetadata.Size;
+                        using var mat = _gstCaps!.Value.CreateMat(pixelDataPtr);
                         onFrame(mat, outputMat);
                     }
 
@@ -297,6 +478,13 @@ namespace RocketWelder.SDK
                     if (!frame.IsValid)
                         continue; // Skip invalid frames
 
+                    // Frame has 16-byte FrameMetadata prefix that must be skipped
+                    if (frame.Size < FrameMetadata.Size)
+                    {
+                        _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", frame.Size);
+                        continue;
+                    }
+
                     // Read metadata - we ALWAYS expect metadata
                     var metadataBytes = _reader.GetMetadata();
                     _metadata = JsonSerializer.Deserialize<GstMetadata>(metadataBytes);
@@ -304,9 +492,11 @@ namespace RocketWelder.SDK
                     _logger.LogInformation("Received metadata from buffer '{BufferName}': {Caps}",
                         _connection.BufferName, _gstCaps);
 
+                    // Create Mat wrapping pixel data (skip 16-byte FrameMetadata prefix)
                     unsafe
                     {
-                        using var mat = _gstCaps!.Value.CreateMat(frame.Pointer);
+                        byte* pixelDataPtr = frame.Pointer + FrameMetadata.Size;
+                        using var mat = _gstCaps!.Value.CreateMat(pixelDataPtr);
                         onFrame(mat);
                     }
 

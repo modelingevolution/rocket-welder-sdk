@@ -1,5 +1,4 @@
-import json
-from rocket_welder_sdk.gst_metadata import GstCaps, GstMetadata
+from rocket_welder_sdk.gst_metadata import GstMetadata
 
 # Test data from actual GStreamer output
 json_str = '{"caps":"video/x-raw, format=(string)GRAY8, width=(int)512, height=(int)512, framerate=(fraction)25/1","element_name":"zerosink0","type":"zerosink","version":"GStreamer 1.24.2"}'
@@ -11,7 +10,7 @@ print()
 try:
     # Parse the metadata
     metadata = GstMetadata.from_json(json_str)
-    print(f"✓ Metadata parsed successfully")
+    print("✓ Metadata parsed successfully")
     print(f"  Type: {metadata.type}")
     print(f"  Element: {metadata.element_name}")
     print(f"  Version: {metadata.version}")

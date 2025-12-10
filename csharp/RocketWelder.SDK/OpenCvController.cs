@@ -119,10 +119,15 @@ namespace RocketWelder.SDK
             _worker.Start();
         }
 
-        public void Start(Action<Mat, ISegmentationResultWriter, IKeyPointsWriter, Mat> onFrame, CancellationToken cancellationToken = default)
+        public void Start(Action<FrameMetadata, Mat, Mat> onFrame, CancellationToken cancellationToken = default)
         {
-            // TODO: Implement segmentation result writer and keypoints writer integration
-            throw new NotImplementedException("Segmentation result writer and keypoints writer are not yet implemented for OpenCvController");
+            // OpenCvController creates synthetic FrameMetadata with frame counter
+            ulong frameNumber = 0;
+            Start((Mat input, Mat output) =>
+            {
+                var metadata = new FrameMetadata(frameNumber++, FrameMetadata.TimestampUnavailable);
+                onFrame(metadata, input, output);
+            }, cancellationToken);
         }
 
         private string GetSource()

@@ -1,6 +1,7 @@
-from setuptools import setup, find_packages
 import os
 import shutil
+
+from setuptools import find_packages, setup
 
 # Always copy README.md from parent directory if it exists
 if os.path.exists("../README.md"):
@@ -9,7 +10,7 @@ if os.path.exists("../README.md"):
 # Read README.md
 readme_path = "README.md"
 if os.path.exists(readme_path):
-    with open(readme_path, "r", encoding="utf-8") as fh:
+    with open(readme_path, encoding="utf-8") as fh:
         long_description = fh.read()
 else:
     long_description = "Client library for RocketWelder video streaming services"
@@ -19,7 +20,7 @@ else:
 version = "0.0.0.dev0"  # Default development version
 version_file = "VERSION"
 if os.path.exists(version_file):
-    with open(version_file, "r") as f:
+    with open(version_file) as f:
         version = f.read().strip()
 
 setup(

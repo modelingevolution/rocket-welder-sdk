@@ -275,16 +275,27 @@ class TestDuplexShmController:
         """Test _process_duplex_frame method with FrameMetadata."""
         import struct
 
-        # Create FrameMetadata bytes (24 bytes)
+        from rocket_welder_sdk.gst_metadata import GstCaps
+
+        # Create FrameMetadata bytes (16 bytes - only frame_number + timestamp_ns)
+        # Width/height/format now come from GstCaps, not FrameMetadata
         frame_number = 42
         timestamp_ns = 1234567890
-        width = 2
-        height = 2
-        fmt = 15  # RGB
-        reserved = 0
 
-        metadata_bytes = struct.pack(
-            "<QQHHHH", frame_number, timestamp_ns, width, height, fmt, reserved
+        metadata_bytes = struct.pack("<QQ", frame_number, timestamp_ns)
+
+        # Set up GstCaps (required for width/height/format)
+        controller._gst_caps = GstCaps(
+            width=2,
+            height=2,
+            format="RGB",
+            depth_type=np.uint8,
+            channels=3,
+            bytes_per_pixel=3,
+            framerate_num=30,
+            framerate_den=1,
+            interlace_mode="progressive",
+            colorimetry="sRGB",
         )
 
         # Create pixel data (2x2x3 = 12 bytes for RGB)

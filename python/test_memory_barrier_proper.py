@@ -13,13 +13,12 @@ The test uses semaphores to ensure proper ordering:
 7. Reader checks if data is correct
 """
 
-import multiprocessing
 import mmap
+import multiprocessing
 import os
 import struct
 import sys
 import time
-from typing import Tuple
 
 # Try to import posix_ipc for named semaphores
 try:

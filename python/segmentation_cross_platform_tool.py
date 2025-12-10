@@ -65,7 +65,7 @@ def write_file(file_path: str, frame_id: int, width: int, height: int, instances
     try:
         # Try to read as file path first
         if Path(instances_json).exists():
-            with open(instances_json, "r") as f:
+            with open(instances_json) as f:
                 instances_data = json.load(f)
         else:
             # Parse as JSON string

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Test OpenCV controller with file protocol support."""
 
-import sys
 import time
 from typing import Any
 

@@ -47,8 +47,31 @@ run_test() {
     
     # Give client time to initialize and create the buffer
     echo "  Waiting for client to initialize..."
-    sleep 3
-    
+
+    # Wait for buffer to be created AND OIEB initialized (with timeout)
+    # IMPORTANT: Just checking if file exists is not enough - the OIEB must be initialized
+    # The first 4 bytes (oieb_size) must be 128 (0x80) for the buffer to be valid
+    WAIT_COUNT=0
+    MAX_WAIT=100  # 10 seconds max (100 * 100ms)
+
+    if [ "$MODE" = "Duplex" ]; then
+        EXPECTED_BUFFER="/dev/shm/${BUFFER_NAME}_request"
+    else
+        EXPECTED_BUFFER="/dev/shm/${BUFFER_NAME}"
+    fi
+
+    while [ $WAIT_COUNT -lt $MAX_WAIT ]; do
+        if [ -f "$EXPECTED_BUFFER" ]; then
+            # Check if OIEB is initialized (first 4 bytes should be 128 = 0x80)
+            OIEB_SIZE=$(od -An -tu4 -N4 "$EXPECTED_BUFFER" 2>/dev/null | tr -d ' ')
+            if [ "$OIEB_SIZE" = "128" ]; then
+                break
+            fi
+        fi
+        sleep 0.1
+        WAIT_COUNT=$((WAIT_COUNT + 1))
+    done
+
     # Verify buffer was created
     if [ "$MODE" = "Duplex" ]; then
         # In duplex mode, Python server creates the request buffer
