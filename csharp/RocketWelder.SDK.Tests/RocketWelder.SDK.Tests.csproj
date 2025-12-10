@@ -27,7 +27,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RocketWelder.SDK\RocketWelder.SDK.csproj" />
-    <ProjectReference Include="..\..\..\micro-plumberd\src\MicroPlumberd.Testing\MicroPlumberd.Testing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MicroPlumberd.Testing" Version="1.0.126.*" />
   </ItemGroup>
 
   <ItemGroup>
