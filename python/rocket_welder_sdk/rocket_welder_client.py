@@ -16,6 +16,8 @@ from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
 from .frame_metadata import FrameMetadata  # noqa: TC001 - used at runtime in callbacks
 from .opencv_controller import OpenCvController
+from .session_id import get_nng_urls, get_session_id_from_env
+from .transport.nng_transport import NngFrameSink
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -53,6 +55,9 @@ class RocketWelderClient:
         self._controller: Optional[IController] = None
         self._lock = threading.Lock()
 
+        # NNG publishers for streaming results (auto-created if SessionId env var is set)
+        self._nng_publishers: dict[str, NngFrameSink] = {}
+
         # Preview support
         self._preview_enabled = (
             self._connection.parameters.get("preview", "false").lower() == "true"
@@ -71,6 +76,44 @@ class RocketWelderClient:
         """Check if the client is running."""
         with self._lock:
             return self._controller is not None and self._controller.is_running
+
+    @property
+    def nng_publishers(self) -> dict[str, NngFrameSink]:
+        """Get NNG publishers for streaming results.
+
+        Returns:
+            Dictionary with 'segmentation', 'keypoints', 'actions' keys.
+            Empty if SessionId env var was not set at startup.
+
+        Example:
+            client.nng_publishers["segmentation"].write_frame(seg_data)
+        """
+        return self._nng_publishers
+
+    def _create_nng_publishers(self, session_id: str) -> None:
+        """Create NNG publishers for result streaming.
+
+        Args:
+            session_id: SessionId string (e.g., "ps-{guid}")
+        """
+        try:
+            urls = get_nng_urls(session_id)
+
+            for name, url in urls.items():
+                sink = NngFrameSink.create_publisher(url)
+                self._nng_publishers[name] = sink
+                logger.info("NNG publisher ready: %s at %s", name, url)
+
+            logger.info(
+                "NNG publishers created for SessionId=%s: seg=%s, kp=%s, actions=%s",
+                session_id,
+                urls["segmentation"],
+                urls["keypoints"],
+                urls["actions"],
+            )
+        except Exception as ex:
+            logger.warning("Failed to create NNG publishers: %s", ex)
+            # Don't fail start() - NNG is optional for backwards compatibility
 
     def get_metadata(self) -> Optional[GstMetadata]:
         """
@@ -118,6 +161,11 @@ class RocketWelderClient:
                 self._controller = OpenCvController(self._connection)
             else:
                 raise ValueError(f"Unsupported protocol: {self._connection.protocol}")
+
+            # Auto-create NNG publishers if SessionId env var is set
+            session_id = get_session_id_from_env()
+            if session_id:
+                self._create_nng_publishers(session_id)
 
             # If preview is enabled, wrap the callback to capture frames
             if self._preview_enabled:
@@ -188,6 +236,15 @@ class RocketWelderClient:
                 # Signal preview to stop if enabled
                 if self._preview_enabled:
                     self._preview_queue.put(None)  # Sentinel value
+
+                # Clean up NNG publishers
+                for name, sink in self._nng_publishers.items():
+                    try:
+                        sink.close()
+                        logger.debug("Closed NNG publisher: %s", name)
+                    except Exception as ex:
+                        logger.warning("Failed to close NNG publisher %s: %s", name, ex)
+                self._nng_publishers.clear()
 
                 logger.info("RocketWelder client stopped")
 

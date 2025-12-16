@@ -15,6 +15,14 @@ from .gst_metadata import GstCaps, GstMetadata
 from .opencv_controller import OpenCvController
 from .periodic_timer import PeriodicTimer, PeriodicTimerSync
 from .rocket_welder_client import RocketWelderClient
+from .session_id import (
+    get_actions_url,
+    get_keypoints_url,
+    get_nng_urls,
+    get_segmentation_url,
+    get_session_id_from_env,
+    parse_session_id,
+)
 
 # Alias for backward compatibility and README examples
 Client = RocketWelderClient
@@ -58,4 +66,11 @@ __all__ = [
     "PeriodicTimerSync",
     "Protocol",
     "RocketWelderClient",
+    # SessionId utilities for NNG URL generation
+    "get_actions_url",
+    "get_keypoints_url",
+    "get_nng_urls",
+    "get_segmentation_url",
+    "get_session_id_from_env",
+    "parse_session_id",
 ]
