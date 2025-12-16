@@ -1,0 +1,166 @@
+name: Publish Preview SDKs
+
+on:
+  push:
+    branches:
+      - 'feature/*'
+    paths:
+      - 'csharp/**'
+      - 'python/**'
+
+permissions:
+  contents: read
+
+jobs:
+  preview-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      short_sha: ${{ steps.version.outputs.short_sha }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Generate preview version
+      id: version
+      run: |
+        # Get latest tag version
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        VERSION="${LATEST_TAG#v}"
+
+        # Parse version components
+        IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+        MAJOR=${MAJOR:-0}
+        MINOR=${MINOR:-0}
+        PATCH=${PATCH:-0}
+
+        # Bump patch for preview
+        PATCH=$((PATCH + 1))
+
+        # Get short SHA
+        SHORT_SHA=$(git rev-parse --short HEAD)
+
+        # Generate preview version
+        PREVIEW_VERSION="$MAJOR.$MINOR.$PATCH-preview.$SHORT_SHA"
+
+        echo "version=$PREVIEW_VERSION" >> $GITHUB_OUTPUT
+        echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+        echo "Preview version: $PREVIEW_VERSION"
+
+  publish-csharp-preview:
+    needs: preview-version
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Update version in csproj
+      run: |
+        VERSION="${{ needs.preview-version.outputs.version }}"
+        cd csharp/RocketWelder.SDK
+        sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.SDK.csproj
+
+    - name: Restore dependencies
+      working-directory: ./csharp
+      run: dotnet restore
+
+    - name: Build
+      working-directory: ./csharp
+      run: dotnet build --configuration Release --no-restore
+
+    - name: Pack
+      working-directory: ./csharp
+      run: dotnet pack RocketWelder.SDK/RocketWelder.SDK.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ needs.preview-version.outputs.version }}
+
+    - name: Push to NuGet
+      working-directory: ./csharp
+      run: |
+        dotnet nuget push ./nupkg/RocketWelder.SDK.*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
+    - name: Summary
+      run: |
+        echo "## C# SDK Preview Published to NuGet" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: ${{ needs.preview-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Package**: RocketWelder.SDK" >> $GITHUB_STEP_SUMMARY
+        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Install with:" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo 'dotnet add package RocketWelder.SDK --version ${{ needs.preview-version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+  publish-python-preview:
+    needs: preview-version
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Create VERSION file
+      run: |
+        VERSION="${{ needs.preview-version.outputs.version }}"
+        cd python
+        echo "$VERSION" > VERSION
+
+    - name: Install build dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install build twine
+
+    - name: Build package
+      working-directory: ./python
+      run: python -m build
+
+    - name: Check package
+      working-directory: ./python
+      run: twine check dist/*
+
+    - name: Publish to Test PyPI
+      working-directory: ./python
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+      run: |
+        twine upload --repository testpypi dist/* --skip-existing
+      continue-on-error: true
+
+    - name: Publish to PyPI
+      working-directory: ./python
+      env:
+        TWINE_USERNAME: __token__
+        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+      run: |
+        twine upload dist/* --skip-existing
+
+    - name: Summary
+      run: |
+        echo "## Python SDK Preview Published to PyPI" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: ${{ needs.preview-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Package**: rocket-welder-sdk" >> $GITHUB_STEP_SUMMARY
+        echo "- **PyPI**: https://pypi.org/project/rocket-welder-sdk/" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Install with:" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo 'pip install rocket-welder-sdk==${{ needs.preview-version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
