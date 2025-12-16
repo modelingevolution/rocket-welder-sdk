@@ -93,10 +93,13 @@ class TestOneWayShmController:
         controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="RGB")
         on_frame = Mock()
 
-        # Create mock frame with correct data
-        frame_data = np.zeros((12,), dtype=np.uint8)  # 2x2x3
+        # Create mock frame with 16-byte metadata prefix + pixel data (2x2x3 = 12 bytes)
+        metadata_prefix = bytes(16)  # 16-byte FrameMetadata
+        pixel_data = np.zeros((12,), dtype=np.uint8)  # 2x2x3
+        frame_data = metadata_prefix + bytes(pixel_data)
         mock_frame = MagicMock()
         mock_frame.data = memoryview(frame_data)
+        mock_frame.size = len(frame_data)
 
         # Process the frame (simulate what happens in the read loop)
         mat = controller._create_mat_from_frame(mock_frame)
@@ -124,8 +127,12 @@ class TestOneWayShmController:
     def test_create_mat_from_frame_no_caps(self, controller):
         """Test _create_mat_from_frame when no caps are available."""
         frame = MagicMock()
-        # Use 5 bytes so it's not a perfect square (no square root of 5)
-        frame.data = memoryview(b"tests")
+        # Use 16-byte prefix + 5 bytes pixel data (not a perfect square)
+        metadata_prefix = bytes(16)
+        pixel_data = b"tests"
+        frame_data = metadata_prefix + pixel_data
+        frame.data = memoryview(frame_data)
+        frame.size = len(frame_data)
 
         result = controller._create_mat_from_frame(frame)
         assert result is None
@@ -135,9 +142,13 @@ class TestOneWayShmController:
         # Set up GstCaps
         controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="RGB")
 
-        # Create frame with correct data size (2x2x3 = 12 bytes)
+        # Create frame with 16-byte prefix + pixel data (2x2x3 = 12 bytes)
+        metadata_prefix = bytes(16)
+        pixel_data = np.zeros((12,), dtype=np.uint8)
+        frame_data = metadata_prefix + bytes(pixel_data)
         frame = MagicMock()
-        frame.data = memoryview(np.zeros((12,), dtype=np.uint8))
+        frame.data = memoryview(frame_data)
+        frame.size = len(frame_data)
 
         result = controller._create_mat_from_frame(frame)
         assert result is not None
@@ -147,9 +158,13 @@ class TestOneWayShmController:
         """Test _create_mat_from_frame with grayscale format."""
         controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="GRAY8")
 
-        # Create frame with correct data size (2x2x1 = 4 bytes)
+        # Create frame with 16-byte prefix + pixel data (2x2x1 = 4 bytes)
+        metadata_prefix = bytes(16)
+        pixel_data = np.zeros((4,), dtype=np.uint8)
+        frame_data = metadata_prefix + bytes(pixel_data)
         frame = MagicMock()
-        frame.data = memoryview(np.zeros((4,), dtype=np.uint8))
+        frame.data = memoryview(frame_data)
+        frame.size = len(frame_data)
 
         result = controller._create_mat_from_frame(frame)
         assert result is not None
@@ -159,9 +174,13 @@ class TestOneWayShmController:
         """Test _create_mat_from_frame with RGBA format."""
         controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="RGBA")
 
-        # Create frame with correct data size (2x2x4 = 16 bytes)
+        # Create frame with 16-byte prefix + pixel data (2x2x4 = 16 bytes)
+        metadata_prefix = bytes(16)
+        pixel_data = np.zeros((16,), dtype=np.uint8)
+        frame_data = metadata_prefix + bytes(pixel_data)
         frame = MagicMock()
-        frame.data = memoryview(np.zeros((16,), dtype=np.uint8))
+        frame.data = memoryview(frame_data)
+        frame.size = len(frame_data)
 
         result = controller._create_mat_from_frame(frame)
         assert result is not None
