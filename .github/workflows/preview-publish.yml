@@ -7,6 +7,12 @@ on:
     paths:
       - 'csharp/**'
       - 'python/**'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Preview version (e.g., 1.1.34-preview.1)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -26,6 +32,16 @@ jobs:
     - name: Generate preview version
       id: version
       run: |
+        # Use input version if provided
+        if [ -n "${{ github.event.inputs.version }}" ]; then
+          PREVIEW_VERSION="${{ github.event.inputs.version }}"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "version=$PREVIEW_VERSION" >> $GITHUB_OUTPUT
+          echo "short_sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "Preview version (from input): $PREVIEW_VERSION"
+          exit 0
+        fi
+
         # Get latest tag version
         LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
         VERSION="${LATEST_TAG#v}"
