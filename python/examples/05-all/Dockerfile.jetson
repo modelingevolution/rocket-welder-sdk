@@ -25,7 +25,7 @@ RUN grep -v "opencv-python" requirements.txt > requirements-jetson.txt && \
 # Install ultralytics for YOLO (PyTorch with CUDA is already included in base image)
 # Use --no-deps to avoid reinstalling opencv-python, then install needed deps
 RUN pip3 install --no-cache-dir --no-deps ultralytics && \
-    pip3 install --no-cache-dir matplotlib pillow pyyaml requests scipy tqdm psutil seaborn pandas
+    pip3 install --no-cache-dir matplotlib pillow pyyaml requests scipy tqdm psutil seaborn pandas pymodbus
 
 # Copy and install the SDK
 COPY rocket_welder_sdk/ /app/rocket_welder_sdk/
@@ -36,7 +36,7 @@ RUN pip3 install --no-cache-dir --no-deps .
 RUN pip3 uninstall -y opencv-python opencv-python-headless || true
 
 # Copy the YOLO example application
-COPY examples/rocket-welder-client-python-yolo/main.py .
+COPY examples/05-all/main.py .
 
 # Set up logging - SDK will propagate to ZEROBUFFER_LOG_LEVEL
 ENV ROCKET_WELDER_LOG_LEVEL=INFO

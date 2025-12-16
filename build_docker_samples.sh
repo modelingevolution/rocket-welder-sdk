@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Build Docker images for sample clients
-# Supports both C# and Python sample clients
+# Supports C# and Python sample clients with multiple variants
 
 set -e
 
@@ -15,8 +15,6 @@ NC='\033[0m' # No Color
 
 # Configuration
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-CSHARP_SAMPLE_DIR="${SCRIPT_DIR}/csharp/examples/SimpleClient"
-PYTHON_SAMPLE_DIR="${SCRIPT_DIR}/python/examples"
 
 # Detect platform
 PLATFORM=""
@@ -40,34 +38,31 @@ TAG_PREFIX="rocket-welder"
 TAG_VERSION="latest"
 NO_CACHE=false
 USE_PLATFORM_TAG=false
-MULTI_PLATFORM=false
-PLATFORMS="linux/amd64,linux/arm64"
-PUSH_TO_REGISTRY=false
 BUILD_JETSON=false
+BUILD_PYTHON38=false
+EXAMPLE_FILTER=""
 
 # Auto-detect Jetson platform
 if [ "$PLATFORM" = "arm64" ] && [ -f /etc/nv_tegra_release ]; then
     BUILD_JETSON=true
 fi
 
-# Function to print colored output
-print_info() {
-    echo -e "${CYAN}$1${NC}"
-}
+# Python examples definition: folder:name:needs_gpu
+PYTHON_EXAMPLES=(
+    "01-simple:simple:false"
+    "02-advanced:advanced:false"
+    "03-integration:integration:false"
+    "04-ui-controls:ui-controls:false"
+    "05-all:all:true"
+    "06-yolo:yolo:true"
+    "07-simple-with-data:simple-with-data:false"
+)
 
-print_success() {
-    echo -e "${GREEN}✓ $1${NC}"
-}
+print_info() { echo -e "${CYAN}$1${NC}"; }
+print_success() { echo -e "${GREEN}✓ $1${NC}"; }
+print_error() { echo -e "${RED}✗ $1${NC}"; }
+print_warning() { echo -e "${YELLOW}⚠ $1${NC}"; }
 
-print_error() {
-    echo -e "${RED}✗ $1${NC}"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠ $1${NC}"
-}
-
-# Function to print section headers
 print_section() {
     echo ""
     echo -e "${BLUE}=========================================${NC}"
@@ -103,18 +98,6 @@ while [[ $# -gt 0 ]]; do
             USE_PLATFORM_TAG=true
             shift
             ;;
-        --multi-platform)
-            MULTI_PLATFORM=true
-            shift
-            ;;
-        --platforms)
-            PLATFORMS="$2"
-            shift 2
-            ;;
-        --push)
-            PUSH_TO_REGISTRY=true
-            shift
-            ;;
         --jetson)
             BUILD_JETSON=true
             shift
@@ -123,6 +106,14 @@ while [[ $# -gt 0 ]]; do
             BUILD_JETSON=false
             shift
             ;;
+        --python38)
+            BUILD_PYTHON38=true
+            shift
+            ;;
+        --example)
+            EXAMPLE_FILTER="$2"
+            shift 2
+            ;;
         --help)
             echo "Usage: $0 [OPTIONS]"
             echo ""
@@ -130,24 +121,33 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --csharp-only       Build only the C# sample client image"
-            echo "  --python-only       Build only the Python sample client image"
+            echo "  --python-only       Build only the Python sample client images"
             echo "  --tag-prefix PREFIX Docker image tag prefix (default: rocket-welder)"
             echo "  --tag-version VER   Docker image tag version (default: latest)"
             echo "  --no-cache          Build without using Docker cache"
             echo "  --platform-tag      Add platform suffix to image names"
-            echo "  --multi-platform    Build multi-platform images using buildx"
-            echo "  --platforms PLATS   Platforms to build for (default: linux/amd64,linux/arm64)"
-            echo "  --push              Push images to registry (required for multi-platform)"
-            echo "  --jetson            Build Jetson-optimized images (auto-detected on Jetson devices)"
+            echo "  --jetson            Build Jetson-optimized images"
             echo "  --no-jetson         Skip building Jetson-optimized images"
+            echo "  --python38          Also build Python 3.8 images"
+            echo "  --example NAME      Build only specific example (e.g., 01-simple, yolo)"
             echo "  --help              Show this help message"
+            echo ""
+            echo "Python examples:"
+            for example in "${PYTHON_EXAMPLES[@]}"; do
+                IFS=':' read -r folder name needs_gpu <<< "$example"
+                gpu_note=""
+                if [ "$needs_gpu" = "true" ]; then
+                    gpu_note=" (GPU required)"
+                fi
+                echo "  - $folder ($name)$gpu_note"
+            done
             echo ""
             echo "Examples:"
             echo "  $0                                    # Build all images"
-            echo "  $0 --csharp-only                      # Build only C# image"
-            echo "  $0 --tag-version 1.0.0                # Build with specific version"
-            echo "  $0 --no-cache                         # Force rebuild without cache"
-            echo "  $0 --multi-platform --push            # Build and push multi-platform images"
+            echo "  $0 --python-only                      # Build only Python images"
+            echo "  $0 --example 01-simple                # Build only simple example"
+            echo "  $0 --example yolo --jetson            # Build YOLO with Jetson variant"
+            echo "  $0 --python38                         # Include Python 3.8 variants"
             exit 0
             ;;
         *)
@@ -158,44 +158,10 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-# Prepare Docker build arguments and setup buildx if needed
+# Prepare Docker build arguments
 DOCKER_BUILD_ARGS=""
 if [ "$NO_CACHE" = true ]; then
     DOCKER_BUILD_ARGS="--no-cache"
-fi
-
-# Setup buildx for multi-platform builds
-if [ "$MULTI_PLATFORM" = true ]; then
-    print_info "Setting up Docker buildx for multi-platform builds..."
-    
-    # Check if buildx is available
-    if ! docker buildx version &> /dev/null; then
-        print_error "Docker buildx is not available. Please install Docker Desktop or Docker CE with buildx plugin."
-        exit 1
-    fi
-    
-    # Create or use existing buildx builder
-    BUILDER_NAME="rocket-welder-builder"
-    if ! docker buildx ls | grep -q "$BUILDER_NAME"; then
-        print_info "Creating buildx builder: $BUILDER_NAME"
-        docker buildx create --name "$BUILDER_NAME" --use
-    else
-        print_info "Using existing buildx builder: $BUILDER_NAME"
-        docker buildx use "$BUILDER_NAME"
-    fi
-    
-    # Start the builder
-    docker buildx inspect --bootstrap
-    
-    # Add platform flags
-    DOCKER_BUILD_ARGS="$DOCKER_BUILD_ARGS --platform=$PLATFORMS"
-    
-    # Add push flag if requested
-    if [ "$PUSH_TO_REGISTRY" = true ]; then
-        DOCKER_BUILD_ARGS="$DOCKER_BUILD_ARGS --push"
-    else
-        print_warning "Multi-platform build without --push will only build, not load images locally"
-    fi
 fi
 
 print_section "RocketWelder SDK Docker Image Builder"
@@ -205,303 +171,129 @@ echo "  Current platform: ${PLATFORM}"
 echo "  Tag prefix: ${TAG_PREFIX}"
 echo "  Tag version: ${TAG_VERSION}"
 echo "  Build C# sample: ${BUILD_CSHARP}"
-echo "  Build Python sample: ${BUILD_PYTHON}"
+echo "  Build Python samples: ${BUILD_PYTHON}"
 echo "  Build Jetson images: ${BUILD_JETSON}"
+echo "  Build Python 3.8: ${BUILD_PYTHON38}"
 echo "  No cache: ${NO_CACHE}"
-echo "  Use platform tag: ${USE_PLATFORM_TAG}"
-echo "  Multi-platform: ${MULTI_PLATFORM}"
-if [ "$MULTI_PLATFORM" = true ]; then
-    echo "  Target platforms: ${PLATFORMS}"
-    echo "  Push to registry: ${PUSH_TO_REGISTRY}"
+if [ -n "$EXAMPLE_FILTER" ]; then
+    echo "  Example filter: ${EXAMPLE_FILTER}"
 fi
 
 # Build C# sample client image
-if [ "$BUILD_CSHARP" = true ]; then
+if [ "$BUILD_CSHARP" = true ] && [ -z "$EXAMPLE_FILTER" ]; then
     print_section "Building C# Sample Client Docker Image"
-    
-    # Build image name based on user preference
+
     if [ "$USE_PLATFORM_TAG" = true ]; then
         CSHARP_IMAGE_TAG="${TAG_PREFIX}-client-csharp-${PLATFORM}:${TAG_VERSION}"
     else
         CSHARP_IMAGE_TAG="${TAG_PREFIX}-client-csharp:${TAG_VERSION}"
     fi
-    
+
     print_info "Building image: ${CSHARP_IMAGE_TAG}"
-    print_info "Context: ${SCRIPT_DIR}/csharp"
-    
-    # Build Docker image (context is at csharp directory level)
-    print_info "Building Docker image..."
     cd "${SCRIPT_DIR}/csharp"
-    
-    if [ "$MULTI_PLATFORM" = true ]; then
-        # Use buildx for multi-platform build
-        docker buildx build ${DOCKER_BUILD_ARGS} \
-            -t "${CSHARP_IMAGE_TAG}" \
-            -f examples/SimpleClient/Dockerfile \
-            .
-    else
-        # Use regular docker build for single platform
-        docker build ${DOCKER_BUILD_ARGS} \
-            -t "${CSHARP_IMAGE_TAG}" \
-            -f examples/SimpleClient/Dockerfile \
-            .
-    fi
-    
+
+    docker build ${DOCKER_BUILD_ARGS} \
+        -t "${CSHARP_IMAGE_TAG}" \
+        -f examples/SimpleClient/Dockerfile \
+        .
+
     if [ $? -eq 0 ]; then
         print_success "C# Docker image built successfully: ${CSHARP_IMAGE_TAG}"
-        
-        # Show image details (only for single platform builds)
-        if [ "$MULTI_PLATFORM" = false ]; then
-            echo ""
-            print_info "Image details:"
-            docker images --filter "reference=${CSHARP_IMAGE_TAG%:*}" --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
-        fi
     else
         print_error "Failed to build C# Docker image"
         exit 1
     fi
 fi
 
-# Build Python sample client image
+# Build Python sample client images
 if [ "$BUILD_PYTHON" = true ]; then
-    print_section "Building Python Sample Client Docker Image"
-
-    # Build image name based on user preference
-    if [ "$USE_PLATFORM_TAG" = true ]; then
-        PYTHON_IMAGE_TAG="${TAG_PREFIX}-client-python-${PLATFORM}:${TAG_VERSION}"
-    else
-        PYTHON_IMAGE_TAG="${TAG_PREFIX}-client-python:${TAG_VERSION}"
-    fi
-
-    print_info "Building image: ${PYTHON_IMAGE_TAG}"
-    print_info "Context: ${SCRIPT_DIR}/python"
-
-    # Build Docker image (context is at python directory level)
-    print_info "Building Docker image..."
     cd "${SCRIPT_DIR}/python"
 
-    if [ "$MULTI_PLATFORM" = true ]; then
-        # Use buildx for multi-platform build
-        docker buildx build ${DOCKER_BUILD_ARGS} \
-            -t "${PYTHON_IMAGE_TAG}" \
-            -f examples/Dockerfile \
-            .
-    else
-        # Use regular docker build for single platform
-        docker build ${DOCKER_BUILD_ARGS} \
-            -t "${PYTHON_IMAGE_TAG}" \
-            -f examples/Dockerfile \
-            .
-    fi
+    for example in "${PYTHON_EXAMPLES[@]}"; do
+        IFS=':' read -r folder name needs_gpu <<< "$example"
 
-    if [ $? -eq 0 ]; then
-        print_success "Python Docker image built successfully: ${PYTHON_IMAGE_TAG}"
-
-        # Show image details (only for single platform builds)
-        if [ "$MULTI_PLATFORM" = false ]; then
-            echo ""
-            print_info "Image details:"
-            docker images --filter "reference=${PYTHON_IMAGE_TAG%:*}" --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
+        # Skip if filter is set and doesn't match
+        if [ -n "$EXAMPLE_FILTER" ]; then
+            if [[ "$folder" != *"$EXAMPLE_FILTER"* ]] && [[ "$name" != *"$EXAMPLE_FILTER"* ]]; then
+                continue
+            fi
         fi
-    else
-        print_error "Failed to build Python Docker image"
-        exit 1
-    fi
 
-
-    # Build Python 3.8 legacy image
-    print_section "Building Python 3.8 Sample Client Docker Image"
-
-    # Build image name for Python 3.8
-    if [ "$USE_PLATFORM_TAG" = true ]; then
-        PYTHON38_IMAGE_TAG="${TAG_PREFIX}-client-python-${PLATFORM}:python38"
-    else
-        PYTHON38_IMAGE_TAG="${TAG_PREFIX}-client-python:python38"
-    fi
-
-    print_info "Building image: ${PYTHON38_IMAGE_TAG}"
-    print_info "Context: ${SCRIPT_DIR}/python"
-
-    # Build Docker image for Python 3.8
-    print_info "Building Python 3.8 Docker image..."
-    cd "${SCRIPT_DIR}/python"
-
-    if [ "$MULTI_PLATFORM" = true ]; then
-        # Use buildx for multi-platform build
-        docker buildx build ${DOCKER_BUILD_ARGS} \
-            -t "${PYTHON38_IMAGE_TAG}" \
-            -f examples/Dockerfile-python38 \
-            .
-    else
-        # Use regular docker build for single platform
-        docker build ${DOCKER_BUILD_ARGS} \
-            -t "${PYTHON38_IMAGE_TAG}" \
-            -f examples/Dockerfile-python38 \
-            .
-    fi
-
-    if [ $? -eq 0 ]; then
-        print_success "Python 3.8 Docker image built successfully: ${PYTHON38_IMAGE_TAG}"
-
-        # Show image details (only for single platform builds)
-        if [ "$MULTI_PLATFORM" = false ]; then
-            echo ""
-            print_info "Image details:"
-            docker images --filter "reference=${TAG_PREFIX}-client-python" --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}" | grep python38
+        # Check if example folder exists
+        if [ ! -d "examples/$folder" ]; then
+            print_warning "Example folder not found: examples/$folder - skipping"
+            continue
         fi
-    else
-        print_error "Failed to build Python 3.8 Docker image"
-        exit 1
-    fi
 
+        print_section "Building Python Example: $folder ($name)"
 
-    # Build Python YOLO Segmentation image
-    print_section "Building Python YOLO Segmentation Client Docker Image"
+        # Build standard Dockerfile
+        if [ -f "examples/$folder/Dockerfile" ]; then
+            if [ "$USE_PLATFORM_TAG" = true ]; then
+                IMAGE_TAG="${TAG_PREFIX}-client-python-${name}-${PLATFORM}:${TAG_VERSION}"
+            else
+                IMAGE_TAG="${TAG_PREFIX}-client-python-${name}:${TAG_VERSION}"
+            fi
 
-    # Build image name for Python YOLO
-    if [ "$USE_PLATFORM_TAG" = true ]; then
-        PYTHON_YOLO_IMAGE_TAG="${TAG_PREFIX}-client-python-yolo-${PLATFORM}:${TAG_VERSION}"
-    else
-        PYTHON_YOLO_IMAGE_TAG="${TAG_PREFIX}-client-python-yolo:${TAG_VERSION}"
-    fi
+            print_info "Building: ${IMAGE_TAG}"
+            docker build ${DOCKER_BUILD_ARGS} \
+                -t "${IMAGE_TAG}" \
+                -f "examples/$folder/Dockerfile" \
+                .
 
-    print_info "Building image: ${PYTHON_YOLO_IMAGE_TAG}"
-    print_info "Context: ${SCRIPT_DIR}/python"
-
-    # Build Docker image for Python YOLO
-    print_info "Building Python YOLO Docker image..."
-    cd "${SCRIPT_DIR}/python"
-
-    if [ "$MULTI_PLATFORM" = true ]; then
-        # Use buildx for multi-platform build
-        docker buildx build ${DOCKER_BUILD_ARGS} \
-            -t "${PYTHON_YOLO_IMAGE_TAG}" \
-            -f examples/rocket-welder-client-python-yolo/Dockerfile \
-            .
-    else
-        # Use regular docker build for single platform
-        docker build ${DOCKER_BUILD_ARGS} \
-            -t "${PYTHON_YOLO_IMAGE_TAG}" \
-            -f examples/rocket-welder-client-python-yolo/Dockerfile \
-            .
-    fi
-
-    if [ $? -eq 0 ]; then
-        print_success "Python YOLO Docker image built successfully: ${PYTHON_YOLO_IMAGE_TAG}"
-
-        # Show image details (only for single platform builds)
-        if [ "$MULTI_PLATFORM" = false ]; then
-            echo ""
-            print_info "Image details:"
-            docker images --filter "reference=${TAG_PREFIX}-client-python-yolo" --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
+            if [ $? -eq 0 ]; then
+                print_success "Built: ${IMAGE_TAG}"
+            else
+                print_error "Failed to build: ${IMAGE_TAG}"
+                exit 1
+            fi
         fi
-    else
-        print_error "Failed to build Python YOLO Docker image"
-        exit 1
-    fi
 
-    # Build Python YOLO Segmentation image for Jetson (if enabled)
-    if [ "$BUILD_JETSON" = true ]; then
-        print_section "Building Python YOLO Segmentation Client Docker Image (Jetson-Optimized)"
+        # Build Jetson variant (if enabled and GPU example)
+        if [ "$BUILD_JETSON" = true ] && [ "$needs_gpu" = "true" ] && [ -f "examples/$folder/Dockerfile.jetson" ]; then
+            JETSON_IMAGE_TAG="${TAG_PREFIX}-client-python-${name}:jetson"
 
-        # Build image name for Python YOLO Jetson
-        PYTHON_YOLO_JETSON_IMAGE_TAG="${TAG_PREFIX}-client-python-yolo:jetson"
+            print_info "Building Jetson variant: ${JETSON_IMAGE_TAG}"
+            docker build ${DOCKER_BUILD_ARGS} \
+                -t "${JETSON_IMAGE_TAG}" \
+                -f "examples/$folder/Dockerfile.jetson" \
+                .
 
-        print_info "Building image: ${PYTHON_YOLO_JETSON_IMAGE_TAG}"
-        print_info "Context: ${SCRIPT_DIR}/python"
-        print_info "Using Jetson-optimized Dockerfile with L4T PyTorch base"
-
-        # Build Docker image for Python YOLO Jetson
-        print_info "Building Python YOLO Jetson Docker image..."
-        cd "${SCRIPT_DIR}/python"
-
-        # Jetson builds are always single-platform (arm64)
-        docker build ${DOCKER_BUILD_ARGS} \
-            -t "${PYTHON_YOLO_JETSON_IMAGE_TAG}" \
-            -f examples/rocket-welder-client-python-yolo/Dockerfile.jetson \
-            .
-
-        if [ $? -eq 0 ]; then
-            print_success "Python YOLO Jetson Docker image built successfully: ${PYTHON_YOLO_JETSON_IMAGE_TAG}"
-
-            echo ""
-            print_info "Image details:"
-            docker images --filter "reference=${TAG_PREFIX}-client-python-yolo" --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}" | grep jetson
-        else
-            print_error "Failed to build Python YOLO Jetson Docker image"
-            exit 1
+            if [ $? -eq 0 ]; then
+                print_success "Built: ${JETSON_IMAGE_TAG}"
+            else
+                print_error "Failed to build: ${JETSON_IMAGE_TAG}"
+                exit 1
+            fi
         fi
-    fi
+
+        # Build Python 3.8 variant (if enabled)
+        if [ "$BUILD_PYTHON38" = true ] && [ -f "examples/$folder/Dockerfile.python38" ]; then
+            PYTHON38_IMAGE_TAG="${TAG_PREFIX}-client-python-${name}:python38"
+
+            print_info "Building Python 3.8 variant: ${PYTHON38_IMAGE_TAG}"
+            docker build ${DOCKER_BUILD_ARGS} \
+                -t "${PYTHON38_IMAGE_TAG}" \
+                -f "examples/$folder/Dockerfile.python38" \
+                .
+
+            if [ $? -eq 0 ]; then
+                print_success "Built: ${PYTHON38_IMAGE_TAG}"
+            else
+                print_error "Failed to build: ${PYTHON38_IMAGE_TAG}"
+                exit 1
+            fi
+        fi
+    done
 fi
 
 print_section "Build Complete!"
 
-print_info "Built images:"
-if [ "$BUILD_CSHARP" = true ]; then
-    echo "  • ${TAG_PREFIX}-client-csharp:${TAG_VERSION}"
-fi
-if [ "$BUILD_PYTHON" = true ]; then
-    echo "  • ${TAG_PREFIX}-client-python:${TAG_VERSION}"
-    echo "  • ${TAG_PREFIX}-client-python:x11 (with display support)"
-    echo "  • ${TAG_PREFIX}-client-python:python38"
-    echo "  • ${TAG_PREFIX}-client-python-yolo:${TAG_VERSION}"
-    if [ "$BUILD_JETSON" = true ]; then
-        echo "  • ${TAG_PREFIX}-client-python-yolo:jetson (Jetson-optimized with GPU support)"
-    fi
-fi
-
+print_info "To list built images:"
+echo "  docker images | grep ${TAG_PREFIX}"
 echo ""
-print_info "To run the containers:"
-echo ""
-
-if [ "$BUILD_CSHARP" = true ]; then
-    echo "C# client:"
-    echo "  docker run --rm -it \\"
-    echo "    -e CONNECTION_STRING=\"shm://test_buffer?size=10MB&metadata=4KB\" \\"
-    echo "    --ipc=host \\"
-    echo "    ${TAG_PREFIX}-client-csharp:${TAG_VERSION}"
-    echo ""
-fi
-
-if [ "$BUILD_PYTHON" = true ]; then
-    echo "Python client (latest):"
-    echo "  docker run --rm -it \\"
-    echo "    -e CONNECTION_STRING=\"shm://test_buffer?size=10MB&metadata=4KB\" \\"
-    echo "    --ipc=host \\"
-    echo "    ${TAG_PREFIX}-client-python:${TAG_VERSION}"
-    echo ""
-    echo "Python client (Python 3.8):"
-    echo "  docker run --rm -it \\"
-    echo "    -e CONNECTION_STRING=\"shm://test_buffer?size=10MB&metadata=4KB\" \\"
-    echo "    --ipc=host \\"
-    echo "    ${TAG_PREFIX}-client-python:python38"
-    echo ""
-    echo "Python client with X11 display support:"
-    echo "  docker run --rm -it \\"
-    echo "    -e DISPLAY=\$DISPLAY \\"
-    echo "    -v /tmp/.X11-unix:/tmp/.X11-unix:rw \\"
-    echo "    -v /path/to/video.mp4:/data/stream.mp4:ro \\"
-    echo "    --network host \\"
-    echo "    ${TAG_PREFIX}-client-python:x11"
-    echo ""
-    echo "  Note: For X11, run 'xhost +local:docker' first to allow display access"
-    echo ""
-    echo "Python YOLO Segmentation client:"
-    echo "  docker run --rm -it \\"
-    echo "    -e CONNECTION_STRING=\"shm://test_buffer?size=10MB&metadata=4KB\" \\"
-    echo "    --ipc=host \\"
-    echo "    ${TAG_PREFIX}-client-python-yolo:${TAG_VERSION}"
-    echo ""
-
-    if [ "$BUILD_JETSON" = true ]; then
-        echo "Python YOLO Segmentation client (Jetson with GPU):"
-        echo "  docker run --rm -it \\"
-        echo "    -e CONNECTION_STRING=\"shm://test_buffer?size=10MB&metadata=4KB\" \\"
-        echo "    --runtime=nvidia --gpus all \\"
-        echo "    --ipc=host \\"
-        echo "    ${TAG_PREFIX}-client-python-yolo:jetson"
-        echo ""
-    fi
-fi
-
-print_info "Note: Use --ipc=host to share IPC namespace with the host for shared memory access"
+print_info "To run a container:"
+echo "  docker run --rm -it \\"
+echo "    -e CONNECTION_STRING=\"shm://test_buffer\" \\"
+echo "    --ipc=host \\"
+echo "    ${TAG_PREFIX}-client-python-simple:${TAG_VERSION}"

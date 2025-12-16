@@ -1,0 +1,32 @@
+# Dockerfile for Python RocketWelder SDK - Simple Client (Jetson)
+# Optimized for NVIDIA Jetson devices (ARM64)
+# Build from SDK root: docker build -f examples/01-simple/Dockerfile.jetson -t rw-simple-jetson .
+FROM dustynv/l4t-pytorch:r35.3.1
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    procps \
+    iputils-ping \
+    net-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements (skip opencv-python - L4T has OpenCV with CUDA)
+COPY requirements.txt .
+RUN grep -v "opencv-python" requirements.txt > requirements-jetson.txt && \
+    pip3 install --no-cache-dir -r requirements-jetson.txt
+
+# Copy and install the SDK
+COPY rocket_welder_sdk/ /app/rocket_welder_sdk/
+COPY setup.py pyproject.toml MANIFEST.in README.md ./
+RUN pip3 install --no-cache-dir --no-deps .
+
+# Remove opencv-python if installed (use L4T's OpenCV)
+RUN pip3 uninstall -y opencv-python opencv-python-headless || true
+
+# Copy the example application
+COPY examples/01-simple/main.py .
+
+ENV ROCKET_WELDER_LOG_LEVEL=INFO
+
+ENTRYPOINT ["python3", "main.py"]

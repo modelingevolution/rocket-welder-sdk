@@ -1,4 +1,6 @@
-# Dockerfile for Python RocketWelder SDK SimpleClient
+# Dockerfile for Python RocketWelder SDK YOLO Segmentation Client
+# REQUIRES NVIDIA GPU with CUDA support - will fail fast without GPU
+# MUST run with: docker run --runtime=nvidia --gpus all ...
 FROM python:3.12-slim-bookworm
 
 WORKDIR /app
@@ -39,22 +41,26 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Install ultralytics for YOLO
+RUN pip install --no-cache-dir ultralytics
+
+RUN pip install --no-cache-dir pymodbus
+
 # Copy and install the SDK
 COPY rocket_welder_sdk/ /app/rocket_welder_sdk/
 COPY setup.py pyproject.toml MANIFEST.in README.md ./
 RUN pip install --no-cache-dir .
 
-# Copy the example application
-COPY examples/simple_client.py .
+# Copy the YOLO example application
+COPY examples/05-all/main.py .
 
 # Set up logging - SDK will propagate to ZEROBUFFER_LOG_LEVEL
 ENV ROCKET_WELDER_LOG_LEVEL=INFO
 
-# Health check (optional)
-# HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-#     CMD pgrep -f simple_client.py || exit 1
+# Download YOLO model at build time (optional - will auto-download on first run if not present)
+RUN python -c "from ultralytics import YOLO; YOLO('yolov8n-seg.pt')"
 
 # Entry point - runs the client with CONNECTION_STRING env var
-ENTRYPOINT ["python", "simple_client.py"]
+ENTRYPOINT ["python", "main.py"]
 
 # No default CMD - will use CONNECTION_STRING from environment

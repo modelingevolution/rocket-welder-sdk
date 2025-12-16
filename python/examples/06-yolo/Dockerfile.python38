@@ -1,7 +1,10 @@
-# Python 3.8 example for RocketWelder SDK
+# Dockerfile for Python RocketWelder SDK - YOLO Segmentation (Python 3.8)
+# REQUIRES NVIDIA GPU with CUDA support
+# Build from SDK root: docker build -f examples/06-yolo/Dockerfile.python38 -t rw-yolo-py38 .
 FROM python:3.8-slim
 
-# Install system dependencies
+WORKDIR /app
+
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -14,17 +17,13 @@ RUN apt-get update && apt-get install -y \
     gstreamer1.0-plugins-good \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
-WORKDIR /app
-
 # Copy and install the SDK
 COPY rocket_welder_sdk/ /app/rocket_welder_sdk/
 COPY setup.py pyproject.toml MANIFEST.in README.md ./
 RUN pip install --no-cache-dir . && \
-    pip install --no-cache-dir posix-ipc
+    pip install --no-cache-dir posix-ipc ultralytics
 
-# Copy the simple client example
-COPY examples/simple_client.py /app/
+# Copy the example application
+COPY examples/06-yolo/main.py .
 
-# Set the entrypoint
-ENTRYPOINT ["python", "simple_client.py"]
+ENTRYPOINT ["python", "main.py"]

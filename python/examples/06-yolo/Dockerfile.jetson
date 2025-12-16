@@ -36,7 +36,7 @@ RUN pip3 install --no-cache-dir --no-deps .
 RUN pip3 uninstall -y opencv-python opencv-python-headless || true
 
 # Copy the YOLO example application
-COPY examples/04-yolo-segmentation/main.py .
+COPY examples/06-yolo/main.py .
 
 # Set up logging - SDK will propagate to ZEROBUFFER_LOG_LEVEL
 ENV ROCKET_WELDER_LOG_LEVEL=INFO
