@@ -42,15 +42,20 @@ jobs:
           exit 0
         fi
 
-        # Get latest tag version
-        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        # Get latest stable tag (exclude preview tags)
+        LATEST_TAG=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -v preview | sort -V | tail -n1 || echo "v0.0.0")
+        if [ -z "$LATEST_TAG" ]; then
+          LATEST_TAG="v0.0.0"
+        fi
         VERSION="${LATEST_TAG#v}"
 
-        # Parse version components
+        # Parse version components (only X.Y.Z, no suffixes)
         IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
         MAJOR=${MAJOR:-0}
         MINOR=${MINOR:-0}
         PATCH=${PATCH:-0}
+        # Strip any non-numeric suffix from PATCH
+        PATCH=$(echo "$PATCH" | grep -oE '^[0-9]+' || echo "0")
 
         # Bump patch for preview
         PATCH=$((PATCH + 1))
