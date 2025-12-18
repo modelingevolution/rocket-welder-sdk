@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- NuGet Package Settings -->
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>RocketWelder.BinaryProtocol</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>ModelingEvolution</Authors>
+    <Company>ModelingEvolution</Company>
+    <Copyright>Copyright © ModelingEvolution 2024</Copyright>
+    <Description>WASM-compatible binary protocol encoders/decoders for RocketWelder streaming data (segmentation, keypoints, actions). Zero-allocation varint and zigzag encoding.</Description>
+    <PackageTags>protocol;binary;varint;zigzag;streaming;wasm;blazor</PackageTags>
+    <PackageProjectUrl>https://github.com/modelingevolution/rocket-welder-sdk</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+</Project>

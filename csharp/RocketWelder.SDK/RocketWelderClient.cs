@@ -24,112 +24,11 @@ using System.Drawing;
 using System.Collections.Generic;
 using System.Linq;
 using RocketWelder.SDK.Transport;
+using RocketWelder.BinaryProtocol;
 
 namespace RocketWelder.SDK
 {
-    /// <summary>
-    /// Varint encoding extensions for efficient integer compression.
-    /// </summary>
-    internal static class VarintExtensions
-    {
-        /// <summary>
-        /// Write unsigned integer as varint to stream.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static void WriteVarint(this Stream stream, uint value)
-        {
-            while (value >= 0x80)
-            {
-                stream.WriteByte((byte)(value | 0x80));
-                value >>= 7;
-            }
-            stream.WriteByte((byte)value);
-        }
-
-        /// <summary>
-        /// Read varint from stream and decode to unsigned integer.
-        /// </summary>
-        public static uint ReadVarint(this Stream stream)
-        {
-            uint result = 0;
-            int shift = 0;
-            byte b;
-            do
-            {
-                if (shift >= 35) // Max 5 bytes for uint32
-                    throw new InvalidDataException("Varint too long (corrupted stream)");
-
-                int read = stream.ReadByte();
-                if (read == -1) throw new EndOfStreamException();
-                b = (byte)read;
-                result |= (uint)(b & 0x7F) << shift;
-                shift += 7;
-            } while ((b & 0x80) != 0);
-            return result;
-        }
-
-        /// <summary>
-        /// ZigZag encode signed integer to unsigned (for efficient varint encoding of signed values).
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static uint ZigZagEncode(this int value)
-        {
-            return (uint)((value << 1) ^ (value >> 31));
-        }
-
-        /// <summary>
-        /// ZigZag decode unsigned integer to signed.
-        /// </summary>
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        public static int ZigZagDecode(this uint value)
-        {
-            return (int)(value >> 1) ^ -(int)(value & 1);
-        }
-
-        /// <summary>
-        /// Write unsigned integer as varint to stream asynchronously.
-        /// </summary>
-        public static async Task WriteVarintAsync(this Stream stream, uint value)
-        {
-            byte[] buffer = new byte[5]; // Max 5 bytes for uint32
-            int index = 0;
-
-            while (value >= 0x80)
-            {
-                buffer[index++] = (byte)(value | 0x80);
-                value >>= 7;
-            }
-            buffer[index++] = (byte)value;
-
-            await stream.WriteAsync(buffer, 0, index);
-        }
-
-        /// <summary>
-        /// Read varint from stream and decode to unsigned integer asynchronously.
-        /// </summary>
-        public static async Task<uint> ReadVarintAsync(this Stream stream)
-        {
-            uint result = 0;
-            int shift = 0;
-            byte b;
-            byte[] buffer = new byte[1];
-
-            do
-            {
-                if (shift >= 35) // Max 5 bytes for uint32
-                    throw new InvalidDataException("Varint too long (corrupted stream)");
-
-                int bytesRead = await stream.ReadAsync(buffer, 0, 1);
-                if (bytesRead == 0) throw new EndOfStreamException();
-                b = buffer[0];
-                result |= (uint)(b & 0x7F) << shift;
-                shift += 7;
-            } while ((b & 0x80) != 0);
-
-            return result;
-        }
-    }
-
+    // VarintExtensions moved to RocketWelder.SDK.Protocol package
 
     class SegmentationResultWriter : ISegmentationResultWriter
     {

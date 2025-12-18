@@ -81,7 +81,12 @@ jobs:
     - name: Update version in csproj
       run: |
         VERSION="${{ needs.preview-version.outputs.version }}"
-        cd csharp/RocketWelder.SDK
+        # Update BinaryProtocol version
+        cd csharp/RocketWelder.BinaryProtocol
+        sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.BinaryProtocol.csproj
+        cd ..
+        # Update SDK version
+        cd RocketWelder.SDK
         sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.SDK.csproj
 
     - name: Restore dependencies
@@ -92,11 +97,25 @@ jobs:
       working-directory: ./csharp
       run: dotnet build --configuration Release --no-restore
 
-    - name: Pack
+    - name: Pack BinaryProtocol
+      working-directory: ./csharp
+      run: dotnet pack RocketWelder.BinaryProtocol/RocketWelder.BinaryProtocol.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ needs.preview-version.outputs.version }}
+
+    - name: Push BinaryProtocol to NuGet
+      working-directory: ./csharp
+      run: |
+        dotnet nuget push ./nupkg/RocketWelder.BinaryProtocol.*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
+    - name: Pack SDK
       working-directory: ./csharp
       run: dotnet pack RocketWelder.SDK/RocketWelder.SDK.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ needs.preview-version.outputs.version }}
 
-    - name: Push to NuGet
+    - name: Push SDK to NuGet
       working-directory: ./csharp
       run: |
         dotnet nuget push ./nupkg/RocketWelder.SDK.*.nupkg \
@@ -108,13 +127,16 @@ jobs:
 
     - name: Summary
       run: |
-        echo "## C# SDK Preview Published to NuGet" >> $GITHUB_STEP_SUMMARY
+        echo "## C# Packages Preview Published to NuGet" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Version**: ${{ needs.preview-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-        echo "- **Package**: RocketWelder.SDK" >> $GITHUB_STEP_SUMMARY
-        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "Install with:" >> $GITHUB_STEP_SUMMARY
+        echo "### RocketWelder.BinaryProtocol" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo 'dotnet add package RocketWelder.BinaryProtocol --version ${{ needs.preview-version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### RocketWelder.SDK" >> $GITHUB_STEP_SUMMARY
         echo '```bash' >> $GITHUB_STEP_SUMMARY
         echo 'dotnet add package RocketWelder.SDK --version ${{ needs.preview-version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY

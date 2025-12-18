@@ -21,6 +21,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\RocketWelder.BinaryProtocol\RocketWelder.BinaryProtocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Emgu.CV" Version="4.11.0.5746" />
     <PackageReference Include="Emgu.CV.runtime.ubuntu-x64" Version="4.11.0.5746" />
     <PackageReference Include="MicroPlumberd" Version="1.0.126.4" />

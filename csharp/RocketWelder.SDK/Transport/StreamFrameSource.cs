@@ -3,6 +3,7 @@ using System.Buffers;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using RocketWelder.BinaryProtocol;
 
 namespace RocketWelder.SDK.Transport
 {
