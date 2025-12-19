@@ -1,24 +1,15 @@
 # Multi-stage build for C# BallDetection example
 # Sink-only example - detects ball and outputs via NNG (no frame modification)
+# Build context: csharp/ directory (run via build_docker_samples.sh)
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
 WORKDIR /src
 
-# Copy the SDK project files first
-COPY RocketWelder.SDK/RocketWelder.SDK.csproj RocketWelder.SDK/
+# Copy the project file and restore dependencies (SDK from NuGet)
+COPY examples/BallDetection/BallDetection.csproj .
+RUN dotnet restore
 
-# Copy the BallDetection project file
-COPY examples/BallDetection/BallDetection.csproj examples/BallDetection/
-
-# Restore dependencies
-WORKDIR /src
-RUN dotnet restore examples/BallDetection/BallDetection.csproj
-
-# Copy the source code
-COPY RocketWelder.SDK/ RocketWelder.SDK/
-COPY examples/BallDetection/ examples/BallDetection/
-
-# Build and publish
-WORKDIR /src/examples/BallDetection
+# Copy the source code and build
+COPY examples/BallDetection/ .
 RUN dotnet publish -c Release -o /app/publish
 
 # Runtime stage - Using Ubuntu 24.04 (Noble) for GLIBC 2.38+ compatibility

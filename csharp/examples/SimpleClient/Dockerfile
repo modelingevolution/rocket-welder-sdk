@@ -1,24 +1,15 @@
 # Multi-stage build for C# SimpleClient
 # Using .NET 10.0 Preview - required for SDK compatibility
+# Build context: csharp/ directory (run via build_docker_samples.sh)
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
 WORKDIR /src
 
-# Copy the SDK project files first
-COPY RocketWelder.SDK/RocketWelder.SDK.csproj RocketWelder.SDK/
+# Copy the project file and restore dependencies (SDK from NuGet)
+COPY examples/SimpleClient/SimpleClient.csproj .
+RUN dotnet restore
 
-# Copy the SimpleClient project file
-COPY examples/SimpleClient/SimpleClient.csproj examples/SimpleClient/
-
-# Restore dependencies
-WORKDIR /src
-RUN dotnet restore examples/SimpleClient/SimpleClient.csproj
-
-# Copy the source code
-COPY RocketWelder.SDK/ RocketWelder.SDK/
-COPY examples/SimpleClient/ examples/SimpleClient/
-
-# Build and publish
-WORKDIR /src/examples/SimpleClient
+# Copy the source code and build
+COPY examples/SimpleClient/ .
 RUN dotnet publish -c Release -o /app/publish
 
 # Runtime stage - Using Ubuntu 24.04 (Noble) for GLIBC 2.38+ compatibility
