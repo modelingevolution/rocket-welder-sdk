@@ -161,9 +161,22 @@ jobs:
 
     - name: Create VERSION file
       run: |
-        VERSION="${{ needs.preview-version.outputs.version }}"
+        # Convert NuGet version to PEP 440 compliant version
+        # NuGet: 1.1.34-preview.a66d687 -> PyPI: 1.1.34.dev<run_number>
+        NUGET_VERSION="${{ needs.preview-version.outputs.version }}"
+        RUN_NUMBER="${{ github.run_number }}"
+
+        # Extract base version (before -preview)
+        BASE_VERSION=$(echo "$NUGET_VERSION" | sed 's/-preview.*//')
+
+        # Create PEP 440 compliant version: X.Y.Z.devN (development release)
+        PEP440_VERSION="${BASE_VERSION}.dev${RUN_NUMBER}"
+
+        echo "NuGet version: $NUGET_VERSION"
+        echo "PEP 440 version: $PEP440_VERSION"
+
         cd python
-        echo "$VERSION" > VERSION
+        echo "$PEP440_VERSION" > VERSION
 
     - name: Install build dependencies
       run: |
