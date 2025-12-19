@@ -2,7 +2,9 @@
 """Simple example of UI controls with RocketWelder SDK."""
 
 import asyncio
+import logging
 import os
+import sys
 from typing import Any
 from uuid import uuid4
 
@@ -11,13 +13,45 @@ from py_micro_plumberd import EventStoreClient
 from rocket_welder_sdk.ui import Color, RegionName, Size, UiService
 
 
+def setup_logging() -> logging.Logger:
+    """Setup logging with console output."""
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    logger.handlers.clear()
+
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # Configure SDK logging
+    rw_logger = logging.getLogger("rocket_welder_sdk")
+    rw_logger.setLevel(logging.INFO)
+    rw_logger.handlers.clear()
+    rw_logger.addHandler(console_handler)
+    rw_logger.propagate = False
+
+    return logger
+
+
+logger: logging.Logger = None  # type: ignore
+
+
 async def main() -> None:
     """Main entry point for UI controls example."""
+    global logger
+    logger = setup_logging()
+
     # Setup
     session_id = os.environ.get("SessionId", str(uuid4()))
     eventstore = os.environ.get("EventStore", "esdb://localhost:2113?tls=false")
 
-    print(f"Session ID: {session_id}")
+    logger.info("Session ID: %s", session_id)
 
     # Create UI service
     ui = UiService(session_id)
@@ -55,7 +89,7 @@ async def main() -> None:
     await ui.do()
 
     # Keep running for 30 seconds
-    print("UI controls active for 30 seconds...")
+    logger.info("UI controls active for 30 seconds...")
     await asyncio.sleep(30)
 
     # Cleanup

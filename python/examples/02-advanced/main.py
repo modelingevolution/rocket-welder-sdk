@@ -4,6 +4,7 @@ Advanced RocketWelder client with FPS display, overlays, and UI controls.
 """
 
 import asyncio
+import logging
 import os
 import sys
 import time
@@ -17,6 +18,35 @@ import numpy.typing as npt
 
 import rocket_welder_sdk as rw
 from rocket_welder_sdk.ui import ArrowDirection, RegionName, UiService
+
+
+def setup_logging() -> logging.Logger:
+    """Setup logging with console output."""
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+    logger.handlers.clear()
+
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(formatter)
+    logger.addHandler(console_handler)
+
+    # Configure SDK logging
+    rw_logger = logging.getLogger("rocket_welder_sdk")
+    rw_logger.setLevel(logging.INFO)
+    rw_logger.handlers.clear()
+    rw_logger.addHandler(console_handler)
+    rw_logger.propagate = False
+
+    return logger
+
+
+logger: logging.Logger = None  # type: ignore
 
 
 class VideoProcessor:
@@ -57,9 +87,9 @@ class VideoProcessor:
             self.ui_service[RegionName.PREVIEW_BOTTOM_CENTER].add(self.arrow_grid)
 
             await self.ui_service.do()
-            print("UI controls initialized")
+            logger.info("UI controls initialized")
         except Exception as e:
-            print(f"UI setup failed: {e}")
+            logger.warning("UI setup failed: %s", e)
 
     def on_arrow_down(self, sender: Any, direction: ArrowDirection) -> None:
         """Handle arrow key press."""
@@ -150,12 +180,15 @@ class VideoProcessor:
 
 async def main() -> None:
     """Main entry point."""
+    global logger
+    logger = setup_logging()
+
     # Get configuration from environment
     session_id = os.environ.get("SessionId")
 
     # Create client
     client = rw.Client.from_(sys.argv)
-    print(f"Connected: {client.connection}")
+    logger.info("Connected: %s", client.connection)
 
     # Create processor
     processor = VideoProcessor(session_id)
@@ -183,7 +216,7 @@ async def main() -> None:
                 await processor.ui_service.do()
             await asyncio.sleep(0.5)
     except KeyboardInterrupt:
-        print("\nShutting down...")
+        logger.info("Shutting down...")
     finally:
         if processor.arrow_grid:
             processor.arrow_grid.dispose()

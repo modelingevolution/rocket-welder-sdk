@@ -438,7 +438,9 @@ class OneWayShmController(IController):
                 sqrt_pixels = math.sqrt(pixels)
                 if sqrt_pixels == int(sqrt_pixels):
                     dimension = int(sqrt_pixels)
-                    logger.info(f"Pixel data size {pixel_data_size} suggests {dimension}x{dimension} RGB")
+                    logger.info(
+                        f"Pixel data size {pixel_data_size} suggests {dimension}x{dimension} RGB"
+                    )
                     pixel_data = np.frombuffer(frame.data[FRAME_METADATA_SIZE:], dtype=np.uint8)
                     return pixel_data.reshape((dimension, dimension, 3))  # type: ignore[no-any-return]
 
@@ -448,7 +450,9 @@ class OneWayShmController(IController):
                 sqrt_pixels = math.sqrt(pixels)
                 if sqrt_pixels == int(sqrt_pixels):
                     dimension = int(sqrt_pixels)
-                    logger.info(f"Pixel data size {pixel_data_size} suggests {dimension}x{dimension} RGBA")
+                    logger.info(
+                        f"Pixel data size {pixel_data_size} suggests {dimension}x{dimension} RGBA"
+                    )
                     pixel_data = np.frombuffer(frame.data[FRAME_METADATA_SIZE:], dtype=np.uint8)
                     return pixel_data.reshape((dimension, dimension, 4))  # type: ignore[no-any-return]
 

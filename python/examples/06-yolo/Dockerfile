@@ -48,7 +48,7 @@ RUN pip install --no-cache-dir ultralytics
 # Copy and install the SDK
 COPY rocket_welder_sdk/ /app/rocket_welder_sdk/
 COPY setup.py pyproject.toml MANIFEST.in README.md ./
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[nng]"
 
 # Copy the YOLO example application
 COPY examples/06-yolo/main.py .

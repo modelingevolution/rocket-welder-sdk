@@ -1,33 +1,36 @@
-# Multi-stage build for C# SimpleClient
-# Using .NET 10.0 Preview - required for SDK compatibility
+# Multi-stage build for C# BallDetection example
+# Sink-only example - detects ball and outputs via NNG (no frame modification)
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
 WORKDIR /src
 
 # Copy the SDK project files first
 COPY RocketWelder.SDK/RocketWelder.SDK.csproj RocketWelder.SDK/
 
-# Copy the SimpleClient project file
-COPY examples/SimpleClient/SimpleClient.csproj examples/SimpleClient/
+# Copy the BallDetection project file
+COPY examples/BallDetection/BallDetection.csproj examples/BallDetection/
 
 # Restore dependencies
 WORKDIR /src
-RUN dotnet restore examples/SimpleClient/SimpleClient.csproj
+RUN dotnet restore examples/BallDetection/BallDetection.csproj
 
 # Copy the source code
 COPY RocketWelder.SDK/ RocketWelder.SDK/
-COPY examples/SimpleClient/ examples/SimpleClient/
+COPY examples/BallDetection/ examples/BallDetection/
 
 # Build and publish
-WORKDIR /src/examples/SimpleClient
+WORKDIR /src/examples/BallDetection
 RUN dotnet publish -c Release -o /app/publish
 
 # Runtime stage - Using Ubuntu 24.04 (Noble) for GLIBC 2.38+ compatibility
-# Using .NET 10.0 Preview runtime
 FROM mcr.microsoft.com/dotnet/runtime:10.0-noble
 WORKDIR /app
 
-# Install OpenCV dependencies and tools for debugging
-RUN apt-get update && apt-get install -y \
+# Copy published app first (to leverage cache for apt-get layer)
+COPY --from=build /app/publish .
+
+# Install all dependencies in a single RUN command to reduce layers
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Core dependencies
     libgomp1 \
     libgdiplus \
     libc6-dev \
@@ -49,22 +52,13 @@ RUN apt-get update && apt-get install -y \
     gfortran \
     libgstreamer1.0-0 \
     libgstreamer-plugins-base1.0-0 \
-    # Useful tools for debugging
-    procps \
-    iputils-ping \
-    net-tools \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy published app
-COPY --from=build /app/publish .
-
-# Install minimal OpenCV/EmguCV dependencies and X11 for preview
-RUN apt-get update && apt-get install -y \
+    # EmguCV/OpenCV native dependencies
     libgeotiff5 \
     libdc1394-25 \
     libopenexr-3-1-30 \
     libhdf5-103-1 \
     libvtk9.1t64 \
+    # X11 for preview
     libx11-6 \
     libxext6 \
     libxrender1 \
@@ -75,27 +69,28 @@ RUN apt-get update && apt-get install -y \
     libxinerama1 \
     libxkbcommon-x11-0 \
     libglu1-mesa \
+    # Debugging tools
+    procps \
+    iputils-ping \
+    net-tools \
     && rm -rf /var/lib/apt/lists/*
 
 # Create symlink for Emgu.CV native library
 RUN ln -s /app/runtimes/ubuntu-x64/native/libcvextern.so /app/libcvextern.so || true
 
 # Ensure Emgu.CV native libraries are accessible
-# The runtime package should handle this, but we'll set library path just in case
-ENV LD_LIBRARY_PATH=/app/runtimes/ubuntu-x64/native:/app:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/app/runtimes/ubuntu-x64/native:/app:${LD_LIBRARY_PATH:-}
 
 # Set up logging
 ENV ZEROBUFFER_LOG_LEVEL=INFO
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 
-# Disable RocketWelder UI by default (can be overridden at runtime)
+# Disable RocketWelder UI by default (sink-only example doesn't need UI)
 ENV DisableRocketWelderUI=true
 
-# Health check (optional)
+# Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD pgrep -f SimpleClient || exit 1
+    CMD pgrep -f BallDetection || exit 1
 
-# Entry point - runs the client with CONNECTION_STRING env var
-ENTRYPOINT ["dotnet", "SimpleClient.dll"]
-
-# No default CMD - will use CONNECTION_STRING from environment
+# Entry point
+ENTRYPOINT ["dotnet", "BallDetection.dll"]

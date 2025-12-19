@@ -16,11 +16,22 @@ from .opencv_controller import OpenCvController
 from .periodic_timer import PeriodicTimer, PeriodicTimerSync
 from .rocket_welder_client import RocketWelderClient
 from .session_id import (
+    # Explicit URL functions (PREFERRED - set by rocket-welder2)
+    ACTIONS_SINK_URL_ENV,
+    KEYPOINTS_SINK_URL_ENV,
+    SEGMENTATION_SINK_URL_ENV,
+    # SessionId-derived URL functions (fallback for backwards compatibility)
     get_actions_url,
+    get_actions_url_from_env,
+    get_configured_nng_urls,
     get_keypoints_url,
+    get_keypoints_url_from_env,
     get_nng_urls,
+    get_nng_urls_from_env,
     get_segmentation_url,
+    get_segmentation_url_from_env,
     get_session_id_from_env,
+    has_explicit_nng_urls,
     parse_session_id,
 )
 
@@ -49,7 +60,10 @@ if _log_level:
         pass  # Invalid log level, ignore
 
 __all__ = [
+    "ACTIONS_SINK_URL_ENV",
     "FRAME_METADATA_SIZE",
+    "KEYPOINTS_SINK_URL_ENV",
+    "SEGMENTATION_SINK_URL_ENV",
     "BytesSize",
     "Client",
     "ConnectionMode",
@@ -66,11 +80,16 @@ __all__ = [
     "PeriodicTimerSync",
     "Protocol",
     "RocketWelderClient",
-    # SessionId utilities for NNG URL generation
     "get_actions_url",
+    "get_actions_url_from_env",
+    "get_configured_nng_urls",
     "get_keypoints_url",
+    "get_keypoints_url_from_env",
     "get_nng_urls",
+    "get_nng_urls_from_env",
     "get_segmentation_url",
+    "get_segmentation_url_from_env",
     "get_session_id_from_env",
+    "has_explicit_nng_urls",
     "parse_session_id",
 ]

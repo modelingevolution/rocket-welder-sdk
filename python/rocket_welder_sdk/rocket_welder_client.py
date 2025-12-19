@@ -16,7 +16,11 @@ from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
 from .frame_metadata import FrameMetadata  # noqa: TC001 - used at runtime in callbacks
 from .opencv_controller import OpenCvController
-from .session_id import get_nng_urls, get_session_id_from_env
+from .session_id import (
+    get_configured_nng_urls,
+    get_nng_urls_from_env,
+    has_explicit_nng_urls,
+)
 from .transport.nng_transport import NngFrameSink
 
 if TYPE_CHECKING:
@@ -90,27 +94,33 @@ class RocketWelderClient:
         """
         return self._nng_publishers
 
-    def _create_nng_publishers(self, session_id: str) -> None:
+    def _create_nng_publishers(self) -> None:
         """Create NNG publishers for result streaming.
 
-        Args:
-            session_id: SessionId string (e.g., "ps-{guid}")
+        URLs are read from environment variables (preferred) or derived from SessionId (fallback).
+
+        Priority:
+        1. Explicit URLs: SEGMENTATION_SINK_URL, KEYPOINTS_SINK_URL, ACTIONS_SINK_URL
+        2. Derived from SessionId environment variable (backwards compatibility)
         """
         try:
-            urls = get_nng_urls(session_id)
+            urls = get_configured_nng_urls()
 
             for name, url in urls.items():
                 sink = NngFrameSink.create_publisher(url)
                 self._nng_publishers[name] = sink
                 logger.info("NNG publisher ready: %s at %s", name, url)
 
+            # Log configuration summary
             logger.info(
-                "NNG publishers created for SessionId=%s: seg=%s, kp=%s, actions=%s",
-                session_id,
-                urls["segmentation"],
-                urls["keypoints"],
-                urls["actions"],
+                "NNG publishers configured: seg=%s, kp=%s, actions=%s",
+                urls.get("segmentation", "(not configured)"),
+                urls.get("keypoints", "(not configured)"),
+                urls.get("actions", "(not configured)"),
             )
+        except ValueError as ex:
+            # No URLs configured - this is expected for containers that don't publish results
+            logger.debug("NNG publishers not configured: %s", ex)
         except Exception as ex:
             logger.warning("Failed to create NNG publishers: %s", ex)
             # Don't fail start() - NNG is optional for backwards compatibility
@@ -162,10 +172,20 @@ class RocketWelderClient:
             else:
                 raise ValueError(f"Unsupported protocol: {self._connection.protocol}")
 
-            # Auto-create NNG publishers if SessionId env var is set
-            session_id = get_session_id_from_env()
-            if session_id:
-                self._create_nng_publishers(session_id)
+            # Auto-create NNG publishers if URLs are configured
+            # (explicit URLs via SEGMENTATION_SINK_URL etc., or derived from SessionId)
+            if has_explicit_nng_urls():
+                self._create_nng_publishers()
+            else:
+                # Log that NNG is not configured (informational)
+                urls = get_nng_urls_from_env()
+                logger.info(
+                    "NNG sink URLs not configured (this is normal if not publishing AI results). "
+                    "seg=%s, kp=%s, actions=%s",
+                    urls.get("segmentation") or "(not set)",
+                    urls.get("keypoints") or "(not set)",
+                    urls.get("actions") or "(not set)",
+                )
 
             # If preview is enabled, wrap the callback to capture frames
             if self._preview_enabled:

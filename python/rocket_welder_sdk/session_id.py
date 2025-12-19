@@ -7,6 +7,22 @@ This module provides utilities to:
 1. Parse SessionId from environment variable
 2. Extract the Guid portion
 3. Generate NNG IPC URLs for streaming results
+4. Read explicit NNG URLs from environment variables (preferred)
+
+## URL Configuration Priority
+
+The SDK supports two ways to configure NNG URLs:
+
+1. **Explicit URLs (PREFERRED)** - Set by rocket-welder2:
+   - SEGMENTATION_SINK_URL
+   - KEYPOINTS_SINK_URL
+   - ACTIONS_SINK_URL
+
+2. **Derived from SessionId (FALLBACK)** - For backwards compatibility:
+   - SessionId env var → parse GUID → generate URLs
+
+Use `get_nng_urls_from_env()` for explicit URLs (preferred).
+Use `get_nng_urls(session_id)` for SessionId-derived URLs (fallback).
 """
 
 from __future__ import annotations
@@ -19,6 +35,11 @@ logger = logging.getLogger(__name__)
 
 SESSION_ID_PREFIX = "ps-"
 SESSION_ID_ENV_VAR = "SessionId"
+
+# Explicit URL environment variables (set by rocket-welder2)
+SEGMENTATION_SINK_URL_ENV = "SEGMENTATION_SINK_URL"
+KEYPOINTS_SINK_URL_ENV = "KEYPOINTS_SINK_URL"
+ACTIONS_SINK_URL_ENV = "ACTIONS_SINK_URL"
 
 
 def parse_session_id(session_id: str) -> uuid.UUID:
@@ -113,3 +134,105 @@ def get_actions_url(session_id: str) -> str:
     """
     guid = parse_session_id(session_id)
     return f"ipc:///tmp/rw-{guid}-actions.sock"
+
+
+# ============================================================================
+# Explicit URL functions (PREFERRED - URLs set by rocket-welder2)
+# ============================================================================
+
+
+def get_nng_urls_from_env() -> dict[str, str | None]:
+    """Get NNG URLs from explicit environment variables.
+
+    This is the PREFERRED method for getting NNG URLs. rocket-welder2
+    sets these environment variables when starting containers.
+
+    Returns:
+        Dictionary with 'segmentation', 'keypoints', 'actions' URLs.
+        Values are None if not configured.
+
+    Examples:
+        >>> os.environ["SEGMENTATION_SINK_URL"] = "ipc:///tmp/rw-abc-seg.sock"
+        >>> urls = get_nng_urls_from_env()
+        >>> urls["segmentation"]
+        'ipc:///tmp/rw-abc-seg.sock'
+    """
+    return {
+        "segmentation": os.environ.get(SEGMENTATION_SINK_URL_ENV),
+        "keypoints": os.environ.get(KEYPOINTS_SINK_URL_ENV),
+        "actions": os.environ.get(ACTIONS_SINK_URL_ENV),
+    }
+
+
+def get_segmentation_url_from_env() -> str | None:
+    """Get segmentation NNG URL from environment variable.
+
+    Returns:
+        IPC URL for segmentation stream, or None if not configured.
+    """
+    return os.environ.get(SEGMENTATION_SINK_URL_ENV)
+
+
+def get_keypoints_url_from_env() -> str | None:
+    """Get keypoints NNG URL from environment variable.
+
+    Returns:
+        IPC URL for keypoints stream, or None if not configured.
+    """
+    return os.environ.get(KEYPOINTS_SINK_URL_ENV)
+
+
+def get_actions_url_from_env() -> str | None:
+    """Get actions NNG URL from environment variable.
+
+    Returns:
+        IPC URL for actions stream, or None if not configured.
+    """
+    return os.environ.get(ACTIONS_SINK_URL_ENV)
+
+
+def has_explicit_nng_urls() -> bool:
+    """Check if explicit NNG URLs are configured.
+
+    Returns:
+        True if at least segmentation OR keypoints URL is configured.
+    """
+    urls = get_nng_urls_from_env()
+    return bool(urls["segmentation"] or urls["keypoints"])
+
+
+def get_configured_nng_urls() -> dict[str, str]:
+    """Get all configured NNG URLs (explicit or derived from SessionId).
+
+    Priority:
+    1. Explicit URLs from environment (SEGMENTATION_SINK_URL, etc.)
+    2. Derived from SessionId environment variable (fallback)
+
+    Returns:
+        Dictionary with 'segmentation', 'keypoints', 'actions' URLs.
+        Only includes URLs that are actually configured.
+
+    Raises:
+        ValueError: If no NNG URLs are configured (neither explicit nor SessionId).
+    """
+    # Try explicit URLs first (preferred)
+    explicit_urls = get_nng_urls_from_env()
+    result: dict[str, str] = {}
+
+    for name, url in explicit_urls.items():
+        if url:
+            result[name] = url
+
+    # If we have at least one explicit URL, return what we have
+    if result:
+        return result
+
+    # Fallback: derive from SessionId
+    session_id = get_session_id_from_env()
+    if session_id:
+        return get_nng_urls(session_id)
+
+    raise ValueError(
+        "No NNG URLs configured. Set SEGMENTATION_SINK_URL/KEYPOINTS_SINK_URL "
+        "environment variables, or set SessionId for URL derivation."
+    )

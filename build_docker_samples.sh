@@ -58,6 +58,12 @@ PYTHON_EXAMPLES=(
     "07-simple-with-data:simple-with-data:false"
 )
 
+# C# examples definition: folder:name
+CSHARP_EXAMPLES=(
+    "SimpleClient:simple"
+    "BallDetection:ball-detection"
+)
+
 print_info() { echo -e "${CYAN}$1${NC}"; }
 print_success() { echo -e "${GREEN}✓ $1${NC}"; }
 print_error() { echo -e "${RED}✗ $1${NC}"; }
@@ -132,6 +138,12 @@ while [[ $# -gt 0 ]]; do
             echo "  --example NAME      Build only specific example (e.g., 01-simple, yolo)"
             echo "  --help              Show this help message"
             echo ""
+            echo "C# examples:"
+            for example in "${CSHARP_EXAMPLES[@]}"; do
+                IFS=':' read -r folder name <<< "$example"
+                echo "  - $folder ($name)"
+            done
+            echo ""
             echo "Python examples:"
             for example in "${PYTHON_EXAMPLES[@]}"; do
                 IFS=':' read -r folder name needs_gpu <<< "$example"
@@ -179,30 +191,51 @@ if [ -n "$EXAMPLE_FILTER" ]; then
     echo "  Example filter: ${EXAMPLE_FILTER}"
 fi
 
-# Build C# sample client image
-if [ "$BUILD_CSHARP" = true ] && [ -z "$EXAMPLE_FILTER" ]; then
-    print_section "Building C# Sample Client Docker Image"
-
-    if [ "$USE_PLATFORM_TAG" = true ]; then
-        CSHARP_IMAGE_TAG="${TAG_PREFIX}-client-csharp-${PLATFORM}:${TAG_VERSION}"
-    else
-        CSHARP_IMAGE_TAG="${TAG_PREFIX}-client-csharp:${TAG_VERSION}"
-    fi
-
-    print_info "Building image: ${CSHARP_IMAGE_TAG}"
+# Build C# sample client images
+if [ "$BUILD_CSHARP" = true ]; then
     cd "${SCRIPT_DIR}/csharp"
 
-    docker build ${DOCKER_BUILD_ARGS} \
-        -t "${CSHARP_IMAGE_TAG}" \
-        -f examples/SimpleClient/Dockerfile \
-        .
+    for example in "${CSHARP_EXAMPLES[@]}"; do
+        IFS=':' read -r folder name <<< "$example"
 
-    if [ $? -eq 0 ]; then
-        print_success "C# Docker image built successfully: ${CSHARP_IMAGE_TAG}"
-    else
-        print_error "Failed to build C# Docker image"
-        exit 1
-    fi
+        # Skip if filter is set and doesn't match
+        if [ -n "$EXAMPLE_FILTER" ]; then
+            if [[ "$folder" != *"$EXAMPLE_FILTER"* ]] && [[ "$name" != *"$EXAMPLE_FILTER"* ]]; then
+                continue
+            fi
+        fi
+
+        # Check if example folder exists
+        if [ ! -d "examples/$folder" ]; then
+            print_warning "C# example folder not found: examples/$folder - skipping"
+            continue
+        fi
+
+        # Check if Dockerfile exists
+        if [ ! -f "examples/$folder/Dockerfile" ]; then
+            print_warning "No Dockerfile found in examples/$folder - skipping"
+            continue
+        fi
+
+        print_section "Building C# Example: $folder ($name)"
+
+        if [ "$USE_PLATFORM_TAG" = true ]; then
+            CSHARP_IMAGE_TAG="${TAG_PREFIX}-client-csharp-${name}-${PLATFORM}:${TAG_VERSION}"
+        else
+            CSHARP_IMAGE_TAG="${TAG_PREFIX}-client-csharp-${name}:${TAG_VERSION}"
+        fi
+
+        print_info "Building: ${CSHARP_IMAGE_TAG}"
+        if docker build ${DOCKER_BUILD_ARGS} \
+            -t "${CSHARP_IMAGE_TAG}" \
+            -f "examples/$folder/Dockerfile" \
+            .; then
+            print_success "Built: ${CSHARP_IMAGE_TAG}"
+        else
+            print_error "Failed to build: ${CSHARP_IMAGE_TAG}"
+            exit 1
+        fi
+    done
 fi
 
 # Build Python sample client images
@@ -236,12 +269,10 @@ if [ "$BUILD_PYTHON" = true ]; then
             fi
 
             print_info "Building: ${IMAGE_TAG}"
-            docker build ${DOCKER_BUILD_ARGS} \
+            if docker build ${DOCKER_BUILD_ARGS} \
                 -t "${IMAGE_TAG}" \
                 -f "examples/$folder/Dockerfile" \
-                .
-
-            if [ $? -eq 0 ]; then
+                .; then
                 print_success "Built: ${IMAGE_TAG}"
             else
                 print_error "Failed to build: ${IMAGE_TAG}"
@@ -254,12 +285,10 @@ if [ "$BUILD_PYTHON" = true ]; then
             JETSON_IMAGE_TAG="${TAG_PREFIX}-client-python-${name}:jetson"
 
             print_info "Building Jetson variant: ${JETSON_IMAGE_TAG}"
-            docker build ${DOCKER_BUILD_ARGS} \
+            if docker build ${DOCKER_BUILD_ARGS} \
                 -t "${JETSON_IMAGE_TAG}" \
                 -f "examples/$folder/Dockerfile.jetson" \
-                .
-
-            if [ $? -eq 0 ]; then
+                .; then
                 print_success "Built: ${JETSON_IMAGE_TAG}"
             else
                 print_error "Failed to build: ${JETSON_IMAGE_TAG}"
@@ -272,12 +301,10 @@ if [ "$BUILD_PYTHON" = true ]; then
             PYTHON38_IMAGE_TAG="${TAG_PREFIX}-client-python-${name}:python38"
 
             print_info "Building Python 3.8 variant: ${PYTHON38_IMAGE_TAG}"
-            docker build ${DOCKER_BUILD_ARGS} \
+            if docker build ${DOCKER_BUILD_ARGS} \
                 -t "${PYTHON38_IMAGE_TAG}" \
                 -f "examples/$folder/Dockerfile.python38" \
-                .
-
-            if [ $? -eq 0 ]; then
+                .; then
                 print_success "Built: ${PYTHON38_IMAGE_TAG}"
             else
                 print_error "Failed to build: ${PYTHON38_IMAGE_TAG}"

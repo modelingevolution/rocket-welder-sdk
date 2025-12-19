@@ -732,6 +732,20 @@ namespace RocketWelder.SDK
         }
 
         /// <summary>
+        /// Logs the NNG sink URL configuration at startup for debugging.
+        /// </summary>
+        private void LogNngConfiguration()
+        {
+            var segUrl = GetSegmentationSinkUrl();
+            var kpUrl = GetKeyPointsSinkUrl();
+
+            _logger.LogInformation(
+                "NNG sink URLs configured: seg={SegUrl}, kp={KpUrl}",
+                segUrl ?? "(not configured)",
+                kpUrl ?? "(not configured)");
+        }
+
+        /// <summary>
         /// Creates or returns the segmentation result sink.
         /// </summary>
         private ISegmentationResultSink GetOrCreateSegmentationSink()
@@ -1015,6 +1029,9 @@ namespace RocketWelder.SDK
             try
             {
                 _logger.LogInformation("Starting RocketWelder client with AI output support: {Connection}", Connection);
+
+                // Log NNG sink URL configuration at startup (for debugging)
+                LogNngConfiguration();
 
                 // Initialize sinks (will throw if not configured)
                 var segSink = GetOrCreateSegmentationSink();
