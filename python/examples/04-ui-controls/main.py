@@ -5,7 +5,7 @@ import asyncio
 import logging
 import os
 import sys
-from typing import Any
+from typing import Any, Optional
 from uuid import uuid4
 
 from py_micro_plumberd import EventStoreClient
@@ -39,7 +39,7 @@ def setup_logging() -> logging.Logger:
     return logger
 
 
-logger: logging.Logger = None  # type: ignore
+logger: Optional[logging.Logger] = None
 
 
 async def main() -> None:

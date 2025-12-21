@@ -9,7 +9,7 @@ from __future__ import annotations  # Enable Python 3.9+ type hints in Python 3.
 import logging
 import sys
 import time
-from typing import Any, Callable, Union
+from typing import Any, Callable, Optional, Union
 
 import cv2
 import numpy as np
@@ -58,7 +58,7 @@ def setup_logging() -> logging.Logger:
 
 
 # Global logger instance
-logger: logging.Logger = None  # type: ignore
+logger: Optional[logging.Logger] = None
 
 
 def log(message: str, level: int = logging.INFO) -> None:
