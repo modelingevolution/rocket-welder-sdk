@@ -23,6 +23,7 @@ from .data_context import (
     IKeyPointsDataContext,
     ISegmentationDataContext,
 )
+from .frame_sink_factory import FrameSinkFactory
 from .schema import (
     IKeyPointsSchema,
     ISegmentationSchema,
@@ -35,6 +36,7 @@ from .transport_protocol import (
 )
 
 __all__ = [
+    "FrameSinkFactory",
     "IKeyPointsDataContext",
     "IKeyPointsSchema",
     "ISegmentationDataContext",

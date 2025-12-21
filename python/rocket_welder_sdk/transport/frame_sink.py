@@ -75,3 +75,48 @@ class IFrameSink(ABC):
     async def close_async(self) -> None:
         """Close the sink and release resources asynchronously."""
         pass
+
+
+class NullFrameSink(IFrameSink):
+    """
+    A frame sink that discards all data.
+
+    Use when no output URL is configured or for testing.
+    Singleton pattern - use NullFrameSink.instance() to get the shared instance.
+    """
+
+    _instance: "NullFrameSink | None" = None
+
+    def __new__(cls) -> "NullFrameSink":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    @classmethod
+    def instance(cls) -> "NullFrameSink":
+        """Get the singleton instance."""
+        return cls()
+
+    def write_frame(self, frame_data: bytes) -> None:
+        """Discards the frame data (no-op)."""
+        pass
+
+    async def write_frame_async(self, frame_data: bytes) -> None:
+        """Discards the frame data (no-op)."""
+        pass
+
+    def flush(self) -> None:
+        """No-op flush."""
+        pass
+
+    async def flush_async(self) -> None:
+        """No-op flush."""
+        pass
+
+    def close(self) -> None:
+        """No-op close (singleton, never actually closed)."""
+        pass
+
+    async def close_async(self) -> None:
+        """No-op close (singleton, never actually closed)."""
+        pass

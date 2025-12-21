@@ -4,7 +4,7 @@ Transport layer for RocketWelder SDK.
 Provides transport-agnostic frame sink/source abstractions for protocols.
 """
 
-from .frame_sink import IFrameSink
+from .frame_sink import IFrameSink, NullFrameSink
 from .frame_source import IFrameSource
 from .nng_transport import NngFrameSink, NngFrameSource
 from .stream_transport import StreamFrameSink, StreamFrameSource
@@ -20,6 +20,7 @@ __all__ = [
     "IFrameSource",
     "NngFrameSink",
     "NngFrameSource",
+    "NullFrameSink",
     "StreamFrameSink",
     "StreamFrameSource",
     "TcpFrameSink",

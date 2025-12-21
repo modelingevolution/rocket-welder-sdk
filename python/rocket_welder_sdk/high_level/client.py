@@ -32,13 +32,13 @@ from .data_context import (
     KeyPointsDataContext,
     SegmentationDataContext,
 )
+from .frame_sink_factory import FrameSinkFactory
 from .schema import (
     IKeyPointsSchema,
     ISegmentationSchema,
     KeyPointsSchema,
     SegmentationSchema,
 )
-from .transport_protocol import TransportKind
 
 if TYPE_CHECKING:
     from rocket_welder_sdk.keypoints_protocol import KeyPointsSink
@@ -203,35 +203,8 @@ class RocketWelderClient:
         return kp_ctx, seg_ctx
 
     def _create_frame_sink(self, protocol: Any, address: str) -> IFrameSink:
-        """Create frame sink from protocol."""
-        from rocket_welder_sdk.transport import NngFrameSink
-        from rocket_welder_sdk.transport.stream_transport import StreamFrameSink
-        from rocket_welder_sdk.transport.unix_socket_transport import UnixSocketFrameSink
-
-        from .transport_protocol import TransportProtocol
-
-        if not isinstance(protocol, TransportProtocol):
-            raise TypeError(f"Expected TransportProtocol, got {type(protocol)}")
-
-        if protocol.kind == TransportKind.FILE:
-            logger.debug("Creating file sink: %s", address)
-            file_handle = open(address, "wb")  # noqa: SIM115  ownership transfers to sink
-            try:
-                return StreamFrameSink(file_handle)
-            except Exception:
-                file_handle.close()
-                raise
-        elif protocol.kind == TransportKind.SOCKET:
-            logger.debug("Creating Unix socket sink: %s", address)
-            return UnixSocketFrameSink.connect(address)
-        elif protocol.kind in (TransportKind.NNG_PUSH_IPC, TransportKind.NNG_PUSH_TCP):
-            logger.debug("Creating NNG pusher: %s", address)
-            return NngFrameSink.create_pusher(address)
-        elif protocol.kind in (TransportKind.NNG_PUB_IPC, TransportKind.NNG_PUB_TCP):
-            logger.debug("Creating NNG publisher: %s", address)
-            return NngFrameSink.create_publisher(address)
-        else:
-            raise ValueError(f"Unsupported protocol: {protocol}")
+        """Create frame sink from protocol using FrameSinkFactory."""
+        return FrameSinkFactory.create(protocol, address, logger_instance=logger)
 
     def close(self) -> None:
         """Release resources."""

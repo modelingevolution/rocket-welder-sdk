@@ -101,6 +101,141 @@ public class FrameSinkFactoryTests
 
     #endregion
 
+    #region Create tests - File protocol
+
+    [Fact]
+    public void Create_FileProtocol_ReturnsStreamFrameSink()
+    {
+        var filePath = $"/tmp/test-sink-{Guid.NewGuid()}.bin";
+
+        try
+        {
+            using var sink = FrameSinkFactory.Create(TransportProtocol.File, filePath);
+
+            Assert.IsType<StreamFrameSink>(sink);
+            Assert.True(File.Exists(filePath));
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+                File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public void Create_FileProtocol_CanWriteData()
+    {
+        var filePath = $"/tmp/test-sink-write-{Guid.NewGuid()}.bin";
+        var testData = new byte[] { 1, 2, 3, 4, 5 };
+
+        try
+        {
+            using (var sink = FrameSinkFactory.Create(TransportProtocol.File, filePath))
+            {
+                sink.WriteFrame(testData);
+                sink.Flush();
+            }
+
+            // Verify file was written (with varint length prefix)
+            Assert.True(File.Exists(filePath));
+            var fileContent = File.ReadAllBytes(filePath);
+            Assert.True(fileContent.Length > testData.Length); // Has length prefix
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+                File.Delete(filePath);
+        }
+    }
+
+    [Fact]
+    public void Integration_SegmentationConnectionString_ToFrameSink_File()
+    {
+        var filePath = $"/tmp/test-seg-file-{Guid.NewGuid()}.bin";
+
+        try
+        {
+            var cs = SegmentationConnectionString.Parse($"file://{filePath}", null);
+
+            Assert.Equal(TransportKind.File, cs.Protocol.Kind);
+            Assert.Equal(filePath, cs.Address);
+
+            using var sink = FrameSinkFactory.Create(cs.Protocol, cs.Address);
+            Assert.IsType<StreamFrameSink>(sink);
+        }
+        finally
+        {
+            if (File.Exists(filePath))
+                File.Delete(filePath);
+        }
+    }
+
+    #endregion
+
+    #region Create tests - NullFrameSink
+
+    [Fact]
+    public void Create_DefaultProtocol_ReturnsNullFrameSink()
+    {
+        // Default protocol (no URL specified) should return NullFrameSink
+        var protocol = default(TransportProtocol);
+
+        var sink = FrameSinkFactory.Create(protocol, "");
+
+        Assert.IsType<NullFrameSink>(sink);
+        Assert.Same(NullFrameSink.Instance, sink);
+    }
+
+    [Fact]
+    public void CreateNull_ReturnsNullFrameSink()
+    {
+        var sink = FrameSinkFactory.CreateNull();
+
+        Assert.IsType<NullFrameSink>(sink);
+        Assert.Same(NullFrameSink.Instance, sink);
+    }
+
+    [Fact]
+    public void NullFrameSink_IsSingleton()
+    {
+        var sink1 = NullFrameSink.Instance;
+        var sink2 = NullFrameSink.Instance;
+
+        Assert.Same(sink1, sink2);
+    }
+
+    [Fact]
+    public void NullFrameSink_WriteFrame_DoesNotThrow()
+    {
+        var sink = NullFrameSink.Instance;
+        var data = new byte[] { 1, 2, 3 };
+
+        // Should not throw
+        sink.WriteFrame(data);
+    }
+
+    [Fact]
+    public async Task NullFrameSink_WriteFrameAsync_DoesNotThrow()
+    {
+        var sink = NullFrameSink.Instance;
+        var data = new byte[] { 1, 2, 3 };
+
+        // Should not throw
+        await sink.WriteFrameAsync(data);
+    }
+
+    [Fact]
+    public void NullFrameSink_Dispose_DoesNotThrow()
+    {
+        var sink = NullFrameSink.Instance;
+
+        // Should not throw - singleton is never disposed
+        sink.Dispose();
+        sink.Dispose(); // Multiple calls should be safe
+    }
+
+    #endregion
+
     #region Create tests - error cases
 
     [Fact]
@@ -117,14 +252,6 @@ public class FrameSinkFactoryTests
         // Pull is for receiving, not sinking
         Assert.Throws<NotSupportedException>(() =>
             FrameSinkFactory.Create(TransportProtocol.NngPullIpc, "ipc:///tmp/test"));
-    }
-
-    [Fact]
-    public void Create_FileProtocol_ThrowsNotSupportedException()
-    {
-        // File is valid in TransportProtocol but not supported for sinks
-        Assert.Throws<NotSupportedException>(() =>
-            FrameSinkFactory.Create(TransportProtocol.File, "/tmp/output.bin"));
     }
 
     #endregion
