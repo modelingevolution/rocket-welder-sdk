@@ -732,7 +732,7 @@ namespace RocketWelder.SDK
         }
 
         /// <summary>
-        /// Logs the NNG sink URL configuration at startup for debugging.
+        /// Logs the sink URL configuration at startup for debugging.
         /// </summary>
         private void LogNngConfiguration()
         {
@@ -740,7 +740,7 @@ namespace RocketWelder.SDK
             var kpUrl = GetKeyPointsSinkUrl();
 
             _logger.LogInformation(
-                "NNG sink URLs configured: seg={SegUrl}, kp={KpUrl}",
+                "Sink URLs configured: seg={SegUrl}, kp={KpUrl}",
                 segUrl ?? "(not configured)",
                 kpUrl ?? "(not configured)");
         }
@@ -758,10 +758,11 @@ namespace RocketWelder.SDK
                 throw new InvalidOperationException(
                     $"Segmentation sink URL not configured. Set '{RocketWelderConfigKeys.SegmentationSinkUrl}' in configuration " +
                     $"or '{RocketWelderConfigKeys.SegmentationSinkUrlEnv}' environment variable. " +
-                    $"Example: ipc:///tmp/ai-segmentation.ipc");
+                    $"Example: socket:///tmp/ai-segmentation.sock");
 
-            _logger.LogInformation("Creating NNG Publisher for segmentation at: {Url}", url);
-            var frameSink = Transport.NngFrameSink.CreatePublisher(url);
+            _logger.LogInformation("Creating segmentation sink at: {Url}", url);
+            var cs = SegmentationConnectionString.Parse(url, null);
+            var frameSink = Transport.FrameSinkFactory.Create(cs.Protocol, cs.Address, _logger);
             _segmentationSink = new SegmentationResultSink(frameSink);
             return _segmentationSink;
         }
@@ -779,10 +780,11 @@ namespace RocketWelder.SDK
                 throw new InvalidOperationException(
                     $"KeyPoints sink URL not configured. Set '{RocketWelderConfigKeys.KeyPointsSinkUrl}' in configuration " +
                     $"or '{RocketWelderConfigKeys.KeyPointsSinkUrlEnv}' environment variable. " +
-                    $"Example: ipc:///tmp/ai-keypoints.ipc");
+                    $"Example: socket:///tmp/ai-keypoints.sock");
 
-            _logger.LogInformation("Creating NNG Publisher for keypoints at: {Url}", url);
-            var frameSink = Transport.NngFrameSink.CreatePublisher(url);
+            _logger.LogInformation("Creating keypoints sink at: {Url}", url);
+            var cs = KeyPointsConnectionString.Parse(url, null);
+            var frameSink = Transport.FrameSinkFactory.Create(cs.Protocol, cs.Address, _logger);
             _keyPointsSink = new KeyPointsSink(frameSink, masterFrameInterval: 300, ownsSink: true);
             return _keyPointsSink;
         }

@@ -215,7 +215,7 @@ class RocketWelderClient:
 
         if protocol.kind == TransportKind.FILE:
             logger.debug("Creating file sink: %s", address)
-            file_handle = open(address, "wb")
+            file_handle = open(address, "wb")  # noqa: SIM115  ownership transfers to sink
             try:
                 return StreamFrameSink(file_handle)
             except Exception:

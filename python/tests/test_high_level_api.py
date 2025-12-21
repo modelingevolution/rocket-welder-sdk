@@ -363,7 +363,10 @@ class TestKeyPointsSchema:
         json_str = schema.get_metadata_json()
         assert "nose" in json_str
         assert "left_eye" in json_str
-        assert '"version": "1.0"' in json_str
+        assert '"version": 1' in json_str
+        assert '"type": "keypoints"' in json_str
+        assert '"id": 0' in json_str
+        assert '"id": 1' in json_str
 
 
 class TestSegmentationSchema:
@@ -423,7 +426,10 @@ class TestSegmentationSchema:
         json_str = schema.get_metadata_json()
         assert "person" in json_str
         assert "car" in json_str
-        assert '"version": "1.0"' in json_str
+        assert '"version": 1' in json_str
+        assert '"type": "segmentation"' in json_str
+        assert '"classId": 1' in json_str
+        assert '"classId": 2' in json_str
 
 
 class TestKeyPointDefinition:

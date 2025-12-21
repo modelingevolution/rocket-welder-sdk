@@ -98,27 +98,3 @@ public readonly record struct SessionStreamId : IParsable<SessionStreamId>, ISpa
     // Implicit conversion to string for convenience
     public static implicit operator string(SessionStreamId id) => id.ToString();
 }
-
-/// <summary>
-/// Extension methods for generating NNG IPC URLs from SessionStreamId.
-/// </summary>
-public static class SessionStreamIdExtensions
-{
-    /// <summary>
-    /// Get NNG IPC URL for segmentation stream.
-    /// </summary>
-    public static string ToSegmentationUrl(this SessionStreamId id) =>
-        $"ipc:///tmp/rw-{(Guid)id}-seg.sock";
-
-    /// <summary>
-    /// Get NNG IPC URL for keypoints stream.
-    /// </summary>
-    public static string ToKeypointsUrl(this SessionStreamId id) =>
-        $"ipc:///tmp/rw-{(Guid)id}-kp.sock";
-
-    /// <summary>
-    /// Get NNG IPC URL for actions stream.
-    /// </summary>
-    public static string ToActionsUrl(this SessionStreamId id) =>
-        $"ipc:///tmp/rw-{(Guid)id}-actions.sock";
-}

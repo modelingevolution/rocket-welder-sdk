@@ -18,6 +18,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <InternalsVisibleTo>RocketWelder.SDK.Tests</InternalsVisibleTo>
   </PropertyGroup>
 
   <ItemGroup>

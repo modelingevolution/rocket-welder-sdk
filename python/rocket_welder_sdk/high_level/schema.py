@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List, Any
+from typing import Any, Dict, List
 
 
 @dataclass(frozen=True)
@@ -190,8 +190,6 @@ class SegmentationSchema(ISegmentationSchema):
         metadata: Dict[str, Any] = {
             "version": 1,
             "type": "segmentation",
-            "classes": [
-                {"classId": c.class_id, "name": c.name} for c in self._classes.values()
-            ],
+            "classes": [{"classId": c.class_id, "name": c.name} for c in self._classes.values()],
         }
         return json.dumps(metadata, indent=2)
