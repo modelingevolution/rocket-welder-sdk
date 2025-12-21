@@ -338,7 +338,7 @@ class OneWayShmController(IController):
         Matches C# CreateMat behavior - creates Mat wrapping the data.
 
         Frame data layout from GStreamer zerosink:
-        [FrameMetadata (16 bytes)][Pixel Data (W×H×C bytes)]
+        [FrameMetadata (16 bytes)][Pixel Data (WxHxC bytes)]
 
         Args:
             frame: ZeroBuffer frame

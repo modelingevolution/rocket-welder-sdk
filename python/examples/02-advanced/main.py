@@ -46,7 +46,7 @@ def setup_logging() -> logging.Logger:
     return logger
 
 
-logger: logging.Logger = None  # type: ignore
+logger: Optional[logging.Logger] = None
 
 
 class VideoProcessor:

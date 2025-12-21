@@ -8,7 +8,7 @@ import logging
 import sys
 import time
 from datetime import datetime
-from typing import Any, Callable, Union
+from typing import Any, Callable, Optional, Union
 
 import cv2
 import numpy as np
@@ -73,8 +73,8 @@ def setup_logging() -> logging.Logger:
     return logger
 
 
-# Global logger instance
-logger: logging.Logger = None  # type: ignore
+# Global logger instance (initialized in main())
+logger: Optional[logging.Logger] = None
 
 
 def log(message: str, level: int = logging.INFO) -> None:

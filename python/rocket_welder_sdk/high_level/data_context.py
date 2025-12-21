@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from rocket_welder_sdk.keypoints_protocol import IKeyPointsWriter
     from rocket_welder_sdk.segmentation_result import SegmentationResultWriter
 
-    from .schema import KeyPoint, SegmentClass
+    from .schema import KeyPointDefinition, SegmentClass
 
 # Type aliases
 Point = Tuple[int, int]
@@ -37,12 +37,12 @@ class IKeyPointsDataContext(ABC):
         pass
 
     @abstractmethod
-    def add(self, point: KeyPoint, x: int, y: int, confidence: float) -> None:
+    def add(self, point: KeyPointDefinition, x: int, y: int, confidence: float) -> None:
         """
         Add a keypoint detection for this frame.
 
         Args:
-            point: KeyPoint from schema definition
+            point: KeyPointDefinition from schema definition
             x: X coordinate in pixels
             y: Y coordinate in pixels
             confidence: Detection confidence (0.0 to 1.0)
@@ -50,15 +50,20 @@ class IKeyPointsDataContext(ABC):
         pass
 
     @abstractmethod
-    def add_point(self, point: KeyPoint, position: Point, confidence: float) -> None:
+    def add_point(self, point: KeyPointDefinition, position: Point, confidence: float) -> None:
         """
         Add a keypoint detection using a Point tuple.
 
         Args:
-            point: KeyPoint from schema definition
+            point: KeyPointDefinition from schema definition
             position: (x, y) tuple
             confidence: Detection confidence (0.0 to 1.0)
         """
+        pass
+
+    @abstractmethod
+    def commit(self) -> None:
+        """Commit the context (called automatically when delegate returns)."""
         pass
 
 
@@ -92,6 +97,11 @@ class ISegmentationDataContext(ABC):
         """
         pass
 
+    @abstractmethod
+    def commit(self) -> None:
+        """Commit the context (called automatically when delegate returns)."""
+        pass
+
 
 class KeyPointsDataContext(IKeyPointsDataContext):
     """Implementation of keypoints data context."""
@@ -101,8 +111,6 @@ class KeyPointsDataContext(IKeyPointsDataContext):
         frame_id: int,
         writer: IKeyPointsWriter,
     ) -> None:
-        from .schema import KeyPoint  # noqa: F401
-
         self._frame_id = frame_id
         self._writer = writer
 
@@ -110,11 +118,11 @@ class KeyPointsDataContext(IKeyPointsDataContext):
     def frame_id(self) -> int:
         return self._frame_id
 
-    def add(self, point: KeyPoint, x: int, y: int, confidence: float) -> None:
+    def add(self, point: KeyPointDefinition, x: int, y: int, confidence: float) -> None:
         """Add a keypoint detection for this frame."""
         self._writer.append(point.id, x, y, confidence)
 
-    def add_point(self, point: KeyPoint, position: Point, confidence: float) -> None:
+    def add_point(self, point: KeyPointDefinition, position: Point, confidence: float) -> None:
         """Add a keypoint detection using a Point tuple."""
         self._writer.append_point(point.id, position, confidence)
 
@@ -131,8 +139,6 @@ class SegmentationDataContext(ISegmentationDataContext):
         frame_id: int,
         writer: SegmentationResultWriter,
     ) -> None:
-        from .schema import SegmentClass  # noqa: F401
-
         self._frame_id = frame_id
         self._writer = writer
 

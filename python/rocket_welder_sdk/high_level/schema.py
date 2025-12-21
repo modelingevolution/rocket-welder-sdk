@@ -10,11 +10,11 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Dict, List
+from typing import Dict, List, Any
 
 
 @dataclass(frozen=True)
-class KeyPoint:
+class KeyPointDefinition:
     """
     A keypoint definition with ID and name.
 
@@ -26,7 +26,7 @@ class KeyPoint:
     name: str
 
     def __str__(self) -> str:
-        return f"KeyPoint({self.id}, '{self.name}')"
+        return f"KeyPointDefinition({self.id}, '{self.name}')"
 
 
 @dataclass(frozen=True)
@@ -54,7 +54,7 @@ class IKeyPointsSchema(ABC):
     """
 
     @abstractmethod
-    def define_point(self, name: str) -> KeyPoint:
+    def define_point(self, name: str) -> KeyPointDefinition:
         """
         Define a new keypoint.
 
@@ -62,13 +62,13 @@ class IKeyPointsSchema(ABC):
             name: Human-readable name for the keypoint (e.g., "nose", "left_eye")
 
         Returns:
-            KeyPoint handle for use with IKeyPointsDataContext.add()
+            KeyPointDefinition handle for use with IKeyPointsDataContext.add()
         """
         pass
 
     @property
     @abstractmethod
-    def defined_points(self) -> List[KeyPoint]:
+    def defined_points(self) -> List[KeyPointDefinition]:
         """Get all defined keypoints."""
         pass
 
@@ -116,34 +116,41 @@ class KeyPointsSchema(IKeyPointsSchema):
     """Implementation of keypoints schema."""
 
     def __init__(self) -> None:
-        self._points: Dict[str, KeyPoint] = {}
+        self._points: Dict[str, KeyPointDefinition] = {}
         self._next_id = 0
 
-    def define_point(self, name: str) -> KeyPoint:
+    def define_point(self, name: str) -> KeyPointDefinition:
         """Define a new keypoint."""
         if name in self._points:
             raise ValueError(f"Keypoint '{name}' already defined")
 
-        point = KeyPoint(id=self._next_id, name=name)
+        point = KeyPointDefinition(id=self._next_id, name=name)
         self._points[name] = point
         self._next_id += 1
         return point
 
     @property
-    def defined_points(self) -> List[KeyPoint]:
+    def defined_points(self) -> List[KeyPointDefinition]:
         """Get all defined keypoints."""
         return list(self._points.values())
 
     def get_metadata_json(self) -> str:
-        """Get JSON metadata for serialization."""
-        return json.dumps(
-            {
-                "version": "1.0",
-                "compute_module_name": "",
-                "points": {p.name: p.id for p in self._points.values()},
-            },
-            indent=2,
-        )
+        """
+        Get JSON metadata for serialization.
+
+        Format matches C# SDK:
+        {
+            "version": 1,
+            "type": "keypoints",
+            "points": [{"id": 0, "name": "nose"}, ...]
+        }
+        """
+        metadata: Dict[str, Any] = {
+            "version": 1,
+            "type": "keypoints",
+            "points": [{"id": p.id, "name": p.name} for p in self._points.values()],
+        }
+        return json.dumps(metadata, indent=2)
 
 
 class SegmentationSchema(ISegmentationSchema):
@@ -170,11 +177,21 @@ class SegmentationSchema(ISegmentationSchema):
         return list(self._classes.values())
 
     def get_metadata_json(self) -> str:
-        """Get JSON metadata for serialization."""
-        return json.dumps(
-            {
-                "version": "1.0",
-                "classes": {str(c.class_id): c.name for c in self._classes.values()},
-            },
-            indent=2,
-        )
+        """
+        Get JSON metadata for serialization.
+
+        Format matches C# SDK:
+        {
+            "version": 1,
+            "type": "segmentation",
+            "classes": [{"classId": 1, "name": "person"}, ...]
+        }
+        """
+        metadata: Dict[str, Any] = {
+            "version": 1,
+            "type": "segmentation",
+            "classes": [
+                {"classId": c.class_id, "name": c.name} for c in self._classes.values()
+            ],
+        }
+        return json.dumps(metadata, indent=2)

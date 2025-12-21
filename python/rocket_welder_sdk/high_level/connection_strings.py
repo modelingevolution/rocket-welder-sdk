@@ -6,7 +6,8 @@ Connection string format: protocol://path?param1=value1&param2=value2
 Examples:
     nng+push+ipc://tmp/keypoints?masterFrameInterval=300
     nng+pub+tcp://localhost:5555
-    file://path/to/output.bin
+    file:///path/to/output.bin
+    socket:///tmp/my.sock
 """
 
 from __future__ import annotations
@@ -144,19 +145,19 @@ class KeyPointsConnectionString:
     """
     Strongly-typed connection string for KeyPoints output.
 
-    Supported protocols (composable with + operator):
-    - Transport.Nng + Transport.Push + Transport.Ipc → nng+push+ipc://tmp/keypoints
-    - Transport.Nng + Transport.Push + Transport.Tcp → nng+push+tcp://host:port
-    - file://path/to/file.bin - File output
+    Supported protocols:
+    - file:///path/to/file.bin - File output (absolute path)
+    - socket:///tmp/socket.sock - Unix domain socket
+    - nng+push+ipc://tmp/keypoints - NNG Push over IPC
+    - nng+push+tcp://host:port - NNG Push over TCP
 
     Supported parameters:
     - masterFrameInterval: Interval between master frames (default: 300)
     """
 
     value: str
-    protocol: Optional[TransportProtocol] = None
-    is_file: bool = False
-    address: str = ""
+    protocol: TransportProtocol
+    address: str
     master_frame_interval: int = 300
     parameters: Dict[str, str] = field(default_factory=dict)
 
@@ -199,25 +200,26 @@ class KeyPointsConnectionString:
 
         # Parse protocol and address
         scheme_end = endpoint_part.find("://")
-        if scheme_end > 0:
-            protocol_str = endpoint_part[:scheme_end]
-            path_part = endpoint_part[scheme_end + 3 :]  # skip "://"
+        if scheme_end <= 0:
+            return None
 
-            if protocol_str.lower() == "file":
-                address = "/" + path_part  # Restore absolute path
-                is_file = True
-                protocol = None
-            else:
-                protocol = TransportProtocol.try_parse(protocol_str)
-                if protocol is None:
-                    return None
-                address = protocol.create_nng_address(path_part)
-                is_file = False
-        elif s.startswith("/"):
-            # Assume absolute file path
-            address = s
-            is_file = True
-            protocol = None
+        schema_str = endpoint_part[:scheme_end]
+        path_part = endpoint_part[scheme_end + 3 :]  # skip "://"
+
+        protocol = TransportProtocol.try_parse(schema_str)
+        if protocol is None:
+            return None
+
+        # Build address based on protocol type
+        if protocol.is_file:
+            # file:///absolute/path -> /absolute/path
+            address = path_part if path_part.startswith("/") else "/" + path_part
+        elif protocol.is_socket:
+            # socket:///tmp/sock -> /tmp/sock
+            address = path_part if path_part.startswith("/") else "/" + path_part
+        elif protocol.is_nng:
+            # NNG protocols need proper address format
+            address = protocol.create_nng_address(path_part)
         else:
             return None
 
@@ -230,7 +232,6 @@ class KeyPointsConnectionString:
         return cls(
             value=s,
             protocol=protocol,
-            is_file=is_file,
             address=address,
             master_frame_interval=master_frame_interval,
             parameters=parameters,
@@ -245,16 +246,16 @@ class SegmentationConnectionString:
     """
     Strongly-typed connection string for Segmentation output.
 
-    Supported protocols (composable with + operator):
-    - Transport.Nng + Transport.Push + Transport.Ipc → nng+push+ipc://tmp/segmentation
-    - Transport.Nng + Transport.Push + Transport.Tcp → nng+push+tcp://host:port
-    - file://path/to/file.bin - File output
+    Supported protocols:
+    - file:///path/to/file.bin - File output (absolute path)
+    - socket:///tmp/socket.sock - Unix domain socket
+    - nng+push+ipc://tmp/segmentation - NNG Push over IPC
+    - nng+push+tcp://host:port - NNG Push over TCP
     """
 
     value: str
-    protocol: Optional[TransportProtocol] = None
-    is_file: bool = False
-    address: str = ""
+    protocol: TransportProtocol
+    address: str
     parameters: Dict[str, str] = field(default_factory=dict)
 
     @classmethod
@@ -296,32 +297,32 @@ class SegmentationConnectionString:
 
         # Parse protocol and address
         scheme_end = endpoint_part.find("://")
-        if scheme_end > 0:
-            protocol_str = endpoint_part[:scheme_end]
-            path_part = endpoint_part[scheme_end + 3 :]  # skip "://"
+        if scheme_end <= 0:
+            return None
 
-            if protocol_str.lower() == "file":
-                address = "/" + path_part  # Restore absolute path
-                is_file = True
-                protocol = None
-            else:
-                protocol = TransportProtocol.try_parse(protocol_str)
-                if protocol is None:
-                    return None
-                address = protocol.create_nng_address(path_part)
-                is_file = False
-        elif s.startswith("/"):
-            # Assume absolute file path
-            address = s
-            is_file = True
-            protocol = None
+        schema_str = endpoint_part[:scheme_end]
+        path_part = endpoint_part[scheme_end + 3 :]  # skip "://"
+
+        protocol = TransportProtocol.try_parse(schema_str)
+        if protocol is None:
+            return None
+
+        # Build address based on protocol type
+        if protocol.is_file:
+            # file:///absolute/path -> /absolute/path
+            address = path_part if path_part.startswith("/") else "/" + path_part
+        elif protocol.is_socket:
+            # socket:///tmp/sock -> /tmp/sock
+            address = path_part if path_part.startswith("/") else "/" + path_part
+        elif protocol.is_nng:
+            # NNG protocols need proper address format
+            address = protocol.create_nng_address(path_part)
         else:
             return None
 
         return cls(
             value=s,
             protocol=protocol,
-            is_file=is_file,
             address=address,
             parameters=parameters,
         )

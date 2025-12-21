@@ -1,103 +1,204 @@
 """
-Transport protocol types with composable + operator.
+Unified transport protocol as a value type.
 
-Allows building transport protocols like:
-    protocol = Transport.Nng + Transport.Push + Transport.Ipc
-    # Results in TransportProtocol("nng", "push", "ipc")
+Supports: file://, socket://, nng+push+ipc://, nng+push+tcp://, etc.
+
+Examples:
+    file:///home/user/output.bin   - absolute file path
+    socket:///tmp/my.sock          - Unix domain socket
+    nng+push+ipc://tmp/keypoints   - NNG Push over IPC
+    nng+push+tcp://host:5555       - NNG Push over TCP
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+from enum import Enum, auto
+from typing import ClassVar, Dict, Optional
 
 
-@dataclass(frozen=True)
-class MessagingLibrary:
-    """Messaging library (nng, zeromq, etc.)."""
+class TransportKind(Enum):
+    """Transport kind enumeration."""
 
-    name: str
+    FILE = auto()
+    """File output."""
 
-    def __add__(self, pattern: MessagingPattern) -> TransportBuilder:
-        """Compose with messaging pattern: Nng + Push."""
-        return TransportBuilder(library=self, pattern=pattern)
+    SOCKET = auto()
+    """Unix domain socket (direct, no messaging library)."""
 
-    def __str__(self) -> str:
-        return self.name
+    NNG_PUSH_IPC = auto()
+    """NNG Push over IPC."""
 
+    NNG_PUSH_TCP = auto()
+    """NNG Push over TCP."""
 
-@dataclass(frozen=True)
-class MessagingPattern:
-    """Messaging pattern (push/pull, pub/sub, etc.)."""
+    NNG_PULL_IPC = auto()
+    """NNG Pull over IPC."""
 
-    name: str
+    NNG_PULL_TCP = auto()
+    """NNG Pull over TCP."""
 
-    def __str__(self) -> str:
-        return self.name
+    NNG_PUB_IPC = auto()
+    """NNG Pub over IPC."""
 
+    NNG_PUB_TCP = auto()
+    """NNG Pub over TCP."""
 
-@dataclass(frozen=True)
-class TransportLayer:
-    """Transport layer (ipc, tcp, etc.)."""
+    NNG_SUB_IPC = auto()
+    """NNG Sub over IPC."""
 
-    name: str
-    uri_prefix: str
-
-    def __str__(self) -> str:
-        return self.name
-
-
-@dataclass(frozen=True)
-class TransportBuilder:
-    """Builder for constructing transport protocols."""
-
-    library: MessagingLibrary
-    pattern: MessagingPattern
-
-    def __add__(self, layer: TransportLayer) -> TransportProtocol:
-        """Compose with transport layer: (Nng + Push) + Ipc."""
-        return TransportProtocol(library=self.library, pattern=self.pattern, layer=layer)
-
-    def __str__(self) -> str:
-        return f"{self.library}+{self.pattern}"
+    NNG_SUB_TCP = auto()
+    """NNG Sub over TCP."""
 
 
-@dataclass(frozen=True)
 class TransportProtocol:
-    """Complete transport protocol specification."""
+    """
+    Unified transport protocol specification as a value type.
 
-    library: MessagingLibrary
-    pattern: MessagingPattern
-    layer: TransportLayer
+    Supports: file://, socket://, nng+push+ipc://, nng+push+tcp://, etc.
+    """
+
+    # Predefined protocols
+    File: TransportProtocol
+    Socket: TransportProtocol
+    NngPushIpc: TransportProtocol
+    NngPushTcp: TransportProtocol
+    NngPullIpc: TransportProtocol
+    NngPullTcp: TransportProtocol
+    NngPubIpc: TransportProtocol
+    NngPubTcp: TransportProtocol
+    NngSubIpc: TransportProtocol
+    NngSubTcp: TransportProtocol
+
+    _SCHEMA_MAP: ClassVar[Dict[str, TransportKind]] = {
+        "file": TransportKind.FILE,
+        "socket": TransportKind.SOCKET,
+        "nng+push+ipc": TransportKind.NNG_PUSH_IPC,
+        "nng+push+tcp": TransportKind.NNG_PUSH_TCP,
+        "nng+pull+ipc": TransportKind.NNG_PULL_IPC,
+        "nng+pull+tcp": TransportKind.NNG_PULL_TCP,
+        "nng+pub+ipc": TransportKind.NNG_PUB_IPC,
+        "nng+pub+tcp": TransportKind.NNG_PUB_TCP,
+        "nng+sub+ipc": TransportKind.NNG_SUB_IPC,
+        "nng+sub+tcp": TransportKind.NNG_SUB_TCP,
+    }
+
+    _KIND_TO_SCHEMA: ClassVar[Dict[TransportKind, str]] = {}
+
+    def __init__(self, kind: TransportKind, schema: str) -> None:
+        self._kind = kind
+        self._schema = schema
 
     @property
-    def protocol_string(self) -> str:
-        """Protocol string for parsing (e.g., 'nng+push+ipc')."""
-        return f"{self.library}+{self.pattern}+{self.layer}"
+    def kind(self) -> TransportKind:
+        """The transport kind."""
+        return self._kind
+
+    @property
+    def schema(self) -> str:
+        """The schema string (e.g., 'file', 'socket', 'nng+push+ipc')."""
+        return self._schema
+
+    # Classification properties
+
+    @property
+    def is_file(self) -> bool:
+        """True if this is a file transport."""
+        return self._kind == TransportKind.FILE
+
+    @property
+    def is_socket(self) -> bool:
+        """True if this is a Unix socket transport."""
+        return self._kind == TransportKind.SOCKET
+
+    @property
+    def is_nng(self) -> bool:
+        """True if this is any NNG-based transport."""
+        return self._kind in {
+            TransportKind.NNG_PUSH_IPC,
+            TransportKind.NNG_PUSH_TCP,
+            TransportKind.NNG_PULL_IPC,
+            TransportKind.NNG_PULL_TCP,
+            TransportKind.NNG_PUB_IPC,
+            TransportKind.NNG_PUB_TCP,
+            TransportKind.NNG_SUB_IPC,
+            TransportKind.NNG_SUB_TCP,
+        }
+
+    @property
+    def is_push(self) -> bool:
+        """True if this is a Push pattern."""
+        return self._kind in {TransportKind.NNG_PUSH_IPC, TransportKind.NNG_PUSH_TCP}
+
+    @property
+    def is_pull(self) -> bool:
+        """True if this is a Pull pattern."""
+        return self._kind in {TransportKind.NNG_PULL_IPC, TransportKind.NNG_PULL_TCP}
+
+    @property
+    def is_pub(self) -> bool:
+        """True if this is a Pub pattern."""
+        return self._kind in {TransportKind.NNG_PUB_IPC, TransportKind.NNG_PUB_TCP}
+
+    @property
+    def is_sub(self) -> bool:
+        """True if this is a Sub pattern."""
+        return self._kind in {TransportKind.NNG_SUB_IPC, TransportKind.NNG_SUB_TCP}
+
+    @property
+    def is_ipc(self) -> bool:
+        """True if this uses IPC layer."""
+        return self._kind in {
+            TransportKind.NNG_PUSH_IPC,
+            TransportKind.NNG_PULL_IPC,
+            TransportKind.NNG_PUB_IPC,
+            TransportKind.NNG_SUB_IPC,
+        }
+
+    @property
+    def is_tcp(self) -> bool:
+        """True if this uses TCP layer."""
+        return self._kind in {
+            TransportKind.NNG_PUSH_TCP,
+            TransportKind.NNG_PULL_TCP,
+            TransportKind.NNG_PUB_TCP,
+            TransportKind.NNG_SUB_TCP,
+        }
 
     def create_nng_address(self, path_or_host: str) -> str:
         """
         Create the NNG address from a path/host.
 
-        For IPC: adds leading "/" to make absolute path
-        For TCP: uses as-is
+        For IPC: ipc:///path
+        For TCP: tcp://host:port
+
+        Raises:
+            ValueError: If this is not an NNG protocol.
         """
-        if self.layer == Transport.Ipc and not path_or_host.startswith("/"):
-            return f"{self.layer.uri_prefix}/{path_or_host}"
-        return f"{self.layer.uri_prefix}{path_or_host}"
+        if not self.is_nng:
+            raise ValueError(f"Cannot create NNG address for {self._kind} transport")
 
-    @property
-    def is_push(self) -> bool:
-        """Check if this is a push pattern."""
-        return self.pattern == Transport.Push
+        if self.is_ipc:
+            # IPC paths need leading "/" for absolute paths
+            if not path_or_host.startswith("/"):
+                return f"ipc:///{path_or_host}"
+            return f"ipc://{path_or_host}"
 
-    @property
-    def is_pub(self) -> bool:
-        """Check if this is a pub pattern."""
-        return self.pattern == Transport.Pub
+        # TCP
+        return f"tcp://{path_or_host}"
 
     def __str__(self) -> str:
-        return self.protocol_string
+        return self._schema
+
+    def __repr__(self) -> str:
+        return f"TransportProtocol({self._kind.name}, '{self._schema}')"
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, TransportProtocol):
+            return self._kind == other._kind
+        return False
+
+    def __hash__(self) -> int:
+        return hash(self._kind)
 
     @classmethod
     def parse(cls, s: str) -> TransportProtocol:
@@ -108,59 +209,30 @@ class TransportProtocol:
         return result
 
     @classmethod
-    def try_parse(cls, s: str) -> Optional[TransportProtocol]:
+    def try_parse(cls, s: Optional[str]) -> Optional[TransportProtocol]:
         """Try to parse a protocol string."""
         if not s:
             return None
 
-        parts = s.lower().split("+")
-        if len(parts) != 3:
+        schema = s.lower().strip()
+        kind = cls._SCHEMA_MAP.get(schema)
+        if kind is None:
             return None
 
-        # Parse library
-        if parts[0] == "nng":
-            library = Transport.Nng
-        else:
-            return None
-
-        # Parse pattern
-        if parts[1] == "push":
-            pattern = Transport.Push
-        elif parts[1] == "pull":
-            pattern = Transport.Pull
-        elif parts[1] == "pub":
-            pattern = Transport.Pub
-        elif parts[1] == "sub":
-            pattern = Transport.Sub
-        else:
-            return None
-
-        # Parse layer
-        if parts[2] == "ipc":
-            layer = Transport.Ipc
-        elif parts[2] == "tcp":
-            layer = Transport.Tcp
-        else:
-            return None
-
-        return cls(library=library, pattern=pattern, layer=layer)
+        return cls(kind, schema)
 
 
-class Transport:
-    """Static helpers for building transport protocols using + operator."""
+# Initialize predefined protocols
+TransportProtocol.File = TransportProtocol(TransportKind.FILE, "file")
+TransportProtocol.Socket = TransportProtocol(TransportKind.SOCKET, "socket")
+TransportProtocol.NngPushIpc = TransportProtocol(TransportKind.NNG_PUSH_IPC, "nng+push+ipc")
+TransportProtocol.NngPushTcp = TransportProtocol(TransportKind.NNG_PUSH_TCP, "nng+push+tcp")
+TransportProtocol.NngPullIpc = TransportProtocol(TransportKind.NNG_PULL_IPC, "nng+pull+ipc")
+TransportProtocol.NngPullTcp = TransportProtocol(TransportKind.NNG_PULL_TCP, "nng+pull+tcp")
+TransportProtocol.NngPubIpc = TransportProtocol(TransportKind.NNG_PUB_IPC, "nng+pub+ipc")
+TransportProtocol.NngPubTcp = TransportProtocol(TransportKind.NNG_PUB_TCP, "nng+pub+tcp")
+TransportProtocol.NngSubIpc = TransportProtocol(TransportKind.NNG_SUB_IPC, "nng+sub+ipc")
+TransportProtocol.NngSubTcp = TransportProtocol(TransportKind.NNG_SUB_TCP, "nng+sub+tcp")
 
-    # Messaging libraries
-    Nng: MessagingLibrary = MessagingLibrary("nng")
-
-    # Messaging patterns
-    Push: MessagingPattern = MessagingPattern("push")
-    Pull: MessagingPattern = MessagingPattern("pull")
-    Pub: MessagingPattern = MessagingPattern("pub")
-    Sub: MessagingPattern = MessagingPattern("sub")
-
-    # Transport layers
-    Ipc: TransportLayer = TransportLayer("ipc", "ipc://")
-    Tcp: TransportLayer = TransportLayer("tcp", "tcp://")
-
-    # File output (not a real transport)
-    File: str = "file"
+# Initialize reverse lookup map
+TransportProtocol._KIND_TO_SCHEMA = {v: k for k, v in TransportProtocol._SCHEMA_MAP.items()}

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import struct
 from dataclasses import dataclass
-from typing import Optional
+from typing import ClassVar, Dict, Optional
 
 # Size of the FrameMetadata structure in bytes
 FRAME_METADATA_SIZE = 16
@@ -113,7 +113,7 @@ class GstVideoFormat:
     GRAY16_BE = 26
     GRAY16_LE = 27
 
-    _FORMAT_NAMES: dict[int, str] = {
+    _FORMAT_NAMES: ClassVar[Dict[int, str]] = {
         0: "UNKNOWN",
         2: "I420",
         3: "YV12",

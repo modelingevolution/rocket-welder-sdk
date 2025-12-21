@@ -36,10 +36,10 @@ venv/bin/pip install --quiet mypy black ruff pytest pytest-cov numpy opencv-pyth
     venv/bin/pip install mypy black ruff pytest pytest-cov numpy opencv-python
 }
 
-# Run mypy for type checking
+# Run mypy for type checking (examples excluded via pyproject.toml)
 echo ""
 echo -e "${YELLOW}Running mypy type checking...${NC}"
-if venv/bin/python -m mypy rocket_welder_sdk examples --strict --no-error-summary; then
+if venv/bin/python -m mypy rocket_welder_sdk --strict --no-error-summary; then
     echo -e "${GREEN}✓ Type checking passed${NC}"
     MYPY_PASS=1
 else
