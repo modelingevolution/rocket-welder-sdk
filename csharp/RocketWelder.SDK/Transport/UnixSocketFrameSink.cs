@@ -2,6 +2,7 @@ using System;
 using System.Buffers.Binary;
 using System.IO;
 using System.Net.Sockets;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace RocketWelder.SDK.Transport
@@ -70,6 +71,60 @@ namespace RocketWelder.SDK.Transport
             var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
             await socket.ConnectAsync(new UnixDomainSocketEndPoint(socketPath));
             return new UnixSocketFrameSink(socket, leaveOpen: false);
+        }
+
+        /// <summary>
+        /// Connects to a Unix socket path asynchronously with timeout and optional retry.
+        /// </summary>
+        /// <param name="socketPath">Path to Unix socket file</param>
+        /// <param name="timeout">Maximum time to wait for connection</param>
+        /// <param name="retry">If true, retries connection until timeout; if false, fails immediately on error</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>Connected frame sink</returns>
+        /// <exception cref="TimeoutException">Thrown when connection cannot be established within timeout</exception>
+        public static async Task<UnixSocketFrameSink> ConnectAsync(
+            string socketPath,
+            TimeSpan timeout,
+            bool retry = true,
+            CancellationToken cancellationToken = default)
+        {
+            var deadline = DateTime.UtcNow + timeout;
+            var retryDelay = TimeSpan.FromMilliseconds(100);
+            SocketException? lastException = null;
+
+            while (DateTime.UtcNow < deadline)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+
+                try
+                {
+                    var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+                    try
+                    {
+                        await socket.ConnectAsync(new UnixDomainSocketEndPoint(socketPath), cancellationToken);
+                        return new UnixSocketFrameSink(socket, leaveOpen: false);
+                    }
+                    catch
+                    {
+                        socket.Dispose();
+                        throw;
+                    }
+                }
+                catch (SocketException ex) when (retry)
+                {
+                    lastException = ex;
+                    var remaining = deadline - DateTime.UtcNow;
+                    if (remaining <= TimeSpan.Zero)
+                        break;
+
+                    var delay = remaining < retryDelay ? remaining : retryDelay;
+                    await Task.Delay(delay, cancellationToken);
+                }
+            }
+
+            throw new TimeoutException(
+                $"Could not connect to Unix socket '{socketPath}' within {timeout.TotalSeconds:F1}s",
+                lastException);
         }
 
         public void WriteFrame(ReadOnlySpan<byte> frameData)

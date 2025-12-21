@@ -154,16 +154,16 @@ namespace RocketWelder.SDK.Transport
             return data;
         }
 
-        public async ValueTask<ReadOnlyMemory<byte>> ReceiveAsync(CancellationToken cancellationToken = default)
+        public ValueTask<ReadOnlyMemory<byte>> ReceiveAsync(CancellationToken cancellationToken = default)
         {
-            if (_disposed)
-                throw new ObjectDisposedException(nameof(NngSubscriberReceiver));
-
-            var result = await _asyncContext.Receive(cancellationToken);
-            var msg = result.Unwrap();
-            var data = msg.AsSpan().ToArray();
-            msg.Dispose();
-            return data;
+            // NNG.NET's ISubAsyncContext has a known issue where async receive hangs
+            // when used with Pub/Sub pattern. The async context callback is never invoked
+            // if there are no messages queued at the time of the call.
+            // Use the synchronous Receive() method instead.
+            // See: https://github.com/jeikabu/nng.NETCore/issues/110
+            throw new NotSupportedException(
+                "Async receive is not supported for NNG Pub/Sub pattern due to a known issue in NNG.NET. " +
+                "Use the synchronous ReadFrame() method instead.");
         }
 
         public void Dispose()

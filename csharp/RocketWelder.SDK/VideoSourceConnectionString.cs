@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
-namespace RocketWelder.SDK.HighLevel;
+namespace RocketWelder.SDK;
 
 /// <summary>
 /// Strongly-typed connection string for video source input.

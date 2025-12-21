@@ -1,6 +1,6 @@
 using System;
 
-namespace RocketWelder.SDK.HighLevel;
+namespace RocketWelder.SDK;
 
 /// <summary>
 /// Configuration options for RocketWelderClient.

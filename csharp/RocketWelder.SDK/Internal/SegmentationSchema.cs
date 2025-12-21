@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 
-namespace RocketWelder.SDK.HighLevel.Internal;
+namespace RocketWelder.SDK.Internal;
 
 /// <summary>
 /// Implementation of <see cref="ISegmentationSchema"/>.

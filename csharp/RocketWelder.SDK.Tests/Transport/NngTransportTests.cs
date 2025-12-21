@@ -141,6 +141,38 @@ namespace RocketWelder.SDK.Tests.Transport
         // The subscriber must connect and subscribe before the publisher sends.
         // We use retry loops to handle the timing window.
 
+        /// <summary>
+        /// Test that async receive with Pub/Sub pattern throws NotSupportedException.
+        /// NNG.NET has a known issue where async receive hangs with Pub/Sub pattern.
+        /// </summary>
+        [Trait("Category", "Integration")]
+        [Fact]
+        public async Task PubSub_IPC_AsyncReceive_ThrowsNotSupported()
+        {
+            var url = $"ipc:///tmp/nng-test-pubsub-async-{Guid.NewGuid():N}";
+
+            _output.WriteLine($"Creating publisher at {url}");
+            using var publisher = NngFrameSink.CreatePublisher(url);
+
+            _output.WriteLine("Creating subscriber");
+            using var subscriber = NngFrameSource.CreateSubscriber(url, topic: Array.Empty<byte>());
+
+            // Wait for subscriber to connect
+            var connected = await publisher.WaitForSubscriberAsync(TimeSpan.FromSeconds(5));
+            Assert.True(connected, "Subscriber should have connected");
+
+            // Async receive should throw NotSupportedException
+            _output.WriteLine("Verifying ReadFrameAsync throws NotSupportedException...");
+            var ex = await Assert.ThrowsAsync<NotSupportedException>(async () =>
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+                await subscriber.ReadFrameAsync(cts.Token);
+            });
+
+            _output.WriteLine($"Got expected exception: {ex.Message}");
+            Assert.Contains("not supported", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
         [Trait("Category", "Integration")]
         [Fact]
         public async Task PubSub_IPC_WithEmptyTopic_ReceivesAllMessages()

@@ -1,7 +1,7 @@
 using System;
 using System.Drawing;
 
-namespace RocketWelder.SDK.HighLevel;
+namespace RocketWelder.SDK;
 
 /// <summary>
 /// Unit of Work for segmentation data, scoped to a single frame.

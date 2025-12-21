@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace RocketWelder.SDK.HighLevel;
+namespace RocketWelder.SDK;
 
 /// <summary>
 /// Schema for defining keypoints. Static, defined once at startup.
@@ -12,13 +12,13 @@ public interface IKeyPointsSchema
     /// ID is auto-assigned sequentially (0, 1, 2, ...).
     /// </summary>
     /// <param name="name">Human-readable name (e.g., "nose", "left_eye")</param>
-    /// <returns>KeyPoint struct for use in data contexts</returns>
-    KeyPoint DefinePoint(string name);
+    /// <returns>KeyPointDefinition struct for use in data contexts</returns>
+    KeyPointDefinition DefinePoint(string name);
 
     /// <summary>
     /// Gets all defined keypoints.
     /// </summary>
-    IReadOnlyList<KeyPoint> DefinedPoints { get; }
+    IReadOnlyList<KeyPointDefinition> DefinedPoints { get; }
 
     /// <summary>
     /// Gets metadata as JSON for readers/consumers.

@@ -1,6 +1,6 @@
 using System;
 
-namespace RocketWelder.SDK.HighLevel.Internal;
+namespace RocketWelder.SDK.Internal;
 
 /// <summary>
 /// Unit of Work implementation for keypoints data.

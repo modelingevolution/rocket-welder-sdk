@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.HighLevel;
+namespace RocketWelder.SDK;
 
 /// <summary>
 /// Represents a defined segmentation class in the schema.

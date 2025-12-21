@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.HighLevel;
+namespace RocketWelder.SDK;
 
 /// <summary>
 /// Unit of Work for keypoints data, scoped to a single frame.

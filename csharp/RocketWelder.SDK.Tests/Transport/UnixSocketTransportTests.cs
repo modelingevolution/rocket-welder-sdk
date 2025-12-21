@@ -232,4 +232,198 @@ public class UnixSocketTransportTests : IDisposable
         Assert.Throws<ArgumentException>(() => new UnixSocketFrameSink(tcpSocket));
         Assert.Throws<ArgumentException>(() => new UnixSocketFrameSource(tcpSocket));
     }
+
+    #region Connection Retry Tests
+
+    [Fact]
+    public async Task UnixSocketSource_ConnectAsync_WithRetry_SucceedsWhenServerStartsLater()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            _output.WriteLine("Skipping test - Unix sockets not supported on this platform");
+            return;
+        }
+
+        // Start connection attempt before server is ready
+        var connectTask = UnixSocketFrameSource.ConnectAsync(
+            _socketPath,
+            timeout: TimeSpan.FromSeconds(5),
+            retry: true);
+
+        // Wait a bit then start server
+        await Task.Delay(500);
+
+        using var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+        listener.Bind(new UnixDomainSocketEndPoint(_socketPath));
+        listener.Listen(1);
+
+        _output.WriteLine("Server started after 500ms delay");
+
+        // Connection should succeed with retry
+        using var source = await connectTask;
+        Assert.NotNull(source);
+
+        _output.WriteLine("Connection succeeded with retry");
+    }
+
+    [Fact]
+    public async Task UnixSocketSink_ConnectAsync_WithRetry_SucceedsWhenServerStartsLater()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            _output.WriteLine("Skipping test - Unix sockets not supported on this platform");
+            return;
+        }
+
+        // Start connection attempt before server is ready
+        var connectTask = UnixSocketFrameSink.ConnectAsync(
+            _socketPath,
+            timeout: TimeSpan.FromSeconds(5),
+            retry: true);
+
+        // Wait a bit then start server
+        await Task.Delay(500);
+
+        using var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+        listener.Bind(new UnixDomainSocketEndPoint(_socketPath));
+        listener.Listen(1);
+
+        _output.WriteLine("Server started after 500ms delay");
+
+        // Connection should succeed with retry
+        using var sink = await connectTask;
+        Assert.NotNull(sink);
+
+        _output.WriteLine("Connection succeeded with retry");
+    }
+
+    [Fact]
+    public async Task UnixSocketSource_ConnectAsync_WithoutRetry_FailsImmediately()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            _output.WriteLine("Skipping test - Unix sockets not supported on this platform");
+            return;
+        }
+
+        // Try to connect without retry to non-existent socket
+        var ex = await Assert.ThrowsAsync<SocketException>(async () =>
+        {
+            await UnixSocketFrameSource.ConnectAsync(
+                _socketPath,
+                timeout: TimeSpan.FromSeconds(5),
+                retry: false);
+        });
+
+        _output.WriteLine($"Got expected SocketException: {ex.SocketErrorCode}");
+    }
+
+    [Fact]
+    public async Task UnixSocketSource_ConnectAsync_TimesOut_WhenServerNeverStarts()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            _output.WriteLine("Skipping test - Unix sockets not supported on this platform");
+            return;
+        }
+
+        var startTime = DateTime.UtcNow;
+
+        // Try to connect with short timeout - server never starts
+        var ex = await Assert.ThrowsAsync<TimeoutException>(async () =>
+        {
+            await UnixSocketFrameSource.ConnectAsync(
+                _socketPath,
+                timeout: TimeSpan.FromSeconds(1),
+                retry: true);
+        });
+
+        var elapsed = DateTime.UtcNow - startTime;
+
+        _output.WriteLine($"Got expected TimeoutException after {elapsed.TotalSeconds:F2}s: {ex.Message}");
+        Assert.True(elapsed >= TimeSpan.FromSeconds(0.9), "Should have waited close to timeout");
+        Assert.True(elapsed < TimeSpan.FromSeconds(2), "Should not wait much longer than timeout");
+    }
+
+    [Fact]
+    public async Task UnixSocketSource_ConnectAsync_CanBeCancelled()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            _output.WriteLine("Skipping test - Unix sockets not supported on this platform");
+            return;
+        }
+
+        using var cts = new CancellationTokenSource();
+        var startTime = DateTime.UtcNow;
+
+        // Start connect then cancel after 300ms
+        var connectTask = UnixSocketFrameSource.ConnectAsync(
+            _socketPath,
+            timeout: TimeSpan.FromSeconds(10),
+            retry: true,
+            cancellationToken: cts.Token);
+
+        await Task.Delay(300);
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
+        {
+            await connectTask;
+        });
+
+        var elapsed = DateTime.UtcNow - startTime;
+        _output.WriteLine($"Cancelled after {elapsed.TotalMilliseconds:F0}ms");
+        Assert.True(elapsed < TimeSpan.FromSeconds(1), "Should have cancelled quickly");
+    }
+
+    [Fact]
+    public async Task UnixSocket_ConnectAsync_WithRetry_WorksWithDataTransfer()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            _output.WriteLine("Skipping test - Unix sockets not supported on this platform");
+            return;
+        }
+
+        var testData = new byte[] { 1, 2, 3, 4, 5 };
+        byte[]? receivedData = null;
+
+        // Start server with delay
+        var serverTask = Task.Run(async () =>
+        {
+            await Task.Delay(300);
+
+            using var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+            listener.Bind(new UnixDomainSocketEndPoint(_socketPath));
+            listener.Listen(1);
+
+            _output.WriteLine("Server listening");
+
+            using var serverSocket = await listener.AcceptAsync();
+            using var source = new UnixSocketFrameSource(serverSocket);
+
+            var frame = await source.ReadFrameAsync();
+            receivedData = frame.ToArray();
+            _output.WriteLine($"Server received {receivedData.Length} bytes");
+        });
+
+        // Client connects with retry
+        using var sink = await UnixSocketFrameSink.ConnectAsync(
+            _socketPath,
+            timeout: TimeSpan.FromSeconds(5),
+            retry: true);
+
+        _output.WriteLine("Client connected");
+
+        sink.WriteFrame(testData);
+        _output.WriteLine("Client sent data");
+
+        await serverTask;
+
+        Assert.Equal(testData, receivedData);
+        _output.WriteLine("Data transfer successful with retry connect");
+    }
+
+    #endregion
 }

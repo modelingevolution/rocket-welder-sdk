@@ -125,6 +125,8 @@ public class BallDetectionService : BackgroundService
     private readonly ILogger<BallDetectionService> _logger;
     private readonly IHostApplicationLifetime _lifetime;
     private int _frameCount = 0;
+    private int _segWritten = 0;
+    private int _keyWritten = 0;
     private int _exitAfter = -1;
 
     public BallDetectionService(
@@ -209,12 +211,14 @@ public class BallDetectionService : BackgroundService
         if (contour != null && contour.Length >= 3)
         {
             segWriter.Append(BallDetector.BallClassId, 0, contour);
+            _segWritten+=1;
         }
 
         // Write keypoint data (center) if found
         if (center.HasValue)
         {
             kpWriter.Append(BallDetector.CenterKeypointId, center.Value.X, center.Value.Y, confidence);
+            _keyWritten +=1;
         }
 
         // Log every 30 frames
@@ -222,8 +226,8 @@ public class BallDetectionService : BackgroundService
         {
             if (center.HasValue)
             {
-                _logger.LogInformation("Frame {Frame}: Ball at ({X}, {Y}), confidence: {Conf:F2}",
-                    _frameCount, center.Value.X, center.Value.Y, confidence);
+                _logger.LogInformation("Frame {Frame}: Ball at ({X}, {Y}), confidence: {Conf:F2}, Segmentations written: {Seg}, KeyPoints written: {Keys}",
+                    _frameCount, center.Value.X, center.Value.Y, confidence, _segWritten, _keyWritten);
             }
             else
             {

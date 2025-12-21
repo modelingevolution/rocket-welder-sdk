@@ -3,7 +3,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Emgu.CV;
 
-namespace RocketWelder.SDK.HighLevel;
+namespace RocketWelder.SDK;
 
 /// <summary>
 /// Main entry point for RocketWelder SDK high-level API.

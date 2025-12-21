@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace RocketWelder.SDK.HighLevel;
+namespace RocketWelder.SDK;
 
 /// <summary>
 /// Schema for defining segmentation classes. Static, defined once at startup.

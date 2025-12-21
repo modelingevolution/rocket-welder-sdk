@@ -1,6 +1,6 @@
-using RocketWelder.SDK.HighLevel.Internal;
+using RocketWelder.SDK.Internal;
 
-namespace RocketWelder.SDK.HighLevel;
+namespace RocketWelder.SDK;
 
 /// <summary>
 /// Factory for creating RocketWelderClient instances.

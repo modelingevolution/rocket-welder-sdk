@@ -2,26 +2,22 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 
-namespace RocketWelder.SDK.HighLevel;
+namespace RocketWelder.SDK;
 
 /// <summary>
 /// Strongly-typed connection string for KeyPoints output.
 /// Format: protocol://path?param1=value1&amp;param2=value2
 ///
-/// Supported protocols (composable with + operator):
-/// - Transport.Nng + Transport.Push + Transport.Ipc → nng+push+ipc://tmp/keypoints
-/// - Transport.Nng + Transport.Push + Transport.Tcp → nng+push+tcp://host:port
-/// - Transport.Nng + Transport.Pub + Transport.Ipc → nng+pub+ipc://tmp/keypoints
-/// - file://path/to/file.bin - File output
+/// Supported protocols:
+/// - file:///path/to/file.bin - File output (absolute path)
+/// - file://relative/path.bin - File output (relative path)
+/// - socket:///tmp/socket.sock - Unix domain socket
+/// - nng+push+ipc://tmp/keypoints - NNG Push over IPC
+/// - nng+push+tcp://host:port - NNG Push over TCP
+/// - nng+pub+ipc://tmp/keypoints - NNG Pub over IPC
 ///
 /// Supported parameters:
 /// - masterFrameInterval: Interval between master frames (default: 300)
-///
-/// Example:
-/// <code>
-/// var protocol = Transport.Nng + Transport.Push + Transport.Ipc;
-/// var cs = KeyPointsConnectionString.Parse("nng+push+ipc://tmp/keypoints", null);
-/// </code>
 /// </summary>
 public readonly record struct KeyPointsConnectionString : IParsable<KeyPointsConnectionString>
 {
@@ -31,18 +27,12 @@ public readonly record struct KeyPointsConnectionString : IParsable<KeyPointsCon
     public string Value { get; }
 
     /// <summary>
-    /// The transport protocol (null for file transport).
+    /// The transport protocol.
     /// </summary>
-    public TransportProtocol? Protocol { get; }
+    public TransportProtocol Protocol { get; }
 
     /// <summary>
-    /// True if this is a file transport (not NNG).
-    /// </summary>
-    public bool IsFile { get; }
-
-    /// <summary>
-    /// The NNG address for NNG transports (e.g., "ipc:///tmp/keypoints", "tcp://localhost:5555").
-    /// For file transport, this is the file path.
+    /// The address (file path, socket path, or NNG address).
     /// </summary>
     public string Address { get; }
 
@@ -58,15 +48,13 @@ public readonly record struct KeyPointsConnectionString : IParsable<KeyPointsCon
 
     private KeyPointsConnectionString(
         string value,
-        TransportProtocol? protocol,
-        bool isFile,
+        TransportProtocol protocol,
         string address,
         int masterFrameInterval,
         IReadOnlyDictionary<string, string> parameters)
     {
         Value = value;
         Protocol = protocol;
-        IsFile = isFile;
         Address = address;
         MasterFrameInterval = masterFrameInterval;
         Parameters = parameters;
@@ -118,37 +106,34 @@ public readonly record struct KeyPointsConnectionString : IParsable<KeyPointsCon
         }
 
         // Parse protocol and address
-        // Format: protocol://path (e.g., nng+push+ipc://tmp/foo)
-        TransportProtocol? protocol = null;
-        bool isFile = false;
-        string address;
-
+        // Format: protocol://path (e.g., nng+push+ipc://tmp/foo, file:///path, socket:///tmp/sock)
         var schemeEnd = endpointPart.IndexOf("://", StringComparison.Ordinal);
-        if (schemeEnd > 0)
-        {
-            var protocolStr = endpointPart[..schemeEnd];
-            var pathPart = endpointPart[(schemeEnd + 3)..]; // skip "://"
+        if (schemeEnd <= 0)
+            return false;
 
-            if (protocolStr.Equals("file", StringComparison.OrdinalIgnoreCase))
-            {
-                isFile = true;
-                address = "/" + pathPart; // restore absolute path
-            }
-            else if (TransportProtocol.TryParse(protocolStr, out var parsed))
-            {
-                protocol = parsed;
-                address = parsed.CreateNngAddress(pathPart);
-            }
-            else
-            {
-                return false;
-            }
-        }
-        else if (endpointPart.StartsWith("/"))
+        var schemaStr = endpointPart[..schemeEnd];
+        var pathPart = endpointPart[(schemeEnd + 3)..]; // skip "://"
+
+        if (!TransportProtocol.TryParse(schemaStr, out var protocol))
+            return false;
+
+        // Build address based on protocol type
+        string address;
+        if (protocol.IsFile)
         {
-            // Assume absolute file path
-            isFile = true;
-            address = endpointPart;
+            // file:///absolute/path → /absolute/path
+            // file://relative/path → relative/path
+            address = pathPart.StartsWith("/") ? pathPart : "/" + pathPart;
+        }
+        else if (protocol.IsSocket)
+        {
+            // socket:///tmp/sock → /tmp/sock
+            address = pathPart.StartsWith("/") ? pathPart : "/" + pathPart;
+        }
+        else if (protocol.IsNng)
+        {
+            // NNG protocols need proper address format
+            address = protocol.CreateNngAddress(pathPart);
         }
         else
         {
@@ -163,7 +148,7 @@ public readonly record struct KeyPointsConnectionString : IParsable<KeyPointsCon
             masterFrameInterval = mfi;
         }
 
-        result = new KeyPointsConnectionString(s, protocol, isFile, address, masterFrameInterval, parameters);
+        result = new KeyPointsConnectionString(s, protocol, address, masterFrameInterval, parameters);
         return true;
     }
 

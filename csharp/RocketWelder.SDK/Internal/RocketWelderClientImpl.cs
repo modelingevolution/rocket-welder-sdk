@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 using Emgu.CV;
 using RocketWelder.SDK.Transport;
 
-namespace RocketWelder.SDK.HighLevel.Internal;
+namespace RocketWelder.SDK.Internal;
 
 /// <summary>
 /// Implementation of <see cref="IRocketWelderClient"/>.
@@ -194,31 +194,21 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
     }
 
     private static IFrameSink CreateFrameSink(KeyPointsConnectionString cs)
-    {
-        if (cs.IsFile)
-            return new StreamFrameSink(File.Create(cs.Address));
-
-        var protocol = cs.Protocol!.Value;
-        if (protocol.IsPush)
-            return NngFrameSink.CreatePusher(cs.Address);
-        if (protocol.IsPub)
-            return NngFrameSink.CreatePublisher(cs.Address);
-
-        throw new ArgumentException($"Unsupported protocol: {protocol}");
-    }
+        => CreateFrameSink(cs.Protocol, cs.Address);
 
     private static IFrameSink CreateFrameSink(SegmentationConnectionString cs)
+        => CreateFrameSink(cs.Protocol, cs.Address);
+
+    private static IFrameSink CreateFrameSink(TransportProtocol protocol, string address)
     {
-        if (cs.IsFile)
-            return new StreamFrameSink(File.Create(cs.Address));
-
-        var protocol = cs.Protocol!.Value;
-        if (protocol.IsPush)
-            return NngFrameSink.CreatePusher(cs.Address);
-        if (protocol.IsPub)
-            return NngFrameSink.CreatePublisher(cs.Address);
-
-        throw new ArgumentException($"Unsupported protocol: {protocol}");
+        return protocol.Kind switch
+        {
+            TransportKind.File => new StreamFrameSink(File.Create(address)),
+            TransportKind.Socket => UnixSocketFrameSink.Connect(address),
+            TransportKind.NngPushIpc or TransportKind.NngPushTcp => NngFrameSink.CreatePusher(address),
+            TransportKind.NngPubIpc or TransportKind.NngPubTcp => NngFrameSink.CreatePublisher(address),
+            _ => throw new NotSupportedException($"Unsupported transport protocol: {protocol}")
+        };
     }
 
     public void Dispose()

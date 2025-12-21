@@ -3,26 +3,26 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 
-namespace RocketWelder.SDK.HighLevel.Internal;
+namespace RocketWelder.SDK.Internal;
 
 /// <summary>
 /// Implementation of <see cref="IKeyPointsSchema"/>.
 /// </summary>
 internal sealed class KeyPointsSchema : IKeyPointsSchema
 {
-    private readonly List<KeyPoint> _points = new();
+    private readonly List<KeyPointDefinition> _points = new();
     private int _nextId;
 
-    public KeyPoint DefinePoint(string name)
+    public KeyPointDefinition DefinePoint(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        var point = new KeyPoint(_nextId++, name);
+        var point = new KeyPointDefinition(_nextId++, name);
         _points.Add(point);
         return point;
     }
 
-    public IReadOnlyList<KeyPoint> DefinedPoints => _points;
+    public IReadOnlyList<KeyPointDefinition> DefinedPoints => _points;
 
     public string GetMetadataJson()
     {

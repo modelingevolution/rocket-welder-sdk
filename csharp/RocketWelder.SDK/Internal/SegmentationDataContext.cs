@@ -1,7 +1,7 @@
 using System;
 using System.Drawing;
 
-namespace RocketWelder.SDK.HighLevel.Internal;
+namespace RocketWelder.SDK.Internal;
 
 /// <summary>
 /// Unit of Work implementation for segmentation data.
