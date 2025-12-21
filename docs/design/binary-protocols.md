@@ -1,4 +1,73 @@
-# RocketWelder.BinaryProtocol Design Document
+# RocketWelder.SDK.Protocols Design Document
+
+## Implementation Summary
+
+**Status:** ✅ Phase 1 & 2 Complete (2024-12)
+
+### Implemented Components
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `BinaryFrameWriter` | `BinaryFrameWriter.cs` | Zero-allocation binary writer for `Span<byte>` |
+| `BinaryFrameReader` | `BinaryFrameReader.cs` | Zero-allocation binary reader (existed) |
+| `VarintExtensions` | `VarintExtensions.cs` | Varint/ZigZag encoding helpers (existed) |
+| `SegmentationProtocol` | `SegmentationProtocol.cs` | Static `Write()`/`Read()` for segmentation frames |
+| `SegmentationFrame` | `SegmentationFrame.cs` | Decoded segmentation frame structure |
+| `SegmentationInstance` | `SegmentationInstance.cs` | Single segmentation instance (classId, instanceId, points) |
+| `KeypointsProtocol` | `KeypointsProtocol.cs` | Static `WriteMasterFrame()`/`WriteDeltaFrame()`/`Read()` |
+| `KeypointsFrame` | `KeypointsFrame.cs` | Decoded keypoints frame structure |
+| `Keypoint` | `Keypoint.cs` | Single keypoint (id, position, confidence) |
+
+### Round-Trip Testing Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           SDK SIDE (Linux Container)                         │
+│                                                                              │
+│  RocketWelderClient                                                          │
+│       │                                                                      │
+│       ├── SegmentationResultWriter ──► encodes instances                     │
+│       └── KeyPointsWriter ──────────► encodes keypoints                      │
+│                │                                                             │
+│                ▼                                                             │
+│           IFrameSink ──► socket / stream / file                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    │ binary data
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                        DECODING SIDE (WASM / Tests)                          │
+│                                                                              │
+│  RocketWelder.SDK.Protocols                                                  │
+│       │                                                                      │
+│       ├── SegmentationProtocol.Read(bytes) ──► SegmentationFrame             │
+│       └── KeypointsProtocol.Read(bytes) ────► KeypointsFrame                 │
+│                │                                                             │
+│                ▼                                                             │
+│  rocket-welder2 Decoders (with NSubstitute mocks)                            │
+│       │                                                                      │
+│       └── ICanvas.DrawPolygon() ──► verify rendering calls                   │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Test Coverage
+
+- **7 unit tests** in `DesignAlignmentTests.cs`:
+  - `BinaryFrameWriter_WritePrimitives_ReadBack` - primitives round-trip
+  - `BinaryFrameWriter_ZigZagVarint_SignedValues` - signed integer encoding
+  - `SegmentationProtocol_WriteRead_RoundTrip` - full segmentation frame
+  - `SegmentationProtocol_WriteInstance_DeltaEncoding` - delta point compression
+  - `KeypointsProtocol_MasterFrame_RoundTrip` - master keypoints frame
+  - `KeypointsProtocol_DeltaFrame_RoundTrip` - delta keypoints frame
+  - `SDK_Encoding_BinaryProtocol_Decoding_RoundTrip` - simulated SDK encoding
+
+### Remaining Work
+
+- **Phase 3:** Refactor SDK writers to use protocol helpers internally
+- **Phase 4:** Refactor rocket-welder2 decoders to use `SegmentationProtocol.Read()`
+- **Phase 5:** Integration tests with NSubstitute verifying `ICanvas.DrawPolygon()` calls
+
+---
 
 ## Problem Statement
 
@@ -12,11 +81,11 @@ Currently, we **cannot** test this because:
 
 ## Solution
 
-Extract **pure protocol encoding/decoding** into `RocketWelder.BinaryProtocol`:
+Extract **pure protocol encoding/decoding** into `RocketWelder.SDK.Protocols`:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                 RocketWelder.BinaryProtocol                              │
+│                 RocketWelder.SDK.Protocols                               │
 │                 (WASM Compatible, No Transport, No Rendering)            │
 ├─────────────────────────────────────────────────────────────────────────┤
 │  Low-Level Primitives (EXISTS)                                           │
@@ -39,7 +108,7 @@ Extract **pure protocol encoding/decoding** into `RocketWelder.BinaryProtocol`:
 ## How This Enables Round-Trip Testing
 
 ```csharp
-// TEST: SDK encoding → BinaryProtocol decoding
+// TEST: SDK encoding → Protocols decoding
 [Fact]
 public void Segmentation_RoundTrip()
 {
@@ -52,7 +121,7 @@ public void Segmentation_RoundTrip()
     // 2. Extract raw bytes (skip length prefix from framing)
     var bytes = ExtractFrameBytes(stream);
 
-    // 3. Decode using BinaryProtocol (WASM-compatible)
+    // 3. Decode using Protocols (WASM-compatible)
     var frame = SegmentationProtocol.Read(bytes);
 
     // 4. Assert round-trip
@@ -83,7 +152,7 @@ internal class KeyPointsWriter : IKeyPointsWriter
 }
 ```
 
-### Exists in RocketWelder.BinaryProtocol
+### Exists in RocketWelder.SDK.Protocols
 
 ```csharp
 // BinaryFrameReader - low-level reading
@@ -122,7 +191,7 @@ public class SegmentationDecoder : IFrameDecoder
 }
 ```
 
-### NEW in RocketWelder.BinaryProtocol
+### NEW in RocketWelder.SDK.Protocols
 
 ```csharp
 // BinaryFrameWriter - symmetric to BinaryFrameReader
@@ -193,10 +262,10 @@ public readonly struct Keypoint
 
 ## Integration Points
 
-### SDK Uses BinaryProtocol for Encoding
+### SDK Uses Protocols for Encoding
 
 ```csharp
-// In RocketWelder.SDK - SegmentationResultWriter refactored to use BinaryProtocol
+// In RocketWelder.SDK - SegmentationResultWriter refactored to use Protocols
 class SegmentationResultWriter
 {
     private void WriteInstance(byte classId, byte instanceId, ReadOnlySpan<Point> points)
@@ -204,7 +273,7 @@ class SegmentationResultWriter
         var instanceSize = SegmentationProtocol.CalculateInstanceSize(points.Length);
         var buffer = _memoryPool.Rent(instanceSize);
 
-        // Use BinaryProtocol for encoding (pure protocol, no transport)
+        // Use Protocols for encoding (pure protocol, no transport)
         var written = SegmentationProtocol.WriteInstance(buffer.Span, classId, instanceId, points);
 
         // Then write to transport
@@ -213,7 +282,7 @@ class SegmentationResultWriter
 }
 ```
 
-### Client Decoders Use BinaryProtocol for Decoding
+### Client Decoders Use Protocols for Decoding
 
 ```csharp
 // In rocket-welder2 - SegmentationDecoder refactored
@@ -221,7 +290,7 @@ public class SegmentationDecoder : IFrameDecoder
 {
     public DecodeResultV2 Decode(ReadOnlySpan<byte> data)
     {
-        // Use BinaryProtocol for decoding (pure protocol)
+        // Use Protocols for decoding (pure protocol)
         var frame = SegmentationProtocol.Read(data);
 
         _stage.OnFrameStart(frame.FrameId);
@@ -281,8 +350,8 @@ Delta Keypoint:
 ## File Structure
 
 ```
-RocketWelder.BinaryProtocol/
-├── RocketWelder.BinaryProtocol.csproj
+RocketWelder.SDK.Protocols/
+├── RocketWelder.SDK.Protocols.csproj
 ├── BinaryFrameReader.cs          (EXISTS)
 ├── BinaryFrameWriter.cs          (NEW)
 ├── VarintExtensions.cs           (EXISTS)
@@ -327,5 +396,5 @@ RocketWelder.BinaryProtocol/
 - Refactor `KeypointsDecoder` to use `KeypointsProtocol.Read()`
 
 ### Phase 5: Add Round-Trip Tests
-- Test SDK encode → BinaryProtocol decode
-- Test BinaryProtocol encode → BinaryProtocol decode
+- Test SDK encode → Protocols decode
+- Test Protocols encode → Protocols decode
