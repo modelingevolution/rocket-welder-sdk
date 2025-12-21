@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "RocketWelder.SDK.Tests": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:53008;http://localhost:53009"
+    }
+  }
+}

@@ -1,0 +1,40 @@
+@inherits LayoutComponentBase
+
+<div class="container">
+    <header>
+        <h1>RocketWelder SDK Blazor Demo</h1>
+        <nav>
+            <a href="/">Home</a>
+            <a href="/segmentation">Segmentation Demo</a>
+            <a href="/keypoints">Keypoints Demo</a>
+        </nav>
+    </header>
+
+    <main>
+        @Body
+    </main>
+</div>
+
+<style>
+    .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+    }
+    header {
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #ccc;
+    }
+    nav {
+        margin-top: 10px;
+    }
+    nav a {
+        margin-right: 15px;
+        text-decoration: none;
+        color: #007bff;
+    }
+    nav a:hover {
+        text-decoration: underline;
+    }
+</style>

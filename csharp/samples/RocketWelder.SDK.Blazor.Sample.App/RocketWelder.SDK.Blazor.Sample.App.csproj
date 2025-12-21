@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RocketWelder.SDK.Blazor.Sample.Client\RocketWelder.SDK.Blazor.Sample.Client.csproj" />
+    <ProjectReference Include="..\..\RocketWelder.SDK.Protocols\RocketWelder.SDK.Protocols.csproj" />
+  </ItemGroup>
+
+</Project>

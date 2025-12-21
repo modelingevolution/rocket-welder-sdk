@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- NuGet Package Settings -->
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>RocketWelder.SDK.Blazor</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>ModelingEvolution</Authors>
+    <Company>ModelingEvolution</Company>
+    <Copyright>Copyright © ModelingEvolution 2024</Copyright>
+    <Description>Blazor components and decoders for RocketWelder streaming data (segmentation, keypoints). WASM-compatible rendering to ICanvas.</Description>
+    <PackageTags>blazor;wasm;streaming;segmentation;keypoints;skia;canvas</PackageTags>
+    <PackageProjectUrl>https://github.com/modelingevolution/rocket-welder-sdk</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RocketWelder.SDK.Protocols\RocketWelder.SDK.Protocols.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BlazorBlaze" Version="1.1.1" />
+  </ItemGroup>
+
+</Project>

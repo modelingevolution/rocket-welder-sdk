@@ -1,0 +1,36 @@
+@page "/"
+
+<h2>RocketWelder SDK Blazor Sample</h2>
+
+<p>
+    This sample demonstrates the RocketWelder SDK for rendering ML results in Blazor WASM.
+</p>
+
+<h3>Available Demos:</h3>
+<ul>
+    <li><a href="/segmentation">Segmentation Demo</a> - Render segmentation polygons with delta-encoded points</li>
+    <li><a href="/keypoints">Keypoints Demo</a> - Render keypoints with master/delta frame support</li>
+</ul>
+
+<h3>Architecture:</h3>
+<pre>
+Server (ASP.NET Core)              WASM Client (Browser)
++-----------------------+          +--------------------------------+
+| ML Results Generator  |   →      | RenderingStreamV2              |
+| - Encode with SDK     | Binary   | ┌─ Decode Thread (WebSocket)   |
+| - Delta compression   | Stream   | │  - BinaryFrameReader          |
++-----------------------+  (WS)    | │  - Draw to IStage             |
+                                   | ├─ Thread-safe frame handoff    |
+                                   | └─ Render Thread (EnableLoop)   |
+                                   |    - TryCopyFrame()             |
+                                   |    - Draw layers to SKCanvas    |
+                                   +--------------------------------+
+</pre>
+
+<h3>Key Features:</h3>
+<ul>
+    <li>Zero-allocation binary encoding with BinaryFrameWriter/Reader</li>
+    <li>Delta compression for efficient point encoding</li>
+    <li>Master/Delta frames for temporal compression</li>
+    <li>WASM-compatible (no transport dependencies)</li>
+</ul>

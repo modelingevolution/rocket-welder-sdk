@@ -27,6 +27,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RocketWelder.SDK\RocketWelder.SDK.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Protocols\RocketWelder.SDK.Protocols.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Blazor\RocketWelder.SDK.Blazor.csproj" />
   </ItemGroup>
 
   <ItemGroup>

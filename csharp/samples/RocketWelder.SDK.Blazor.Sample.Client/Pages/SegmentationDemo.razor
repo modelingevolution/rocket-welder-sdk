@@ -1,0 +1,154 @@
+@page "/segmentation"
+@using BlazorBlaze.VectorGraphics
+@using Microsoft.Extensions.Logging
+@using RocketWelder.SDK.Blazor
+@inject ILoggerFactory LoggerFactory
+@inject NavigationManager NavigationManager
+@inject ILogger<SegmentationDemo> Logger
+@implements IAsyncDisposable
+
+<h2>Segmentation Demo</h2>
+
+<p>Real-time segmentation polygon streaming from server (30 FPS).
+Uses two-thread architecture: decode thread + render loop.</p>
+
+<div class="controls mb-3">
+    <button class="btn btn-success me-2" @onclick="StartStreaming" disabled="@_isStreaming">
+        Connect & Stream
+    </button>
+    <button class="btn btn-danger me-2" @onclick="StopStreaming" disabled="@(!_isStreaming)">
+        Disconnect
+    </button>
+</div>
+
+<div class="stats mb-3 p-2 bg-dark text-light rounded">
+    <span class="me-3">Frame: <strong>@(_stream?.Frame ?? 0)</strong></span>
+    <span class="me-3">FPS: <strong>@((_stream?.Fps ?? 0).ToString("F1"))</strong></span>
+    <span class="me-3">Status: <strong>@(_stream?.IsConnected == true ? "Streaming" : "Disconnected")</strong></span>
+    <span>Transfer: <strong>@(_stream?.TransferRate.ToString() ?? "0 B")/s</strong></span>
+</div>
+
+@if (!string.IsNullOrEmpty(_stream?.Error))
+{
+    <div class="alert alert-danger">
+        Error: @_stream.Error
+    </div>
+}
+
+<div style="width: 800px; height: 600px; border: 1px solid #ccc;">
+    <SKCanvasView OnPaintSurface="OnPaintSurface" EnableRenderLoop="true" style="width: 100%; height: 100%;" />
+</div>
+
+<div class="mt-3">
+    <h5>Architecture</h5>
+    <p>
+        <strong>Server:</strong> Streams segmentation protocol data (8 polygons, delta-encoded points) at 30 FPS over WebSocket.<br/>
+        <strong>Client:</strong> RenderingStreamV2 manages WebSocket receive loop in background thread.
+        SegmentationDecoder parses binary protocol and draws to IStage layers.
+        EnableRenderLoop triggers continuous painting where TryCopyFrame() provides thread-safe frame handoff.
+    </p>
+</div>
+
+@code {
+    private const int CanvasWidth = 800;
+    private const int CanvasHeight = 600;
+
+    private RenderingStreamV2? _stream;
+    private bool _isStreaming;
+
+    // Custom color mapping for segmentation classes
+    private static readonly Dictionary<byte, RgbColor> ClassColors = new()
+    {
+        [0] = new RgbColor(255, 100, 100),  // Red
+        [1] = new RgbColor(100, 255, 100),  // Green
+        [2] = new RgbColor(100, 100, 255),  // Blue
+        [3] = new RgbColor(255, 255, 100),  // Yellow
+        [4] = new RgbColor(255, 100, 255),  // Magenta
+        [5] = new RgbColor(100, 255, 255),  // Cyan
+        [6] = new RgbColor(255, 165, 0),    // Orange
+        [7] = new RgbColor(128, 0, 128),    // Purple
+    };
+
+    protected override void OnInitialized()
+    {
+        // Build RenderingStreamV2 with our SegmentationDecoder
+        _stream = new RenderingStreamBuilder(CanvasWidth, CanvasHeight, LoggerFactory)
+            .WithDecoder(stage =>
+            {
+                var decoder = new SegmentationDecoder(stage, layerId: 0);
+                foreach (var kvp in ClassColors)
+                    decoder.Brushes.Add(kvp.Key, kvp.Value);
+                decoder.Thickness = 2;
+                return decoder;
+            })
+            .Build();
+    }
+
+    private async Task StartStreaming()
+    {
+        if (_stream == null) return;
+
+        _isStreaming = true;
+
+        try
+        {
+            // Build WebSocket URI from current location
+            var baseUri = new Uri(NavigationManager.BaseUri);
+            var wsScheme = baseUri.Scheme == "https" ? "wss" : "ws";
+            var wsUri = new Uri($"{wsScheme}://{baseUri.Host}:{baseUri.Port}/ws/segmentation");
+
+            await _stream.ConnectAsync(wsUri);
+        }
+        catch (Exception ex)
+        {
+            _isStreaming = false;
+            Logger.LogError(ex, "WebSocket connection failed");
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task StopStreaming()
+    {
+        _isStreaming = false;
+
+        if (_stream != null)
+        {
+            await _stream.DisconnectAsync();
+        }
+
+        StateHasChanged();
+    }
+
+    private void OnPaintSurface(SKPaintSurfaceEventArgs e)
+    {
+        var canvas = e.Surface.Canvas;
+        canvas.Clear(new SKColor(240, 240, 245));
+
+        if (_stream == null || (!_isStreaming && _stream.Frame == 0))
+        {
+            // Show idle message
+            using var paint = new SKPaint { Color = SKColors.Gray };
+            using var font = new SKFont(SKTypeface.Default, 20);
+            canvas.DrawText("Click 'Connect & Stream' to begin", 220, 300, font, paint);
+            return;
+        }
+
+        // Thread-safe render: copies frame from decode thread if available
+        _stream.Render(canvas);
+
+        // Update stats display periodically
+        if (_stream.Frame % 10 == 0)
+        {
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_stream != null)
+        {
+            await _stream.DisposeAsync();
+        }
+    }
+}
