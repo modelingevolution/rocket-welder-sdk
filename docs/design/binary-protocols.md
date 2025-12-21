@@ -116,18 +116,97 @@ public readonly struct KeypointFrame
 
 ## Reader API
 
-### SegmentationReader
+### Design Decision: Streaming Callbacks vs Eager Parsing
+
+After TDD validation and research (Utf8JsonReader patterns, MessagePack-CSharp), we provide **two complementary APIs**:
+
+1. **Streaming API (Primary)** - Zero-allocation, callback-based, ideal for rendering loops
+2. **Eager API (Secondary)** - Returns complete frames, allocates, ideal for testing/debugging
+
+### SegmentationReader - Streaming API (RECOMMENDED)
 
 ```csharp
 namespace RocketWelder.SDK.BinaryProtocols.Segmentation;
 
 /// <summary>
-/// Stateless reader for segmentation frames.
+/// Zero-allocation streaming reader for segmentation frames.
+/// Points are passed directly to callback for immediate rendering.
+/// </summary>
+public static class SegmentationReader
+{
+    public delegate void HeaderCallback(in SegmentationHeader header);
+    public delegate void InstanceCallback(in SegmentationInstanceData instance, ReadOnlySpan<Point> points);
+    public delegate void CompleteCallback();
+
+    /// <summary>
+    /// Parse frame with streaming callbacks. Zero allocation.
+    /// Points buffer is reused across instances.
+    /// </summary>
+    public static void Parse(
+        ReadOnlySpan<byte> data,
+        Span<Point> pointBuffer,
+        HeaderCallback onHeader,
+        InstanceCallback onInstance,
+        CompleteCallback onComplete);
+}
+
+/// <summary>
+/// Header data passed to callback.
+/// </summary>
+public readonly struct SegmentationHeader
+{
+    public ulong FrameId { get; init; }
+    public uint Width { get; init; }
+    public uint Height { get; init; }
+}
+
+/// <summary>
+/// Instance data passed to callback. Ref struct for efficiency.
+/// Points are passed as separate parameter, not captured.
+/// </summary>
+public readonly ref struct SegmentationInstanceData
+{
+    public byte ClassId { get; init; }
+    public byte InstanceId { get; init; }
+    public uint PointCount { get; init; }
+}
+```
+
+**Usage in WASM Rendering Loop:**
+```csharp
+// Pre-allocate buffer (once, reuse across frames)
+Span<Point> pointBuffer = stackalloc Point[4096];
+
+SegmentationReader.Parse(frameData, pointBuffer,
+    onHeader: (in SegmentationHeader h) =>
+    {
+        _stage.OnFrameStart(h.FrameId);
+        _stage.Clear(_layerId);
+    },
+    onInstance: (in SegmentationInstanceData inst, ReadOnlySpan<Point> points) =>
+    {
+        // Points passed directly - no need to access shared buffer!
+        var color = _palette[inst.ClassId];
+        _canvas.DrawPolygon(points, color);
+    },
+    onComplete: () =>
+    {
+        _stage.OnFrameEnd();
+    });
+```
+
+### SegmentationReader - Eager API (Alternative)
+
+```csharp
+/// <summary>
+/// Eager parsing API - allocates, returns complete frame.
+/// Use for testing, debugging, or when deferred processing is needed.
 /// </summary>
 public static class SegmentationReader
 {
     /// <summary>
     /// Parse a complete segmentation frame from binary data.
+    /// Allocates memory for instances and points.
     /// </summary>
     public static SegmentationFrame Parse(ReadOnlySpan<byte> data);
 
@@ -138,13 +217,86 @@ public static class SegmentationReader
 }
 ```
 
-### KeypointReader
+### KeypointReader - Streaming API (RECOMMENDED)
 
 ```csharp
 namespace RocketWelder.SDK.BinaryProtocols.Keypoints;
 
 /// <summary>
+/// Stateful streaming reader for keypoint frames.
+/// Maintains previous frame state for delta decoding.
+/// Class (not ref struct) because state persists across frames.
+/// </summary>
+public class KeypointReader
+{
+    public delegate void HeaderCallback(in KeypointHeader header);
+    public delegate void KeypointCallback(in KeypointData keypoint);
+    public delegate void CompleteCallback();
+
+    /// <summary>
+    /// Parse frame with streaming callbacks.
+    /// Applies delta decoding using internal state.
+    /// </summary>
+    public void Parse(
+        ReadOnlySpan<byte> data,
+        HeaderCallback onHeader,
+        KeypointCallback onKeypoint,
+        CompleteCallback onComplete);
+
+    /// <summary>
+    /// Reset state (next frame treated as master).
+    /// </summary>
+    public void Reset();
+}
+
+public readonly struct KeypointHeader
+{
+    public ulong FrameId { get; init; }
+    public bool IsDelta { get; init; }
+    public uint KeypointCount { get; init; }
+}
+
+public readonly struct KeypointData
+{
+    public int Id { get; init; }
+    public Point Position { get; init; }  // Absolute position (deltas applied)
+    public ushort Confidence { get; init; }
+}
+```
+
+**Usage in WASM Rendering Loop:**
+```csharp
+// Reader maintains state between frames
+private readonly KeypointReader _reader = new();
+
+void OnFrameReceived(ReadOnlySpan<byte> data)
+{
+    _reader.Parse(data,
+        onHeader: (in KeypointHeader h) =>
+        {
+            _stage.OnFrameStart(h.FrameId);
+            _stage.Clear(_layerId);
+        },
+        onKeypoint: (in KeypointData kp) =>
+        {
+            // kp.Position is absolute (reader applied deltas)
+            var radius = (int)(kp.Confidence / 10000f * 8) + 3;
+            var color = _palette[kp.Id];
+            _canvas.DrawCircle(kp.Position.X, kp.Position.Y, radius, color);
+        },
+        onComplete: () =>
+        {
+            _stage.OnFrameEnd();
+        });
+}
+```
+
+### KeypointReader - Eager API (Alternative)
+
+```csharp
+/// <summary>
 /// Stateful reader for keypoint frames (handles master/delta).
+/// Returns complete frames - allocates.
 /// </summary>
 public class KeypointReader
 {
@@ -162,18 +314,46 @@ public class KeypointReader
 
 ## Writer API
 
-### SegmentationWriter
+### Design Decision: Static vs Class Writers
+
+Based on research (Utf8JsonWriter, MessagePackWriter patterns):
+
+- **SegmentationWriter**: Static methods (no state between frames)
+- **KeypointWriter**: Class (needs state for master/delta encoding)
+
+### SegmentationWriter - Static Methods (Zero Allocation)
 
 ```csharp
 namespace RocketWelder.SDK.BinaryProtocols.Segmentation;
 
 /// <summary>
 /// Stateless writer for segmentation frames.
+/// Static methods write directly to IBufferWriter for zero-copy performance.
 /// </summary>
 public static class SegmentationWriter
 {
     /// <summary>
-    /// Write a complete segmentation frame to a buffer.
+    /// Write frame header (call once before WriteInstance calls).
+    /// </summary>
+    public static void WriteHeader(
+        IBufferWriter<byte> buffer,
+        ulong frameId,
+        uint width,
+        uint height);
+
+    /// <summary>
+    /// Write a single instance with delta-encoded points.
+    /// Call multiple times after WriteHeader.
+    /// </summary>
+    public static void WriteInstance(
+        IBufferWriter<byte> buffer,
+        byte classId,
+        byte instanceId,
+        ReadOnlySpan<Point> points);
+
+    /// <summary>
+    /// Write a complete frame (header + all instances).
+    /// Convenience method for simple cases.
     /// </summary>
     public static void Write(
         IBufferWriter<byte> buffer,
@@ -181,34 +361,44 @@ public static class SegmentationWriter
         uint width,
         uint height,
         ReadOnlySpan<SegmentationInstance> instances);
-
-    /// <summary>
-    /// Calculate the size of a frame before writing.
-    /// </summary>
-    public static int CalculateSize(
-        uint width,
-        uint height,
-        ReadOnlySpan<SegmentationInstance> instances);
 }
 ```
 
-### KeypointWriter
+**Usage:**
+```csharp
+var buffer = new ArrayBufferWriter<byte>();
+
+// Option 1: Streaming (for large frames or memory-constrained)
+SegmentationWriter.WriteHeader(buffer, frameId: 42, width: 1920, height: 1080);
+SegmentationWriter.WriteInstance(buffer, classId: 0, instanceId: 1, polygon1Points);
+SegmentationWriter.WriteInstance(buffer, classId: 1, instanceId: 0, polygon2Points);
+
+// Option 2: Batch (for convenience)
+SegmentationWriter.Write(buffer, frameId, width, height, instances);
+```
+
+### KeypointWriter - Class with State
 
 ```csharp
 namespace RocketWelder.SDK.BinaryProtocols.Keypoints;
 
 /// <summary>
-/// Stateful writer for keypoint frames (manages master/delta).
+/// Stateful writer for keypoint frames.
+/// Manages master/delta frame encoding.
+/// Class (not static) because state persists across frames.
+/// Reusable via Reset() to avoid allocations (like Utf8JsonWriter).
 /// </summary>
 public class KeypointWriter
 {
     /// <summary>
     /// Master frame interval (default: 300 frames).
+    /// Frame 0 is always master, then delta until next master.
     /// </summary>
     public int MasterFrameInterval { get; init; } = 300;
 
     /// <summary>
     /// Write a keypoint frame (automatically chooses master or delta).
+    /// Delta encoding uses previous frame for compression.
     /// </summary>
     public void Write(
         IBufferWriter<byte> buffer,
@@ -224,10 +414,37 @@ public class KeypointWriter
         ReadOnlySpan<Keypoint> keypoints);
 
     /// <summary>
+    /// Force write a delta frame (errors if no previous frame).
+    /// </summary>
+    public void WriteDelta(
+        IBufferWriter<byte> buffer,
+        ulong frameId,
+        ReadOnlySpan<Keypoint> keypoints);
+
+    /// <summary>
     /// Reset state (next frame will be master).
+    /// Use to switch to new IBufferWriter or new stream.
     /// </summary>
     public void Reset();
 }
+```
+
+**Usage:**
+```csharp
+var writer = new KeypointWriter { MasterFrameInterval = 300 };
+var buffer = new ArrayBufferWriter<byte>();
+
+// Frame 1: Automatically master (first frame)
+writer.Write(buffer, frameId: 1, keypoints1);
+
+// Frame 2: Automatically delta
+writer.Write(buffer, frameId: 2, keypoints2);
+
+// Frame 301: Automatically master (interval reached)
+writer.Write(buffer, frameId: 301, keypoints301);
+
+// Force master at any time
+writer.WriteMaster(buffer, frameId: 500, keypointsForced);
 ```
 
 ## Protocol Specifications
