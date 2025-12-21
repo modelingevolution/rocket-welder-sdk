@@ -1,6 +1,6 @@
 using System.Drawing;
 
-namespace RocketWelder.BinaryProtocol;
+namespace RocketWelder.SDK.Protocols;
 
 /// <summary>
 /// Static helpers for encoding and decoding keypoints protocol data.

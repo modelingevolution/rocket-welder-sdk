@@ -1,4 +1,4 @@
-namespace RocketWelder.BinaryProtocol;
+namespace RocketWelder.SDK.Protocols;
 
 /// <summary>
 /// Represents a decoded keypoints frame containing pose estimation results.

@@ -10,7 +10,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using RocketWelder.SDK.Transport;
-using RocketWelder.BinaryProtocol;
+using RocketWelder.SDK.Protocols;
 
 namespace RocketWelder.SDK;
 

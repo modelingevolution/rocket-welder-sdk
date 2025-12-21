@@ -22,7 +22,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RocketWelder.BinaryProtocol\RocketWelder.BinaryProtocol.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Protocols\RocketWelder.SDK.Protocols.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,6 +1,6 @@
 using System.Buffers.Binary;
 
-namespace RocketWelder.BinaryProtocol;
+namespace RocketWelder.SDK.Protocols;
 
 /// <summary>
 /// Zero-allocation binary writer for encoding streaming protocol data.

@@ -1,12 +1,12 @@
 using System.Drawing;
-using RocketWelder.BinaryProtocol;
+using RocketWelder.SDK.Protocols;
 using Xunit;
 
 // Use aliases to avoid conflict with RocketWelder.SDK types
-using ProtocolSegmentationFrame = RocketWelder.BinaryProtocol.SegmentationFrame;
-using ProtocolSegmentationInstance = RocketWelder.BinaryProtocol.SegmentationInstance;
-using ProtocolKeypoint = RocketWelder.BinaryProtocol.Keypoint;
-using ProtocolKeypointsFrame = RocketWelder.BinaryProtocol.KeypointsFrame;
+using ProtocolSegmentationFrame = RocketWelder.SDK.Protocols.SegmentationFrame;
+using ProtocolSegmentationInstance = RocketWelder.SDK.Protocols.SegmentationInstance;
+using ProtocolKeypoint = RocketWelder.SDK.Protocols.Keypoint;
+using ProtocolKeypointsFrame = RocketWelder.SDK.Protocols.KeypointsFrame;
 
 namespace RocketWelder.SDK.Tests.BinaryProtocols;
 

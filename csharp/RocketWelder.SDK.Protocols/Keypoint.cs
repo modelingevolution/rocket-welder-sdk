@@ -1,6 +1,6 @@
 using System.Drawing;
 
-namespace RocketWelder.BinaryProtocol;
+namespace RocketWelder.SDK.Protocols;
 
 /// <summary>
 /// Represents a single keypoint in a pose estimation result.

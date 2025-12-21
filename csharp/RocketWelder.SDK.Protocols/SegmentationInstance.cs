@@ -1,6 +1,6 @@
 using System.Drawing;
 
-namespace RocketWelder.BinaryProtocol;
+namespace RocketWelder.SDK.Protocols;
 
 /// <summary>
 /// Represents a single segmentation instance (object mask) in a frame.

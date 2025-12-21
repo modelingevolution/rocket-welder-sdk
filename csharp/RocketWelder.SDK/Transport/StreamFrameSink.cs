@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Threading.Tasks;
-using RocketWelder.BinaryProtocol;
+using RocketWelder.SDK.Protocols;
 
 namespace RocketWelder.SDK.Transport
 {

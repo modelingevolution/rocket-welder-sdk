@@ -1,4 +1,4 @@
-namespace RocketWelder.BinaryProtocol;
+namespace RocketWelder.SDK.Protocols;
 
 /// <summary>
 /// Varint and ZigZag encoding extensions for efficient integer compression.
