@@ -45,15 +45,20 @@ jobs:
     - name: Update version in csproj
       run: |
         VERSION="${{ steps.version.outputs.version }}"
-        # Update BinaryProtocol version
-        cd csharp/RocketWelder.BinaryProtocol
-        sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.BinaryProtocol.csproj
-        sed -i "s/<PackageVersion>.*<\/PackageVersion>/<PackageVersion>$VERSION<\/PackageVersion>/" RocketWelder.BinaryProtocol.csproj
+        # Update SDK.Protocols version
+        cd csharp/RocketWelder.SDK.Protocols
+        sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.SDK.Protocols.csproj
+        sed -i "s/<PackageVersion>.*<\/PackageVersion>/<PackageVersion>$VERSION<\/PackageVersion>/" RocketWelder.SDK.Protocols.csproj
         cd ..
         # Update SDK version
         cd RocketWelder.SDK
         sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.SDK.csproj
         sed -i "s/<PackageVersion>.*<\/PackageVersion>/<PackageVersion>$VERSION<\/PackageVersion>/" RocketWelder.SDK.csproj
+        cd ..
+        # Update SDK.Blazor version
+        cd RocketWelder.SDK.Blazor
+        sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.SDK.Blazor.csproj
+        sed -i "s/<PackageVersion>.*<\/PackageVersion>/<PackageVersion>$VERSION<\/PackageVersion>/" RocketWelder.SDK.Blazor.csproj
     
     - name: Restore dependencies
       working-directory: ./csharp
@@ -63,14 +68,14 @@ jobs:
       working-directory: ./csharp
       run: dotnet build --configuration Release --no-restore
     
-    - name: Pack BinaryProtocol
+    - name: Pack SDK.Protocols
       working-directory: ./csharp
-      run: dotnet pack RocketWelder.BinaryProtocol/RocketWelder.BinaryProtocol.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
+      run: dotnet pack RocketWelder.SDK.Protocols/RocketWelder.SDK.Protocols.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
 
-    - name: Push BinaryProtocol to NuGet
+    - name: Push SDK.Protocols to NuGet
       working-directory: ./csharp
       run: |
-        dotnet nuget push ./nupkg/RocketWelder.BinaryProtocol.*.nupkg \
+        dotnet nuget push ./nupkg/RocketWelder.SDK.Protocols.*.nupkg \
           --api-key ${{ secrets.NUGET_API_KEY }} \
           --source https://api.nuget.org/v3/index.json \
           --skip-duplicate
@@ -90,6 +95,20 @@ jobs:
           --skip-duplicate
       env:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
+    - name: Pack SDK.Blazor
+      working-directory: ./csharp
+      run: dotnet pack RocketWelder.SDK.Blazor/RocketWelder.SDK.Blazor.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
+
+    - name: Push SDK.Blazor to NuGet
+      working-directory: ./csharp
+      run: |
+        dotnet nuget push ./nupkg/RocketWelder.SDK.Blazor.*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
     
     - name: Summary
       run: |
@@ -97,14 +116,20 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### RocketWelder.BinaryProtocol" >> $GITHUB_STEP_SUMMARY
-        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.BinaryProtocol" >> $GITHUB_STEP_SUMMARY
+        echo "### RocketWelder.SDK.Protocols" >> $GITHUB_STEP_SUMMARY
+        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Protocols" >> $GITHUB_STEP_SUMMARY
         echo '```bash' >> $GITHUB_STEP_SUMMARY
-        echo 'dotnet add package RocketWelder.BinaryProtocol --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
+        echo 'dotnet add package RocketWelder.SDK.Protocols --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### RocketWelder.SDK" >> $GITHUB_STEP_SUMMARY
         echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK" >> $GITHUB_STEP_SUMMARY
         echo '```bash' >> $GITHUB_STEP_SUMMARY
         echo 'dotnet add package RocketWelder.SDK --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### RocketWelder.SDK.Blazor" >> $GITHUB_STEP_SUMMARY
+        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Blazor" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo 'dotnet add package RocketWelder.SDK.Blazor --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
