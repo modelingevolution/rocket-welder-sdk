@@ -147,6 +147,16 @@ class Program
         Console.WriteLine();
 
         await Host.CreateDefaultBuilder(args)
+            .ConfigureLogging(logging =>
+            {
+                logging.ClearProviders();
+                logging.AddSimpleConsole(options =>
+                {
+                    options.TimestampFormat = "[yyyy-MM-dd HH:mm:ss.fff] ";
+                    options.UseUtcTimestamp = false;
+                    options.SingleLine = true;
+                });
+            })
             .ConfigureServices((context, services) =>
             {
                 services.AddHostedService<VideoProcessingService>();

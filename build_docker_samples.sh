@@ -77,6 +77,29 @@ print_section() {
     echo ""
 }
 
+# Extract SDK versions
+get_csharp_sdk_version() {
+    local csproj_file="$1"
+    if [ -f "$csproj_file" ]; then
+        grep -oP 'PackageReference Include="RocketWelder\.SDK" Version="\K[^"]+' "$csproj_file" 2>/dev/null || echo "unknown"
+    else
+        echo "unknown"
+    fi
+}
+
+get_python_sdk_version() {
+    local init_file="${SCRIPT_DIR}/python/rocket_welder_sdk/__init__.py"
+    if [ -f "$init_file" ]; then
+        grep -oP '__version__\s*=\s*"\K[^"]+' "$init_file" 2>/dev/null || echo "unknown"
+    else
+        echo "unknown"
+    fi
+}
+
+# Store built images for summary
+declare -a BUILT_IMAGES=()
+declare -a BUILT_SDK_VERSIONS=()
+
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -191,6 +214,56 @@ if [ -n "$EXAMPLE_FILTER" ]; then
     echo "  Example filter: ${EXAMPLE_FILTER}"
 fi
 
+# Pre-build SDK version check
+echo ""
+print_info "SDK Versions:"
+
+HAS_DISCREPANCY=false
+
+# Check C# SDK versions
+if [ "$BUILD_CSHARP" = true ]; then
+    declare -A CSHARP_VERSIONS_CHECK
+    for example in "${CSHARP_EXAMPLES[@]}"; do
+        IFS=':' read -r folder name <<< "$example"
+        if [ -n "$EXAMPLE_FILTER" ]; then
+            if [[ "$folder" != *"$EXAMPLE_FILTER"* ]] && [[ "$name" != *"$EXAMPLE_FILTER"* ]]; then
+                continue
+            fi
+        fi
+        csproj_file="${SCRIPT_DIR}/csharp/examples/$folder/$folder.csproj"
+        if [ -f "$csproj_file" ]; then
+            ver=$(get_csharp_sdk_version "$csproj_file")
+            CSHARP_VERSIONS_CHECK["$ver"]+="$folder "
+            echo "  C# $folder: NuGet ${ver}"
+        fi
+    done
+
+    if [ ${#CSHARP_VERSIONS_CHECK[@]} -gt 1 ]; then
+        HAS_DISCREPANCY=true
+        echo ""
+        print_warning "C# NuGet SDK version discrepancy detected!"
+        for ver in "${!CSHARP_VERSIONS_CHECK[@]}"; do
+            echo -e "  ${YELLOW}Version ${ver}:${NC} ${CSHARP_VERSIONS_CHECK[$ver]}"
+        done
+    fi
+fi
+
+# Check Python SDK version
+if [ "$BUILD_PYTHON" = true ]; then
+    py_ver=$(get_python_sdk_version)
+    echo "  Python (all examples): PyPI ${py_ver}"
+fi
+
+if [ "$HAS_DISCREPANCY" = true ]; then
+    echo ""
+    print_warning "Version discrepancies found. Continue anyway? (y/N)"
+    read -r response
+    if [[ ! "$response" =~ ^[Yy]$ ]]; then
+        print_error "Build aborted. Please align SDK versions first."
+        exit 1
+    fi
+fi
+
 # Build C# sample client images
 if [ "$BUILD_CSHARP" = true ]; then
     cd "${SCRIPT_DIR}/csharp"
@@ -217,7 +290,11 @@ if [ "$BUILD_CSHARP" = true ]; then
             continue
         fi
 
+        # Get SDK version from csproj
+        SDK_VERSION=$(get_csharp_sdk_version "examples/$folder/$folder.csproj")
+
         print_section "Building C# Example: $folder ($name)"
+        print_info "RocketWelder.SDK NuGet version: ${SDK_VERSION}"
 
         if [ "$USE_PLATFORM_TAG" = true ]; then
             CSHARP_IMAGE_TAG="${TAG_PREFIX}-client-csharp-${name}-${PLATFORM}:${TAG_VERSION}"
@@ -231,6 +308,8 @@ if [ "$BUILD_CSHARP" = true ]; then
             -f "examples/$folder/Dockerfile" \
             .; then
             print_success "Built: ${CSHARP_IMAGE_TAG}"
+            BUILT_IMAGES+=("${CSHARP_IMAGE_TAG}")
+            BUILT_SDK_VERSIONS+=("NuGet: ${SDK_VERSION}")
         else
             print_error "Failed to build: ${CSHARP_IMAGE_TAG}"
             exit 1
@@ -241,6 +320,9 @@ fi
 # Build Python sample client images
 if [ "$BUILD_PYTHON" = true ]; then
     cd "${SCRIPT_DIR}/python"
+
+    # Get Python SDK version once (same for all Python images)
+    PYTHON_SDK_VERSION=$(get_python_sdk_version)
 
     for example in "${PYTHON_EXAMPLES[@]}"; do
         IFS=':' read -r folder name needs_gpu <<< "$example"
@@ -259,6 +341,7 @@ if [ "$BUILD_PYTHON" = true ]; then
         fi
 
         print_section "Building Python Example: $folder ($name)"
+        print_info "rocket-welder-sdk PyPI version: ${PYTHON_SDK_VERSION}"
 
         # Build standard Dockerfile
         if [ -f "examples/$folder/Dockerfile" ]; then
@@ -274,6 +357,8 @@ if [ "$BUILD_PYTHON" = true ]; then
                 -f "examples/$folder/Dockerfile" \
                 .; then
                 print_success "Built: ${IMAGE_TAG}"
+                BUILT_IMAGES+=("${IMAGE_TAG}")
+                BUILT_SDK_VERSIONS+=("PyPI: ${PYTHON_SDK_VERSION}")
             else
                 print_error "Failed to build: ${IMAGE_TAG}"
                 exit 1
@@ -290,6 +375,8 @@ if [ "$BUILD_PYTHON" = true ]; then
                 -f "examples/$folder/Dockerfile.jetson" \
                 .; then
                 print_success "Built: ${JETSON_IMAGE_TAG}"
+                BUILT_IMAGES+=("${JETSON_IMAGE_TAG}")
+                BUILT_SDK_VERSIONS+=("PyPI: ${PYTHON_SDK_VERSION}")
             else
                 print_error "Failed to build: ${JETSON_IMAGE_TAG}"
                 exit 1
@@ -306,6 +393,8 @@ if [ "$BUILD_PYTHON" = true ]; then
                 -f "examples/$folder/Dockerfile.python38" \
                 .; then
                 print_success "Built: ${PYTHON38_IMAGE_TAG}"
+                BUILT_IMAGES+=("${PYTHON38_IMAGE_TAG}")
+                BUILT_SDK_VERSIONS+=("PyPI: ${PYTHON_SDK_VERSION}")
             else
                 print_error "Failed to build: ${PYTHON38_IMAGE_TAG}"
                 exit 1
@@ -315,6 +404,57 @@ if [ "$BUILD_PYTHON" = true ]; then
 fi
 
 print_section "Build Complete!"
+
+# Display summary of built images with SDK versions
+if [ ${#BUILT_IMAGES[@]} -gt 0 ]; then
+    print_info "Built images with SDK versions:"
+    echo ""
+    for i in "${!BUILT_IMAGES[@]}"; do
+        echo -e "  ${GREEN}✓${NC} ${BUILT_IMAGES[$i]}"
+        echo -e "    └─ SDK: ${BUILT_SDK_VERSIONS[$i]}"
+    done
+    echo ""
+
+    # Check for version discrepancies
+    declare -A NUGET_VERSIONS
+    declare -A PYPI_VERSIONS
+
+    for i in "${!BUILT_SDK_VERSIONS[@]}"; do
+        version="${BUILT_SDK_VERSIONS[$i]}"
+        image="${BUILT_IMAGES[$i]}"
+        if [[ "$version" == NuGet:* ]]; then
+            ver="${version#NuGet: }"
+            NUGET_VERSIONS["$ver"]+="$image "
+        elif [[ "$version" == PyPI:* ]]; then
+            ver="${version#PyPI: }"
+            PYPI_VERSIONS["$ver"]+="$image "
+        fi
+    done
+
+    # Warn about NuGet version discrepancies
+    if [ ${#NUGET_VERSIONS[@]} -gt 1 ]; then
+        print_warning "NuGet SDK version discrepancy detected!"
+        for ver in "${!NUGET_VERSIONS[@]}"; do
+            echo -e "  ${YELLOW}Version ${ver}:${NC}"
+            for img in ${NUGET_VERSIONS[$ver]}; do
+                echo "    - $img"
+            done
+        done
+        echo ""
+    fi
+
+    # Warn about PyPI version discrepancies
+    if [ ${#PYPI_VERSIONS[@]} -gt 1 ]; then
+        print_warning "PyPI SDK version discrepancy detected!"
+        for ver in "${!PYPI_VERSIONS[@]}"; do
+            echo -e "  ${YELLOW}Version ${ver}:${NC}"
+            for img in ${PYPI_VERSIONS[$ver]}; do
+                echo "    - $img"
+            done
+        done
+        echo ""
+    fi
+fi
 
 print_info "To list built images:"
 echo "  docker images | grep ${TAG_PREFIX}"

@@ -1,0 +1,189 @@
+@page "/multi-stream"
+@using BlazorBlaze.VectorGraphics
+@using Microsoft.Extensions.Logging
+@using RocketWelder.SDK.Blazor
+@inject ILoggerFactory LoggerFactory
+@inject NavigationManager NavigationManager
+@inject ILogger<MultiStreamDemo> Logger
+@implements IAsyncDisposable
+
+<h2>Multi-Stream Overlay Demo</h2>
+
+<p>Demonstrates composite rendering of multiple ML streams (segmentation + keypoints)
+with independent decode threads and unified rendering on a single canvas.</p>
+
+<div class="controls mb-3">
+    <button class="btn btn-success me-2" @onclick="Connect" disabled="@_connected">
+        Connect All Streams
+    </button>
+    <button class="btn btn-danger" @onclick="Disconnect" disabled="@(!_connected)">
+        Disconnect
+    </button>
+</div>
+
+<div class="stats mb-3 p-2 bg-dark text-light rounded">
+    <span class="me-3">Segmentation: <strong>@_segFps.ToString("F1") FPS</strong></span>
+    <span class="me-3">Keypoints: <strong>@_kpFps.ToString("F1") FPS</strong></span>
+    <span class="me-3">Transfer: <strong>@_composite?.TotalTransferRate/s</strong></span>
+    <span>Streams: <strong>@(_composite?.Count ?? 0)</strong></span>
+</div>
+
+@if (_errorMessage is not null)
+{
+    <div class="alert alert-danger">@_errorMessage</div>
+}
+
+<div style="width: 800px; height: 600px; border: 1px solid #ccc; background: #1a1a2e;">
+    <SKCanvasView OnPaintSurface="OnPaint" EnableRenderLoop="true"
+                  style="width: 100%; height: 100%;" />
+</div>
+
+<div class="mt-3">
+    <h5>Architecture (Option A: Separate Stages)</h5>
+    <pre class="bg-dark text-light p-2 rounded">
+DECODE THREADS (independent)              RENDER THREAD
++--------------------------+              +--------------------+
+| Thread 1 (Segmentation)  |              | OnPaint()          |
+| WS -> Decode -> Stage    |---+          |                    |
++--------------------------+   |          | for stream in list:|
+| Thread 2 (Keypoints)     |   +--------->|   stream.Render()  |
+| WS -> Decode -> Stage    |---+          |                    |
++--------------------------+              | (sequential, no    |
+                                          |  contention)       |
+                                          +--------------------+
+</pre>
+    <p>
+        <strong>Z-Order:</strong> Streams render in add order (first = back).<br/>
+        <strong>Layer usage:</strong> Each stream has its own stage with independent layers.<br/>
+        <strong>Thread safety:</strong> No shared mutable state between streams.
+    </p>
+</div>
+
+@code {
+    private const int Width = 800;
+    private const int Height = 600;
+
+    private CompositeRenderingStream? _composite;
+    private RenderingStreamV2? _segStream;
+    private RenderingStreamV2? _kpStream;
+
+    private bool _connected;
+    private float _segFps;
+    private float _kpFps;
+    private string? _errorMessage;
+
+    // Segmentation colors
+    private static readonly Dictionary<byte, RgbColor> SegColors = new()
+    {
+        [0] = new RgbColor(255, 100, 100),  // Red
+        [1] = new RgbColor(100, 255, 100),  // Green
+        [2] = new RgbColor(100, 100, 255),  // Blue
+        [3] = new RgbColor(255, 255, 100),  // Yellow
+        [4] = new RgbColor(255, 100, 255),  // Magenta
+        [5] = new RgbColor(100, 255, 255),  // Cyan
+        [6] = new RgbColor(255, 165, 0),    // Orange
+        [7] = new RgbColor(128, 0, 128),    // Purple
+    };
+
+    protected override void OnInitialized()
+    {
+        // Build segmentation stream (layer 0 within its own stage)
+        _segStream = new RenderingStreamBuilder(Width, Height, LoggerFactory)
+            .WithDecoder(stage =>
+            {
+                var decoder = new SegmentationDecoder(stage, layerId: 0);
+                foreach (var kvp in SegColors)
+                    decoder.Brushes.Add(kvp.Key, kvp.Value);
+                decoder.Thickness = 2;
+                return decoder;
+            })
+            .Build();
+
+        // Build keypoints stream (layer 0 within its own stage)
+        _kpStream = new RenderingStreamBuilder(Width, Height, LoggerFactory)
+            .WithDecoder(stage =>
+            {
+                var decoder = new KeypointsDecoder(stage, layerId: 0);
+                decoder.CrossSize = 8;
+                decoder.Thickness = 2;
+                decoder.ShowLabels = false;
+                return decoder;
+            })
+            .Build();
+
+        // Combine into composite (order = Z-order: seg behind kp)
+        _composite = new CompositeRenderingStream();
+        _composite.AddStream(_segStream);  // First = back (segmentation)
+        _composite.AddStream(_kpStream);   // Second = front (keypoints)
+    }
+
+    private async Task Connect()
+    {
+        if (_composite == null) return;
+
+        try
+        {
+            var baseUri = new Uri(NavigationManager.BaseUri);
+            var wsScheme = baseUri.Scheme == "https" ? "wss" : "ws";
+
+            var segUri = new Uri($"{wsScheme}://{baseUri.Host}:{baseUri.Port}/ws/segmentation");
+            var kpUri = new Uri($"{wsScheme}://{baseUri.Host}:{baseUri.Port}/ws/keypoints");
+
+            // Connect both streams (they run independently)
+            await Task.WhenAll(
+                _segStream!.ConnectAsync(segUri),
+                _kpStream!.ConnectAsync(kpUri)
+            );
+
+            _connected = true;
+            _errorMessage = null;
+        }
+        catch (Exception ex)
+        {
+            _errorMessage = $"Connection failed: {ex.Message}";
+            Logger.LogError(ex, "WebSocket connection failed");
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task Disconnect()
+    {
+        if (_composite == null) return;
+
+        await _composite.DisconnectAllAsync();
+        _connected = false;
+        StateHasChanged();
+    }
+
+    private void OnPaint(SKPaintSurfaceEventArgs e)
+    {
+        var canvas = e.Surface.Canvas;
+        canvas.Clear(new SKColor(26, 26, 46)); // Dark background
+
+        if (_composite == null || (!_connected && _composite.TotalFrames == 0))
+        {
+            using var paint = new SKPaint { Color = SKColors.Gray };
+            using var font = new SKFont(SKTypeface.Default, 20);
+            canvas.DrawText("Click 'Connect All Streams' to begin", 180, 300, font, paint);
+            return;
+        }
+
+        // Render all streams in order (segmentation first, then keypoints on top)
+        _composite.Render(canvas);
+
+        // Update stats
+        _segFps = _segStream?.Fps ?? 0;
+        _kpFps = _kpStream?.Fps ?? 0;
+
+        // Periodic UI update
+        if ((_segStream?.Frame ?? 0) % 10 == 0)
+            InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_composite != null)
+            await _composite.DisposeAsync();
+    }
+}
