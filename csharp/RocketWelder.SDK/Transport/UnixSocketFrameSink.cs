@@ -19,6 +19,7 @@ namespace RocketWelder.SDK.Transport
     {
         private readonly NetworkStream _stream;
         private readonly Socket? _socket;
+        private readonly UnixSocketServer? _server;
         private readonly bool _leaveOpen;
         private bool _disposed;
 
@@ -39,8 +40,20 @@ namespace RocketWelder.SDK.Transport
         /// <param name="socket">Connected Unix domain socket</param>
         /// <param name="leaveOpen">If true, doesn't close socket on disposal</param>
         public UnixSocketFrameSink(Socket socket, bool leaveOpen = false)
+            : this(socket, server: null, leaveOpen)
+        {
+        }
+
+        /// <summary>
+        /// Creates a Unix socket frame sink from a connected Socket with optional server ownership.
+        /// </summary>
+        /// <param name="socket">Connected Unix domain socket</param>
+        /// <param name="server">Optional server to dispose when sink is disposed</param>
+        /// <param name="leaveOpen">If true, doesn't close socket on disposal</param>
+        internal UnixSocketFrameSink(Socket socket, UnixSocketServer? server, bool leaveOpen = false)
         {
             _socket = socket ?? throw new ArgumentNullException(nameof(socket));
+            _server = server;
 
             if (socket.AddressFamily != AddressFamily.Unix)
                 throw new ArgumentException("Socket must be a Unix domain socket", nameof(socket));
@@ -127,6 +140,38 @@ namespace RocketWelder.SDK.Transport
                 lastException);
         }
 
+        /// <summary>
+        /// Binds to a Unix socket path as a server and waits for a client to connect.
+        /// Use this when the SDK is the producer (server) and rocket-welder2 is the consumer (client).
+        /// </summary>
+        /// <param name="socketPath">Path to Unix socket file</param>
+        /// <returns>Frame sink connected to the first client</returns>
+        /// <remarks>
+        /// This is the server-side counterpart to <see cref="Connect"/>.
+        /// The server binds and listens, then blocks until a client connects.
+        /// </remarks>
+        public static UnixSocketFrameSink Bind(string socketPath)
+        {
+            var server = new UnixSocketServer(socketPath);
+            server.Start();
+            var clientSocket = server.Accept();
+            return new UnixSocketFrameSink(clientSocket, server, leaveOpen: false);
+        }
+
+        /// <summary>
+        /// Binds to a Unix socket path as a server and waits asynchronously for a client to connect.
+        /// </summary>
+        /// <param name="socketPath">Path to Unix socket file</param>
+        /// <param name="cancellationToken">Cancellation token</param>
+        /// <returns>Frame sink connected to the first client</returns>
+        public static async Task<UnixSocketFrameSink> BindAsync(string socketPath, CancellationToken cancellationToken = default)
+        {
+            var server = new UnixSocketServer(socketPath);
+            server.Start();
+            var clientSocket = await server.AcceptAsync(cancellationToken);
+            return new UnixSocketFrameSink(clientSocket, server, leaveOpen: false);
+        }
+
         public void WriteFrame(ReadOnlySpan<byte> frameData)
         {
             if (_disposed)
@@ -181,6 +226,9 @@ namespace RocketWelder.SDK.Transport
                 _stream.Dispose();
                 _socket?.Dispose();
             }
+
+            // Always dispose server (cleans up socket file)
+            _server?.Dispose();
         }
 
         public async ValueTask DisposeAsync()
@@ -193,6 +241,9 @@ namespace RocketWelder.SDK.Transport
                 await _stream.DisposeAsync();
                 _socket?.Dispose();
             }
+
+            // Always dispose server (cleans up socket file)
+            _server?.Dispose();
         }
     }
 }

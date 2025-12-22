@@ -44,44 +44,35 @@ public class UnixSocketTransportTests : IDisposable
             return;
         }
 
-        // Arrange - Start Unix socket server
-        using var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-        listener.Bind(new UnixDomainSocketEndPoint(_socketPath));
-        listener.Listen(1);
-
+        // Arrange - SDK creates server, consumer connects
         var testData = new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 };
         byte[]? receivedData = null;
 
-        var serverTask = Task.Run(async () =>
+        // Producer (SDK) - binds and waits for consumer, then writes frames
+        var serverTask = Task.Run(() =>
         {
-            using var serverSocket = await listener.AcceptAsync();
-            using var source = new UnixSocketFrameSource(serverSocket);
-
-            var frame = await source.ReadFrameAsync();
-            receivedData = frame.ToArray();
-
-            // Echo back
-            using var sink = new UnixSocketFrameSink(serverSocket, leaveOpen: true);
-            sink.WriteFrame(frame.Span);
+            // Bind creates server, waits for client connection
+            using var sink = UnixSocketFrameSink.Bind(_socketPath);
+            sink.WriteFrame(testData);
         });
 
-        // Act - Client connects and sends
-        using var clientSocket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-        await clientSocket.ConnectAsync(new UnixDomainSocketEndPoint(_socketPath));
+        // Give server time to start listening
+        await Task.Delay(100);
 
-        using var clientSink = new UnixSocketFrameSink(clientSocket, leaveOpen: true);
-        clientSink.WriteFrame(testData);
+        // Consumer (rocket-welder2) - connects and reads frames
+        using var source = await UnixSocketFrameSource.ConnectAsync(
+            _socketPath,
+            timeout: TimeSpan.FromSeconds(5),
+            retry: true);
 
-        // Read response
-        using var clientSource = new UnixSocketFrameSource(clientSocket);
-        var response = await clientSource.ReadFrameAsync();
+        var frame = await source.ReadFrameAsync();
+        receivedData = frame.ToArray();
 
         await serverTask;
 
         // Assert
         Assert.NotNull(receivedData);
         Assert.Equal(testData, receivedData);
-        Assert.Equal(testData, response.ToArray());
 
         _output.WriteLine($"Successfully sent and received {testData.Length} bytes via Unix socket");
     }

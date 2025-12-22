@@ -10,44 +10,49 @@ public class FrameSinkFactoryTests
     #region Create tests - Socket protocol
 
     [Fact]
-    public void Create_SocketProtocol_AttemptsUnixSocketConnection()
+    public async Task Create_SocketProtocol_BindsAsServer_AndAcceptsClient()
     {
-        // Socket protocol should attempt Unix socket connection
-        // This will throw SocketException because socket doesn't exist
-        var protocol = TransportProtocol.Socket;
-        var address = "/tmp/nonexistent-test-socket.sock";
+        // FrameSinkFactory.Create with socket protocol should:
+        // 1. Bind to socket path (be the SERVER)
+        // 2. Wait for client to connect
+        // 3. Return sink that writes to connected client
+        //
+        // This is the production flow:
+        // - SDK container calls FrameSinkFactory.Create() → binds as server
+        // - rocket-welder2 connects as client → reads frames
 
-        var ex = Assert.Throws<SocketException>(() => FrameSinkFactory.Create(protocol, address));
-
-        // SocketException means it correctly tried to connect via Unix socket
-        // Common errors: AddressNotAvailable, ConnectionRefused, or native errno for missing file
-        Assert.True(ex.SocketErrorCode == SocketError.AddressNotAvailable
-                 || ex.SocketErrorCode == SocketError.ConnectionRefused
-                 || (int)ex.SocketErrorCode == 2);  // ENOENT - file not found on Linux
-    }
-
-    [Fact]
-    public void Create_SocketProtocol_ReturnsUnixSocketFrameSink_WhenSocketExists()
-    {
-        // Create a real Unix socket server to test connection
-        var socketPath = $"/tmp/test-sink-{Guid.NewGuid()}.sock";
+        var socketPath = $"/tmp/test-factory-server-{Guid.NewGuid()}.sock";
+        var testData = new byte[] { 1, 2, 3, 4, 5 };
+        byte[]? receivedData = null;
 
         try
         {
-            // Create listening socket
-            using var server = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-            server.Bind(new UnixDomainSocketEndPoint(socketPath));
-            server.Listen(1);
+            // Producer (SDK) - factory creates server, waits for client
+            var serverTask = Task.Run(() =>
+            {
+                using var sink = FrameSinkFactory.Create(TransportProtocol.Socket, socketPath);
+                Assert.IsType<UnixSocketFrameSink>(sink);
+                sink.WriteFrame(testData);
+            });
 
-            // Create sink via factory
-            using var sink = FrameSinkFactory.Create(TransportProtocol.Socket, socketPath);
+            // Give server time to start listening
+            await Task.Delay(100);
 
-            // Verify correct type
-            Assert.IsType<UnixSocketFrameSink>(sink);
+            // Consumer (rocket-welder2) - connects and reads
+            using var source = await UnixSocketFrameSource.ConnectAsync(
+                socketPath,
+                timeout: TimeSpan.FromSeconds(5),
+                retry: true);
+
+            var frame = await source.ReadFrameAsync();
+            receivedData = frame.ToArray();
+
+            await serverTask;
+
+            Assert.Equal(testData, receivedData);
         }
         finally
         {
-            // Cleanup
             if (File.Exists(socketPath))
                 File.Delete(socketPath);
         }

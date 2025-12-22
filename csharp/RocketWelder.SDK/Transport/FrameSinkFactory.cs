@@ -37,8 +37,8 @@ public static class FrameSinkFactory
 
         if (protocol.IsSocket)
         {
-            logger?.LogInformation("Creating Unix socket frame sink at: {Path}", address);
-            return UnixSocketFrameSink.Connect(address);
+            logger?.LogInformation("Creating Unix socket server at: {Path}", address);
+            return UnixSocketFrameSink.Bind(address);
         }
 
         if (protocol.IsNng)
