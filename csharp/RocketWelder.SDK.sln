@@ -28,6 +28,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Blazor.Sam
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Blazor.Sample.App", "samples\RocketWelder.SDK.Blazor.Sample.App\RocketWelder.SDK.Blazor.Sample.App.csproj", "{23F2719F-4A2D-42E9-9E65-A06764B8A6DE}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Server", "RocketWelder.SDK.Server\RocketWelder.SDK.Server.csproj", "{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Server.Tests", "RocketWelder.SDK.Server.Tests\RocketWelder.SDK.Server.Tests.csproj", "{24850015-5A73-4989-9B85-FB8F7FA486C0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -122,6 +126,30 @@ Global
 		{23F2719F-4A2D-42E9-9E65-A06764B8A6DE}.Release|x64.Build.0 = Release|Any CPU
 		{23F2719F-4A2D-42E9-9E65-A06764B8A6DE}.Release|x86.ActiveCfg = Release|Any CPU
 		{23F2719F-4A2D-42E9-9E65-A06764B8A6DE}.Release|x86.Build.0 = Release|Any CPU
+		{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}.Debug|x64.Build.0 = Debug|Any CPU
+		{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}.Debug|x86.Build.0 = Debug|Any CPU
+		{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}.Release|Any CPU.Build.0 = Release|Any CPU
+		{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}.Release|x64.ActiveCfg = Release|Any CPU
+		{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}.Release|x64.Build.0 = Release|Any CPU
+		{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}.Release|x86.ActiveCfg = Release|Any CPU
+		{BCF9FE6B-3181-48F8-9107-CFC37297F3D9}.Release|x86.Build.0 = Release|Any CPU
+		{24850015-5A73-4989-9B85-FB8F7FA486C0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{24850015-5A73-4989-9B85-FB8F7FA486C0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{24850015-5A73-4989-9B85-FB8F7FA486C0}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{24850015-5A73-4989-9B85-FB8F7FA486C0}.Debug|x64.Build.0 = Debug|Any CPU
+		{24850015-5A73-4989-9B85-FB8F7FA486C0}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{24850015-5A73-4989-9B85-FB8F7FA486C0}.Debug|x86.Build.0 = Debug|Any CPU
+		{24850015-5A73-4989-9B85-FB8F7FA486C0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{24850015-5A73-4989-9B85-FB8F7FA486C0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{24850015-5A73-4989-9B85-FB8F7FA486C0}.Release|x64.ActiveCfg = Release|Any CPU
+		{24850015-5A73-4989-9B85-FB8F7FA486C0}.Release|x64.Build.0 = Release|Any CPU
+		{24850015-5A73-4989-9B85-FB8F7FA486C0}.Release|x86.ActiveCfg = Release|Any CPU
+		{24850015-5A73-4989-9B85-FB8F7FA486C0}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

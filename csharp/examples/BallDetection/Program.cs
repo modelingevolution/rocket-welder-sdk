@@ -1,4 +1,5 @@
 using System.Drawing;
+using BlazorBlaze.Server;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
@@ -7,19 +8,21 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using RocketWelder.SDK;
+using RocketWelder.SDK.Graphics;
 using static RocketWelder.SDK.RocketWelderClient;
 using ErrorEventArgs = ZeroBuffer.ErrorEventArgs;
 
 /// <summary>
 /// Simple example detecting a ball from videotestsrc pattern=ball.
-/// Outputs ball edge as segmentation and center as keypoint via NNG.
+/// Outputs ball edge as segmentation, center as keypoint, and position as text overlay.
 ///
 /// This is a SINK-ONLY example - it does NOT modify the output frame.
-/// Data is streamed via NNG Pub/Sub for downstream consumers.
+/// Data is streamed via Unix sockets for downstream consumers.
 ///
-/// Requires configuration:
+/// Optional configuration (uses NullSink if not set):
 ///   - RocketWelder:SegmentationSinkUrl or SEGMENTATION_SINK_URL
 ///   - RocketWelder:KeyPointsSinkUrl or KEYPOINTS_SINK_URL
+///   - RocketWelder:GraphicsSinkUrl or GRAPHICS_SINK_URL
 /// </summary>
 class Program
 {
@@ -157,19 +160,14 @@ public class BallDetectionService : BackgroundService
         _logger.LogInformation("Starting Ball Detection client (SINK-ONLY): {Connection}", _client.Connection);
         _client.OnError += OnError;
 
-        // Check for NNG sink configuration
+        // Log sink configuration (NullSink used if not configured)
         var segUrl = _configuration["RocketWelder:SegmentationSinkUrl"] ?? Environment.GetEnvironmentVariable("SEGMENTATION_SINK_URL");
         var kpUrl = _configuration["RocketWelder:KeyPointsSinkUrl"] ?? Environment.GetEnvironmentVariable("KEYPOINTS_SINK_URL");
+        var gfxUrl = _configuration["RocketWelder:GraphicsSinkUrl"] ?? Environment.GetEnvironmentVariable("GRAPHICS_SINK_URL");
 
-        if (string.IsNullOrEmpty(segUrl) || string.IsNullOrEmpty(kpUrl))
-        {
-            _logger.LogWarning("NNG sink URLs not configured. Set SEGMENTATION_SINK_URL and KEYPOINTS_SINK_URL environment variables.");
-        }
-        else
-        {
-            _logger.LogInformation("Segmentation sink: {Url}", segUrl);
-            _logger.LogInformation("Keypoints sink: {Url}", kpUrl);
-        }
+        _logger.LogInformation("Segmentation sink: {Url}", segUrl ?? "(NullSink)");
+        _logger.LogInformation("Keypoints sink: {Url}", kpUrl ?? "(NullSink)");
+        _logger.LogInformation("Graphics sink: {Url}", gfxUrl ?? "(NullSink)");
 
         // Use the Start overload that provides writers
         _logger.LogInformation("Running in DUPLEX mode (sink-only, no frame modification)");
@@ -210,7 +208,7 @@ public class BallDetectionService : BackgroundService
         _lifetime.StopApplication();
     }
 
-    private void ProcessFrameWithWriters(Mat input, ISegmentationResultWriter segWriter, IKeyPointsWriter kpWriter, Mat output)
+    private void ProcessFrameWithWriters(Mat input, ISegmentationResultWriter segWriter, IKeyPointsWriter kpWriter, IStageWriter stageWriter, Mat output)
     {
         _frameCount++;
 
@@ -229,6 +227,18 @@ public class BallDetectionService : BackgroundService
         {
             kpWriter.Append(BallDetector.CenterKeypointId, center.Value.X, center.Value.Y, confidence);
             _keyWritten +=1;
+        }
+
+        // Draw ball position as text overlay in upper left corner
+        var layer = stageWriter[0];
+        layer.SetFontSize(24);
+        if (center.HasValue)
+        {
+            layer.DrawText($"Ball: ({center.Value.X}, {center.Value.Y})", 10, 30);
+        }
+        else
+        {
+            layer.DrawText("Ball: not detected", 10, 30);
         }
 
         // Log every 30 frames

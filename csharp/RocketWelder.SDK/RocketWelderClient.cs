@@ -25,6 +25,10 @@ using System.Collections.Generic;
 using System.Linq;
 using RocketWelder.SDK.Transport;
 using RocketWelder.SDK.Protocols;
+using RocketWelder.SDK.Graphics;
+using SkiaSharp;
+using BlazorBlaze.VectorGraphics;
+using BlazorBlaze.Server;
 
 namespace RocketWelder.SDK
 {
@@ -546,6 +550,115 @@ namespace RocketWelder.SDK
         public void Dispose() { }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
+
+    /// <summary>
+    /// Null sink that discards all segmentation data.
+    /// Used when no sink URL is configured (debugging/development).
+    /// </summary>
+    internal sealed class NullSegmentationResultSink : ISegmentationResultSink
+    {
+        public static readonly NullSegmentationResultSink Instance = new();
+        private NullSegmentationResultSink() { }
+
+        public ISegmentationResultWriter CreateWriter(ulong frameId, uint width, uint height)
+            => NoOpSegmentationWriter.Instance;
+
+        public void Dispose() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Null sink that discards all keypoints data.
+    /// Used when no sink URL is configured (debugging/development).
+    /// </summary>
+    internal sealed class NullKeyPointsSink : IKeyPointsSink
+    {
+        public static readonly NullKeyPointsSink Instance = new();
+        private NullKeyPointsSink() { }
+
+        public IKeyPointsWriter CreateWriter(ulong frameId)
+            => NoOpKeyPointsWriter.Instance;
+
+        public void Dispose() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// Null sink that discards all graphics data.
+    /// Used when no sink URL is configured (debugging/development).
+    /// </summary>
+    internal sealed class NullStageSink : IStageSink
+    {
+        public static readonly NullStageSink Instance = new();
+        private NullStageSink() { }
+
+        public IStageWriter CreateWriter(ulong frameId)
+            => NoOpStageWriter.Instance;
+
+        public void Dispose() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// No-op stage writer that discards all graphics operations.
+    /// Used by NullStageSink.
+    /// </summary>
+    internal sealed class NoOpStageWriter : IStageWriter
+    {
+        public static readonly NoOpStageWriter Instance = new();
+        private NoOpStageWriter() { }
+
+        public ulong FrameId => 0;
+        public ILayerCanvas this[byte layerId] => NoOpLayerCanvas.Instance;
+        public ILayerCanvas Layer(byte layerId) => NoOpLayerCanvas.Instance;
+        public void Dispose() { }
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
+    }
+
+    /// <summary>
+    /// No-op layer canvas that discards all drawing operations.
+    /// Used by NoOpStageWriter.
+    /// </summary>
+    internal sealed class NoOpLayerCanvas : ILayerCanvas
+    {
+        public static readonly NoOpLayerCanvas Instance = new();
+        private NoOpLayerCanvas() { }
+
+        public byte LayerId => 0;
+
+        // Frame type
+        public void Master() { }
+        public void Remain() { }
+        public void Clear() { }
+
+        // Context state - Styling
+        public void SetStroke(RgbColor color) { }
+        public void SetFill(RgbColor color) { }
+        public void SetThickness(int width) { }
+        public void SetFontSize(int size) { }
+        public void SetFontColor(RgbColor color) { }
+
+        // Context state - Transforms
+        public void Translate(float dx, float dy) { }
+        public void Rotate(float degrees) { }
+        public void Scale(float sx, float sy) { }
+        public void Skew(float kx, float ky) { }
+        public void SetMatrix(SKMatrix matrix) { }
+
+        // Context stack
+        public void Save() { }
+        public void Restore() { }
+        public void ResetContext() { }
+
+        // Draw operations
+        public void DrawPolygon(ReadOnlySpan<SKPoint> points) { }
+        public void DrawText(string text, int x, int y) { }
+        public void DrawCircle(int centerX, int centerY, int radius) { }
+        public void DrawRectangle(int x, int y, int width, int height) { }
+        public void DrawLine(int x1, int y1, int x2, int y2) { }
+        public void DrawJpeg(ReadOnlySpan<byte> jpegData, int x, int y, int width, int height) { }
+    }
+
     internal static class ControllerFactory
     {
         public static IController Create(in ConnectionString cs, ILoggerFactory? loggerFactory = null)
@@ -621,6 +734,18 @@ namespace RocketWelder.SDK
         /// Environment variable name for keypoints sink URL (alternative to config).
         /// </summary>
         public const string KeyPointsSinkUrlEnv = "KEYPOINTS_SINK_URL";
+
+        /// <summary>
+        /// Configuration key for the graphics sink URL.
+        /// The AI container publishes vector graphics to this URL.
+        /// rocket-welder2 subscribes to receive and stream to browsers.
+        /// </summary>
+        public const string GraphicsSinkUrl = "RocketWelder:GraphicsSinkUrl";
+
+        /// <summary>
+        /// Environment variable name for graphics sink URL (alternative to config).
+        /// </summary>
+        public const string GraphicsSinkUrlEnv = "GRAPHICS_SINK_URL";
     }
 
     /// <summary>
@@ -655,9 +780,10 @@ namespace RocketWelder.SDK
         private Action<Mat>? _originalOneWayCallback;
         private Action<Mat, Mat>? _originalDuplexCallback;
 
-        // NNG Sinks for AI output (lazily created when needed)
+        // Sinks for AI output (lazily created when needed)
         private ISegmentationResultSink? _segmentationSink;
         private IKeyPointsSink? _keyPointsSink;
+        private IStageSink? _stageSink;
 
         /// <summary>
         /// Gets the connection configuration.
@@ -747,6 +873,7 @@ namespace RocketWelder.SDK
 
         /// <summary>
         /// Creates or returns the segmentation result sink.
+        /// Returns NullSink when URL is not configured (for debugging/development).
         /// </summary>
         private ISegmentationResultSink GetOrCreateSegmentationSink()
         {
@@ -755,10 +882,10 @@ namespace RocketWelder.SDK
 
             var url = GetSegmentationSinkUrl();
             if (string.IsNullOrWhiteSpace(url))
-                throw new InvalidOperationException(
-                    $"Segmentation sink URL not configured. Set '{RocketWelderConfigKeys.SegmentationSinkUrl}' in configuration " +
-                    $"or '{RocketWelderConfigKeys.SegmentationSinkUrlEnv}' environment variable. " +
-                    $"Example: socket:///tmp/ai-segmentation.sock");
+            {
+                _logger.LogInformation("Segmentation sink URL not configured - using NullSink (data will be discarded)");
+                return NullSegmentationResultSink.Instance;
+            }
 
             _logger.LogInformation("Creating segmentation sink at: {Url}", url);
             var cs = SegmentationConnectionString.Parse(url, null);
@@ -769,6 +896,7 @@ namespace RocketWelder.SDK
 
         /// <summary>
         /// Creates or returns the keypoints sink.
+        /// Returns NullSink when URL is not configured (for debugging/development).
         /// </summary>
         private IKeyPointsSink GetOrCreateKeyPointsSink()
         {
@@ -777,16 +905,60 @@ namespace RocketWelder.SDK
 
             var url = GetKeyPointsSinkUrl();
             if (string.IsNullOrWhiteSpace(url))
-                throw new InvalidOperationException(
-                    $"KeyPoints sink URL not configured. Set '{RocketWelderConfigKeys.KeyPointsSinkUrl}' in configuration " +
-                    $"or '{RocketWelderConfigKeys.KeyPointsSinkUrlEnv}' environment variable. " +
-                    $"Example: socket:///tmp/ai-keypoints.sock");
+            {
+                _logger.LogInformation("KeyPoints sink URL not configured - using NullSink (data will be discarded)");
+                return NullKeyPointsSink.Instance;
+            }
 
             _logger.LogInformation("Creating keypoints sink at: {Url}", url);
             var cs = KeyPointsConnectionString.Parse(url, null);
             var frameSink = Transport.FrameSinkFactory.Create(cs.Protocol, cs.Address, _logger);
             _keyPointsSink = new KeyPointsSink(frameSink, masterFrameInterval: 300, ownsSink: true);
             return _keyPointsSink;
+        }
+
+        /// <summary>
+        /// Gets the graphics sink URL from configuration or environment.
+        /// </summary>
+        private string? GetGraphicsSinkUrl()
+        {
+            return _configuration?[RocketWelderConfigKeys.GraphicsSinkUrl]
+                ?? Environment.GetEnvironmentVariable(RocketWelderConfigKeys.GraphicsSinkUrlEnv);
+        }
+
+        /// <summary>
+        /// Creates or returns the graphics stage sink.
+        /// Returns NullSink when URL is not configured (for debugging/development).
+        /// </summary>
+        private IStageSink GetOrCreateStageSink()
+        {
+            if (_stageSink != null)
+                return _stageSink;
+
+            var url = GetGraphicsSinkUrl();
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                _logger.LogInformation("Graphics sink URL not configured - using NullSink (data will be discarded)");
+                return NullStageSink.Instance;
+            }
+
+            _logger.LogInformation("Creating graphics stage sink at: {Url}", url);
+
+            // Parse URL and create frame sink
+            // URL format: socket:///tmp/path.sock
+            IFrameSink frameSink;
+            if (url.StartsWith("socket://", StringComparison.OrdinalIgnoreCase))
+            {
+                var socketPath = url.Substring("socket://".Length);
+                frameSink = UnixSocketFrameSink.Bind(socketPath);
+            }
+            else
+            {
+                throw new NotSupportedException($"Graphics sink URL protocol not supported: {url}. Expected socket:// prefix.");
+            }
+
+            _stageSink = new StageSink(frameSink, ownsSink: true);
+            return _stageSink;
         }
         
         private void OnControllerError(IController controller, Exception exception)
@@ -1074,6 +1246,204 @@ namespace RocketWelder.SDK
         }
 
         /// <summary>
+        /// Starts receiving frames with segmentation, keypoints, and vector graphics output support (DUPLEX MODE).
+        /// Creates sinks for streaming AI results and vector overlays to rocket-welder2.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This overload enables AI models to write segmentation results, keypoints, AND vector graphics
+        /// that are automatically published to rocket-welder2 for storage, comparison, and browser display.
+        /// </para>
+        /// <para>
+        /// The SDK manages the stageWriter lifecycle:
+        /// <list type="bullet">
+        ///   <item><description>BeginFrame() is called before your callback</description></item>
+        ///   <item><description>Flush() is called after your callback returns</description></item>
+        /// </list>
+        /// </para>
+        /// <para>
+        /// <b>Configuration Required:</b>
+        /// <list type="bullet">
+        ///   <item><description><c>RocketWelder:SegmentationSinkUrl</c> or <c>SEGMENTATION_SINK_URL</c></description></item>
+        ///   <item><description><c>RocketWelder:KeyPointsSinkUrl</c> or <c>KEYPOINTS_SINK_URL</c></description></item>
+        ///   <item><description><c>RocketWelder:GraphicsSinkUrl</c> or <c>GRAPHICS_SINK_URL</c></description></item>
+        /// </list>
+        /// </para>
+        /// <para>
+        /// <b>Example:</b>
+        /// <code>
+        /// client.Start((input, segWriter, kpWriter, stageWriter, output) =>
+        /// {
+        ///     var result = aiModel.Infer(input);
+        ///
+        ///     // Write segmentation results
+        ///     foreach (var instance in result.Instances)
+        ///         segWriter.Append(instance.ClassId, instance.InstanceId, instance.ContourPoints);
+        ///
+        ///     // Draw vector graphics overlay
+        ///     stageWriter[0].SetStroke(RgbColor.Red);
+        ///     foreach (var contour in result.Contours)
+        ///         stageWriter[0].DrawPolygon(contour.Points);
+        ///
+        ///     stageWriter[1].DrawText($"Frame: {stageWriter.FrameId}", 10, 20);
+        ///
+        ///     // Draw on output mat
+        ///     result.DrawTo(output);
+        /// });
+        /// </code>
+        /// </para>
+        /// </remarks>
+        /// <param name="onFrame">Callback receiving input Mat, segmentation writer, keypoints writer, stage writer, and output Mat</param>
+        /// <param name="cancellationToken">Optional cancellation token</param>
+        public void Start(Action<Mat, ISegmentationResultWriter, IKeyPointsWriter, IStageWriter, Mat> onFrame, CancellationToken cancellationToken = default)
+        {
+            if (IsRunning)
+                throw new InvalidOperationException("Client is already running");
+
+            try
+            {
+                _logger.LogInformation("Starting RocketWelder client with AI output and graphics support (duplex): {Connection}", Connection);
+
+                // Log sink URL configuration at startup (for debugging)
+                LogNngConfiguration();
+                _logger.LogInformation("Graphics sink URL: {Url}", GetGraphicsSinkUrl() ?? "(not configured)");
+
+                // Initialize sinks (will throw if not configured)
+                var segSink = GetOrCreateSegmentationSink();
+                var kpSink = GetOrCreateKeyPointsSink();
+                var stageSink = GetOrCreateStageSink();
+
+                // Wrapper callback that creates per-frame writers
+                _controller.Start((FrameMetadata frameMetadata, Mat inputMat, Mat outputMat) =>
+                {
+                    // Get caps from controller metadata (width/height for segmentation)
+                    var caps = _controller.GetMetadata()?.Caps;
+                    if (caps == null)
+                    {
+                        _logger.LogWarning("GstCaps not available for frame {FrameNumber}, skipping AI output", frameMetadata.FrameNumber);
+                        using var noOpStageWriter = stageSink.CreateWriter(frameMetadata.FrameNumber);
+                        onFrame(inputMat, NoOpSegmentationWriter.Instance, NoOpKeyPointsWriter.Instance, noOpStageWriter, outputMat);
+                        return;
+                    }
+
+                    // Create per-frame writers from sinks (all auto-flush on dispose)
+                    using var segWriter = segSink.CreateWriter(frameMetadata.FrameNumber, (uint)caps.Value.Width, (uint)caps.Value.Height);
+                    using var kpWriter = kpSink.CreateWriter(frameMetadata.FrameNumber);
+                    using var stageWriter = stageSink.CreateWriter(frameMetadata.FrameNumber);
+
+                    onFrame(inputMat, segWriter, kpWriter, stageWriter, outputMat);
+                    // All writers auto-flush on dispose
+                }, cancellationToken);
+
+                Started?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to start RocketWelder client with AI output and graphics support");
+                OnError?.Invoke(this, new ErrorEventArgs(ex));
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Starts receiving frames with segmentation, keypoints, and vector graphics output support (ONE-WAY MODE).
+        /// Creates sinks for streaming AI results and vector overlays to rocket-welder2.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// This overload is for inference-only containers that don't produce an output frame.
+        /// AI models can write segmentation results, keypoints, AND vector graphics
+        /// that are automatically published to rocket-welder2.
+        /// </para>
+        /// <para>
+        /// All writers auto-flush on dispose, following the same pattern throughout.
+        /// </para>
+        /// <para>
+        /// <b>Configuration Required:</b>
+        /// <list type="bullet">
+        ///   <item><description><c>RocketWelder:SegmentationSinkUrl</c> or <c>SEGMENTATION_SINK_URL</c></description></item>
+        ///   <item><description><c>RocketWelder:KeyPointsSinkUrl</c> or <c>KEYPOINTS_SINK_URL</c></description></item>
+        ///   <item><description><c>RocketWelder:GraphicsSinkUrl</c> or <c>GRAPHICS_SINK_URL</c></description></item>
+        /// </list>
+        /// </para>
+        /// <para>
+        /// <b>Example:</b>
+        /// <code>
+        /// client.Start((input, segWriter, kpWriter, stageWriter) =>
+        /// {
+        ///     var result = aiModel.Infer(input);
+        ///
+        ///     // Write segmentation results
+        ///     foreach (var instance in result.Instances)
+        ///         segWriter.Append(instance.ClassId, instance.InstanceId, instance.ContourPoints);
+        ///
+        ///     // Draw vector graphics overlay
+        ///     stageWriter[0].SetStroke(RgbColor.Red);
+        ///     foreach (var contour in result.Contours)
+        ///         stageWriter[0].DrawPolygon(contour.Points);
+        /// });
+        /// </code>
+        /// </para>
+        /// </remarks>
+        /// <param name="onFrame">Callback receiving input Mat, segmentation writer, keypoints writer, and stage writer</param>
+        /// <param name="cancellationToken">Optional cancellation token</param>
+        public void Start(Action<Mat, ISegmentationResultWriter, IKeyPointsWriter, IStageWriter> onFrame, CancellationToken cancellationToken = default)
+        {
+            if (IsRunning)
+                throw new InvalidOperationException("Client is already running");
+
+            try
+            {
+                _logger.LogInformation("Starting RocketWelder client with AI output and graphics support (one-way): {Connection}", Connection);
+
+                // Log sink URL configuration at startup (for debugging)
+                LogNngConfiguration();
+                _logger.LogInformation("Graphics sink URL: {Url}", GetGraphicsSinkUrl() ?? "(not configured)");
+
+                // Initialize sinks (will throw if not configured)
+                var segSink = GetOrCreateSegmentationSink();
+                var kpSink = GetOrCreateKeyPointsSink();
+                var stageSink = GetOrCreateStageSink();
+
+                // Track frame number for one-way mode
+                ulong frameNumber = 0;
+
+                // Wrapper callback that creates per-frame writers
+                _controller.Start((Mat inputMat) =>
+                {
+                    frameNumber++;
+
+                    // Get caps from controller metadata (width/height for segmentation)
+                    var caps = _controller.GetMetadata()?.Caps;
+
+                    if (caps == null)
+                    {
+                        _logger.LogWarning("GstCaps not available, skipping AI output");
+                        using var noOpStageWriter = stageSink.CreateWriter(frameNumber);
+                        onFrame(inputMat, NoOpSegmentationWriter.Instance, NoOpKeyPointsWriter.Instance, noOpStageWriter);
+                        return;
+                    }
+
+                    // Create per-frame writers from sinks (all auto-flush on dispose)
+                    using var segWriter = segSink.CreateWriter(frameNumber, (uint)caps.Value.Width, (uint)caps.Value.Height);
+                    using var kpWriter = kpSink.CreateWriter(frameNumber);
+                    using var stageWriter = stageSink.CreateWriter(frameNumber);
+
+                    onFrame(inputMat, segWriter, kpWriter, stageWriter);
+                    // All writers auto-flush on dispose
+                }, cancellationToken);
+
+                Started?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to start RocketWelder client with AI output and graphics support");
+                OnError?.Invoke(this, new ErrorEventArgs(ex));
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Gets the segmentation sink for external use (e.g., custom frame processing).
         /// Returns null if not configured.
         /// </summary>
@@ -1217,6 +1587,12 @@ namespace RocketWelder.SDK
             {
                 _keyPointsSink.Dispose();
                 _keyPointsSink = null;
+            }
+
+            if (_stageSink != null)
+            {
+                _stageSink.Dispose();
+                _stageSink = null;
             }
 
             if (_controller != null)
