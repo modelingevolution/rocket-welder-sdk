@@ -758,6 +758,13 @@ class DuplexShmController(IController):
 
             # GstCaps must be available for width/height/format
             # (FrameMetadata no longer contains these - they're stream-level, not per-frame)
+            # If not available yet, try to read metadata again (race condition with C# Server)
+            if not self._gst_caps and self._duplex_server and self._duplex_server.request_reader:
+                logger.debug("GstCaps not available, attempting to read metadata again...")
+                metadata = self._duplex_server.request_reader.get_metadata()
+                if metadata:
+                    self._on_metadata(metadata)
+
             if not self._gst_caps:
                 logger.warning(
                     "GstCaps not available, skipping frame %d", frame_metadata.frame_number

@@ -54,11 +54,14 @@ class GstCaps:
     @classmethod
     def parse(cls, caps_string: str) -> GstCaps:
         """
-        Parse GStreamer caps string.
-        Example: "video/x-raw, format=(string)RGB, width=(int)640, height=(int)480, framerate=(fraction)30/1"
+        Parse GStreamer caps string or simple format string.
+
+        Supports two formats:
+        1. Full GStreamer format: "video/x-raw, format=(string)RGB, width=(int)640, height=(int)480"
+        2. Simple format: "640x480 RGB" or "640x480 RGB @ 30.00fps"
 
         Args:
-            caps_string: GStreamer caps string
+            caps_string: Caps string in either format
 
         Returns:
             GstCaps instance
@@ -71,9 +74,50 @@ class GstCaps:
 
         caps_string = caps_string.strip()
 
+        # Try simple format first: "WIDTHxHEIGHT FORMAT" or "WIDTHxHEIGHT FORMAT @ FPS"
+        # Example: "320x240 BGR" or "1920x1080 RGB @ 30.00fps"
+        simple_match = re.match(r"^(\d+)x(\d+)\s+(\w+)(?:\s*@\s*([\d.]+)\s*fps)?$", caps_string)
+        if simple_match:
+            width = int(simple_match.group(1))
+            height = int(simple_match.group(2))
+            format_str = simple_match.group(3)
+            fps_str = simple_match.group(4)
+
+            framerate_num = None
+            framerate_den = None
+            if fps_str:
+                # Convert float FPS to fraction
+                fps = float(fps_str)
+                # Use common framerates or default to fps/1
+                if abs(fps - 30.0) < 0.01:
+                    framerate_num, framerate_den = 30, 1
+                elif abs(fps - 29.97) < 0.01:
+                    framerate_num, framerate_den = 30000, 1001
+                elif abs(fps - 25.0) < 0.01:
+                    framerate_num, framerate_den = 25, 1
+                elif abs(fps - 60.0) < 0.01:
+                    framerate_num, framerate_den = 60, 1
+                elif abs(fps - 59.94) < 0.01:
+                    framerate_num, framerate_den = 60000, 1001
+                else:
+                    framerate_num, framerate_den = int(fps * 1000), 1000
+
+            depth_type, channels, bytes_per_pixel = cls._map_gstreamer_format_to_numpy(format_str)
+            return cls(
+                width=width,
+                height=height,
+                format=format_str,
+                depth_type=depth_type,
+                channels=channels,
+                bytes_per_pixel=bytes_per_pixel,
+                framerate_num=framerate_num,
+                framerate_den=framerate_den,
+                caps_string=None,  # Not a real GStreamer caps string
+            )
+
         # Check if it's a video caps
         if not caps_string.startswith("video/x-raw"):
-            raise ValueError(f"Not a video/x-raw caps string: {caps_string}")
+            raise ValueError(f"Not a video/x-raw caps string or simple format: {caps_string}")
 
         try:
             # Parse width

@@ -22,19 +22,26 @@ class UnixSocketFrameSink(IFrameSink):
     Each frame is prefixed with a 4-byte little-endian length header.
     """
 
-    def __init__(self, sock: socket.socket, leave_open: bool = False):
+    def __init__(
+        self,
+        sock: socket.socket,
+        leave_open: bool = False,
+        server: Optional["UnixSocketServer"] = None,
+    ):
         """
         Create a Unix socket frame sink.
 
         Args:
             sock: Connected Unix domain socket
             leave_open: If True, doesn't close socket on close
+            server: Optional server to clean up on close (used by bind())
         """
         if sock.family != socket.AF_UNIX:
             raise ValueError("Socket must be a Unix domain socket")
 
         self._socket = sock
         self._leave_open = leave_open
+        self._server = server
         self._closed = False
 
     @classmethod
@@ -68,6 +75,45 @@ class UnixSocketFrameSink(IFrameSink):
         loop = asyncio.get_event_loop()
         await loop.sock_connect(sock, socket_path)
         return cls(sock, leave_open=False)
+
+    @classmethod
+    def bind(cls, socket_path: str) -> "UnixSocketFrameSink":
+        """
+        Bind to a Unix socket path as a server and wait for a client to connect.
+
+        Use this when the SDK is the producer (server) and rocket-welder2 is
+        the consumer (client).
+
+        Args:
+            socket_path: Path to Unix socket file
+
+        Returns:
+            Frame sink connected to the first client
+
+        Note:
+            This is the server-side counterpart to connect().
+            The server binds and listens, then blocks until a client connects.
+        """
+        server = UnixSocketServer(socket_path)
+        server.start()
+        client_socket = server.accept()
+        return cls(client_socket, leave_open=False, server=server)
+
+    @classmethod
+    async def bind_async(cls, socket_path: str) -> "UnixSocketFrameSink":
+        """
+        Bind to a Unix socket path as a server and wait asynchronously for a client.
+
+        Args:
+            socket_path: Path to Unix socket file
+
+        Returns:
+            Frame sink connected to the first client
+        """
+        server = UnixSocketServer(socket_path)
+        server.start()
+        client_socket = await server.accept_async()
+        return cls(client_socket, leave_open=False, server=server)
 
     def write_frame(self, frame_data: bytes) -> None:
         """Write frame with 4-byte length prefix to Unix socket."""
@@ -112,6 +158,10 @@ class UnixSocketFrameSink(IFrameSink):
             with contextlib.suppress(OSError):
                 self._socket.shutdown(socket.SHUT_WR)
             self._socket.close()
+        # Clean up server if we created one via bind()
+        if self._server is not None:
+            self._server.stop()
+            self._server = None
 
     async def close_async(self) -> None:
         """Close the Unix socket sink asynchronously."""

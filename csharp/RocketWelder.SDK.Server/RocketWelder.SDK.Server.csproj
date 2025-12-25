@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <PackageId>RocketWelder.SDK.Server</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>ModelingEvolution</Authors>
+    <Company>ModelingEvolution</Company>
+    <Copyright>Copyright © ModelingEvolution 2024</Copyright>
+    <Description>Server-side library for testing RocketWelder SDK containers. Simulates GStreamer by sending frames via DuplexChannel and reading AI results from sockets.</Description>
+    <PackageTags>video;streaming;testing;zerobuffer;sharedmemory;gstreamer;simulation</PackageTags>
+    <PackageProjectUrl>https://github.com/modelingevolution/rocket-welder-sdk</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <InternalsVisibleTo>RocketWelder.SDK.Server.Tests</InternalsVisibleTo>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RocketWelder.SDK\RocketWelder.SDK.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Protocols\RocketWelder.SDK.Protocols.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Emgu.CV" Version="4.11.0.5746" />
+    <PackageReference Include="Emgu.CV.runtime.ubuntu-x64" Version="4.11.0.5746" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <!-- Use local ZeroBuffer for development/testing - switch back to NuGet for release -->
+    <ProjectReference Include="/mnt/d/source/modelingevolution/streamer/src/zerobuffer/csharp/ZeroBuffer/ZeroBuffer.csproj" />
+    <!-- <PackageReference Include="ZeroBuffer" Version="1.2.8" /> -->
+  </ItemGroup>
+
+</Project>

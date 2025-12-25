@@ -84,8 +84,8 @@ class FrameSinkFactory:
             return StreamFrameSink(file_handle)
 
         if protocol.is_socket:
-            log.info("Creating Unix socket frame sink at: %s", address)
-            return UnixSocketFrameSink.connect(address)
+            log.info("Creating Unix socket frame sink (server/bind) at: %s", address)
+            return UnixSocketFrameSink.bind(address)
 
         if protocol.is_nng:
             log.info("Creating NNG frame sink (%s) at: %s", protocol.schema, address)

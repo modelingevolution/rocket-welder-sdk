@@ -15,7 +15,15 @@ import numpy as np
 from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
 from .frame_metadata import FrameMetadata  # noqa: TC001 - used at runtime in callbacks
+from .high_level.connection_strings import KeyPointsConnectionString, SegmentationConnectionString
+from .high_level.frame_sink_factory import FrameSinkFactory
+from .keypoints_protocol import IKeyPointsSink, IKeyPointsWriter, KeyPointsSink
 from .opencv_controller import OpenCvController
+from .segmentation_result import (
+    ISegmentationResultSink,
+    ISegmentationResultWriter,
+    SegmentationResultSink,
+)
 from .session_id import (
     get_configured_nng_urls,
     get_nng_urls_from_env,
@@ -245,6 +253,144 @@ class RocketWelderClient:
             # Start the controller
             self._controller.start(actual_callback, cancellation_token)  # type: ignore[arg-type]
             logger.info("RocketWelder client started with %s", self._connection)
+
+    def start_with_writers(
+        self,
+        on_frame: Callable[[Mat, ISegmentationResultWriter, IKeyPointsWriter, Mat], None],  # type: ignore[valid-type]
+        cancellation_token: Optional[threading.Event] = None,
+    ) -> None:
+        """
+        Start receiving frames with segmentation and keypoints output support.
+
+        Creates sinks for streaming AI results to rocket-welder2.
+
+        Configuration via environment variables:
+        - SEGMENTATION_SINK_URL: URL for segmentation output (e.g., socket:///tmp/seg.sock)
+        - KEYPOINTS_SINK_URL: URL for keypoints output (e.g., socket:///tmp/kp.sock)
+
+        Args:
+            on_frame: Callback receiving (input_mat, seg_writer, kp_writer, output_mat).
+                     The writers are created per-frame and auto-flush on context exit.
+            cancellation_token: Optional cancellation token
+
+        Example:
+            def process_frame(input_mat, seg_writer, kp_writer, output_mat):
+                # Run AI inference
+                result = ai_model.infer(input_mat)
+
+                # Write segmentation results
+                for instance in result.instances:
+                    seg_writer.append(instance.class_id, instance.instance_id, instance.points)
+
+                # Write keypoints
+                for kp in result.keypoints:
+                    kp_writer.append(kp.id, kp.x, kp.y, kp.confidence)
+
+                # Copy/draw to output
+                output_mat[:] = input_mat
+
+            client.start_with_writers(process_frame)
+
+        Raises:
+            RuntimeError: If already running
+            ValueError: If connection type is not supported or not duplex mode
+        """
+        with self._lock:
+            if self._controller and self._controller.is_running:
+                raise RuntimeError("Client is already running")
+
+            # This overload requires duplex mode
+            if self._connection.connection_mode != ConnectionMode.DUPLEX:
+                raise ValueError("start_with_writers() requires duplex connection mode")
+
+            # Create controller
+            if self._connection.protocol == Protocol.SHM:
+                self._controller = DuplexShmController(self._connection)
+            elif self._connection.protocol == Protocol.FILE or bool(
+                self._connection.protocol & Protocol.MJPEG  # type: ignore[operator]
+            ):
+                self._controller = OpenCvController(self._connection)
+            else:
+                raise ValueError(f"Unsupported protocol: {self._connection.protocol}")
+
+            # Create sinks from environment
+            seg_sink = self._get_or_create_segmentation_sink()
+            kp_sink = self._get_or_create_keypoints_sink()
+
+            logger.info(
+                "Starting RocketWelder client with AI output support: seg=%s, kp=%s",
+                "configured" if seg_sink else "null",
+                "configured" if kp_sink else "null",
+            )
+
+            # Wrapper callback that creates per-frame writers
+            def writer_callback(
+                frame_metadata: FrameMetadata, input_mat: Mat, output_mat: Mat  # type: ignore[valid-type]
+            ) -> None:
+                # Get caps from controller metadata (width/height for segmentation)
+                metadata = self._controller.get_metadata() if self._controller else None
+                caps = metadata.caps if metadata else None
+
+                if caps is None:
+                    logger.warning(
+                        "GstCaps not available for frame %d, using no-op writers",
+                        frame_metadata.frame_number,
+                    )
+                    # Use no-op writers
+                    on_frame(
+                        input_mat, _NoOpSegmentationWriter(), _NoOpKeyPointsWriter(), output_mat
+                    )
+                    return
+
+                # Create per-frame writers from sinks
+                with seg_sink.create_writer(
+                    frame_metadata.frame_number, caps.width, caps.height
+                ) as seg_writer, kp_sink.create_writer(frame_metadata.frame_number) as kp_writer:
+                    # Call user callback with writers
+                    on_frame(input_mat, seg_writer, kp_writer, output_mat)
+                    # Writers auto-flush on context exit
+
+            # Start the controller with our wrapper
+            self._controller.start(writer_callback, cancellation_token)  # type: ignore[arg-type]
+            logger.info("RocketWelder client started with writers: %s", self._connection)
+
+    def _get_or_create_segmentation_sink(self) -> ISegmentationResultSink:
+        """Get or create segmentation result sink from environment."""
+        import os
+
+        url = os.environ.get("SEGMENTATION_SINK_URL")
+        if not url:
+            logger.debug("SEGMENTATION_SINK_URL not set, using null sink")
+            return _NullSegmentationSink()
+
+        try:
+            cs = SegmentationConnectionString.parse(url)
+            frame_sink = FrameSinkFactory.create(cs.protocol, cs.address)
+            return SegmentationResultSink(frame_sink=frame_sink, owns_sink=True)
+        except Exception as ex:
+            logger.warning("Failed to create segmentation sink from %s: %s", url, ex)
+            return _NullSegmentationSink()
+
+    def _get_or_create_keypoints_sink(self) -> IKeyPointsSink:
+        """Get or create keypoints sink from environment."""
+        import os
+
+        url = os.environ.get("KEYPOINTS_SINK_URL")
+        if not url:
+            logger.debug("KEYPOINTS_SINK_URL not set, using null sink")
+            return _NullKeyPointsSink()
+
+        try:
+            cs = KeyPointsConnectionString.parse(url)
+            frame_sink = FrameSinkFactory.create(cs.protocol, cs.address)
+            return KeyPointsSink(
+                frame_sink=frame_sink,
+                master_frame_interval=cs.master_frame_interval,
+                owns_sink=True,
+            )
+        except Exception as ex:
+            logger.warning("Failed to create keypoints sink from %s: %s", url, ex)
+            return _NullKeyPointsSink()
 
     def stop(self) -> None:
         """Stop the client and clean up resources."""
@@ -495,3 +641,59 @@ class RocketWelderClient:
             f"shm://{buffer_name}?size={buffer_size}&metadata={metadata_size}&mode=Duplex"
         )
         return cls(connection_str)
+
+
+# No-op implementations for when sinks are not configured
+
+
+class _NoOpKeyPointsWriter(IKeyPointsWriter):
+    """No-op keypoints writer that discards all data."""
+
+    def append(self, keypoint_id: int, x: int, y: int, confidence: float) -> None:
+        """Discard keypoint data."""
+        pass
+
+    def append_point(self, keypoint_id: int, point: tuple, confidence: float) -> None:  # type: ignore[type-arg]
+        """Discard keypoint data."""
+        pass
+
+    def close(self) -> None:
+        """No-op close."""
+        pass
+
+
+class _NoOpSegmentationWriter(ISegmentationResultWriter):
+    """No-op segmentation writer that discards all data."""
+
+    def append(self, class_id: int, instance_id: int, points: Any) -> None:
+        """Discard segmentation data."""
+        pass
+
+    def close(self) -> None:
+        """No-op close."""
+        pass
+
+
+class _NullKeyPointsSink(IKeyPointsSink):
+    """Null keypoints sink that creates no-op writers."""
+
+    def create_writer(self, frame_id: int) -> IKeyPointsWriter:
+        """Create a no-op writer."""
+        return _NoOpKeyPointsWriter()
+
+    @staticmethod
+    def read(json_definition: str, blob_stream: Any) -> Any:
+        """Not supported for null sink."""
+        raise NotImplementedError("NullKeyPointsSink does not support reading")
+
+
+class _NullSegmentationSink(ISegmentationResultSink):
+    """Null segmentation sink that creates no-op writers."""
+
+    def create_writer(self, frame_id: int, width: int, height: int) -> ISegmentationResultWriter:
+        """Create a no-op writer."""
+        return _NoOpSegmentationWriter()
+
+    def close(self) -> None:
+        """No-op close."""
+        pass

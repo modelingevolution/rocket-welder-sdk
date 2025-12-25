@@ -52,10 +52,11 @@ public class UiService : IUiService
         
     private async Task ProcessScheduledDefinitions()
     {
-        var toDefine = _scheduledDefinitions;
+        // Atomically swap to empty - prevents losing items added between read and reset
+        var toDefine = Interlocked.Exchange(ref _scheduledDefinitions,
+            ImmutableList<(ControlBase, RegionName, ControlType)>.Empty);
         if (!toDefine.IsEmpty)
         {
-            _scheduledDefinitions = ImmutableList<(ControlBase, RegionName, ControlType)>.Empty;
             
             // Send DefineControl commands
             foreach (var (control, region, type) in toDefine)
@@ -79,10 +80,11 @@ public class UiService : IUiService
     
     private async Task ProcessScheduledDeletions()
     {
-        var toDelete = _scheduledDeletions;
+        // Atomically swap to empty - prevents losing items added between read and reset
+        var toDelete = Interlocked.Exchange(ref _scheduledDeletions,
+            ImmutableHashSet<ControlId>.Empty);
         if (!toDelete.IsEmpty)
         {
-            _scheduledDeletions = ImmutableHashSet<ControlId>.Empty;
                 
             // Send batch delete command
             await _bus.SendAsync(_sessionId, new DeleteControls { ControlIds = toDelete }, fireAndForget: true);
@@ -164,30 +166,16 @@ public class UiService : IUiService
     }
     internal void ScheduleDelete(ControlId controlId)
     {
-        // Thread-safe addition using immutable collection
-        // Multiple threads can call Dispose simultaneously
-        ImmutableHashSet<ControlId> original;
-        ImmutableHashSet<ControlId> updated;
-        do
-        {
-            original = _scheduledDeletions;
-            updated = original.Add(controlId);
-        } while (Interlocked.CompareExchange(ref _scheduledDeletions, updated, original) != original);
+        // Thread-safe addition using ImmutableInterlocked
+        ImmutableInterlocked.Update(ref _scheduledDeletions, set => set.Add(controlId));
     }
         
     internal void ScheduleDefineControl(ControlBase control, RegionName region, ControlType type)
     {
-        if (control == null)
-            throw new ArgumentNullException(nameof(control));
-        
-        // Thread-safe addition using immutable collection
-        ImmutableList<(ControlBase, RegionName, ControlType)> original;
-        ImmutableList<(ControlBase, RegionName, ControlType)> updated;
-        do
-        {
-            original = _scheduledDefinitions;
-            updated = original.Add((control, region, type));
-        } while (Interlocked.CompareExchange(ref _scheduledDefinitions, updated, original) != original);
+        ArgumentNullException.ThrowIfNull(control);
+
+        // Thread-safe addition using ImmutableInterlocked
+        ImmutableInterlocked.Update(ref _scheduledDefinitions, list => list.Add((control, region, type)));
     }
 
     public async ValueTask DisposeAsync()

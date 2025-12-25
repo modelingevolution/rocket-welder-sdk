@@ -21,6 +21,7 @@ Features:
 
 import io
 import struct
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import BinaryIO, Iterator, List, Optional, Tuple, Union
 
@@ -418,3 +419,134 @@ class SegmentationResultReader:
     def __exit__(self, *args: object) -> None:
         """Context manager exit."""
         pass
+
+
+class ISegmentationResultWriter(ABC):
+    """Interface for writing segmentation results for a single frame."""
+
+    @abstractmethod
+    def append(
+        self,
+        class_id: int,
+        instance_id: int,
+        points: Union[List[Point], PointArray],
+    ) -> None:
+        """
+        Append an instance with contour points.
+
+        Args:
+            class_id: Object class ID (0-255)
+            instance_id: Instance ID within class (0-255)
+            points: List of (x, y) tuples or NumPy array of shape (N, 2)
+        """
+        pass
+
+    @abstractmethod
+    def close(self) -> None:
+        """Flush and close the writer."""
+        pass
+
+    def __enter__(self) -> "ISegmentationResultWriter":
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Context manager exit."""
+        self.close()
+
+
+class ISegmentationResultSink(ABC):
+    """
+    Factory for creating segmentation result writers per frame (transport-agnostic).
+
+    Mirrors C# ISegmentationResultSink interface.
+    """
+
+    @abstractmethod
+    def create_writer(self, frame_id: int, width: int, height: int) -> ISegmentationResultWriter:
+        """
+        Create a writer for the current frame.
+
+        Args:
+            frame_id: Unique frame identifier
+            width: Frame width in pixels
+            height: Frame height in pixels
+
+        Returns:
+            Segmentation result writer for this frame
+        """
+        pass
+
+    @abstractmethod
+    def close(self) -> None:
+        """Close the sink and release resources."""
+        pass
+
+    def __enter__(self) -> "ISegmentationResultSink":
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Context manager exit."""
+        self.close()
+
+
+class SegmentationResultSink(ISegmentationResultSink):
+    """
+    Transport-agnostic segmentation result sink.
+
+    Creates writers for each frame that serialize to the underlying IFrameSink.
+
+    Thread-safe: No (caller must synchronize)
+    """
+
+    def __init__(
+        self,
+        stream: Optional[BinaryIO] = None,
+        *,
+        frame_sink: Optional[IFrameSink] = None,
+        owns_sink: bool = False,
+    ) -> None:
+        """
+        Initialize segmentation result sink.
+
+        Args:
+            stream: BinaryIO stream (convenience - auto-wraps in StreamFrameSink)
+            frame_sink: IFrameSink to write frames to (keyword-only, transport-agnostic)
+            owns_sink: If True, closes the sink on disposal (keyword-only)
+
+        Note:
+            Either stream or frame_sink must be provided (not both).
+            For convenience, stream is the primary parameter (auto-wraps in StreamFrameSink).
+            For transport-agnostic usage, use frame_sink= keyword argument.
+        """
+        if frame_sink is None and stream is None:
+            raise TypeError("Either stream or frame_sink must be provided")
+
+        if frame_sink is not None and stream is not None:
+            raise TypeError("Cannot provide both stream and frame_sink")
+
+        # Convenience: auto-wrap stream in StreamFrameSink
+        if stream is not None:
+            self._frame_sink: IFrameSink = StreamFrameSink(stream, leave_open=False)
+            self._owns_sink = True
+        else:
+            assert frame_sink is not None
+            self._frame_sink = frame_sink
+            self._owns_sink = owns_sink
+
+    def create_writer(self, frame_id: int, width: int, height: int) -> ISegmentationResultWriter:
+        """Create a writer for the current frame."""
+        # SegmentationResultWriter implements the write methods we need
+        # We return it as ISegmentationResultWriter
+        return SegmentationResultWriter(  # type: ignore[return-value]
+            frame_id=frame_id,
+            width=width,
+            height=height,
+            frame_sink=self._frame_sink,
+        )
+
+    def close(self) -> None:
+        """Close the sink and release resources."""
+        if self._owns_sink:
+            self._frame_sink.close()

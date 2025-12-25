@@ -1,5 +1,8 @@
 using System.Drawing;
 using System.Net.WebSockets;
+using ModelingEvolution.EventAggregator.Blazor;
+using ModelingEvolution.EventAggregator.Server;
+using RocketWelder.SDK.Blazor.Sample.App.Components;
 using RocketWelder.SDK.Protocols;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -10,11 +13,23 @@ if (builder.Environment.IsDevelopment())
     builder.WebHost.UseStaticWebAssets();
 }
 
+// Add Razor Components with both Server and WebAssembly interactivity
+builder.Services.AddRazorComponents()
+    .AddInteractiveServerComponents()
+    .AddInteractiveWebAssemblyComponents();
+
+// EventAggregator for Server-to-WASM event forwarding
+builder.Services.AddEventAggregatorBlazor().AsServerSide();
+
 var app = builder.Build();
 
 app.UseWebSockets();
-app.UseBlazorFrameworkFiles();
+
+// Map EventAggregator WebSocket endpoint
+app.MapEventAggregator();
+
 app.UseStaticFiles();
+app.UseAntiforgery();
 
 // WebSocket endpoint for segmentation streaming demo
 app.Map("/ws/segmentation", async context =>
@@ -42,7 +57,10 @@ app.Map("/ws/keypoints", async context =>
     await StreamKeypointsAsync(ws, context.RequestAborted);
 });
 
-app.MapFallbackToFile("index.html");
+app.MapRazorComponents<App>()
+    .AddInteractiveServerRenderMode()
+    .AddInteractiveWebAssemblyRenderMode()
+    .AddAdditionalAssemblies(typeof(RocketWelder.SDK.Blazor.Sample.Client._Imports).Assembly);
 
 app.Run();
 

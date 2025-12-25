@@ -12,9 +12,21 @@ from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
 from .frame_metadata import FRAME_METADATA_SIZE, FrameMetadata, GstVideoFormat
 from .gst_metadata import GstCaps, GstMetadata
+from .keypoints_protocol import (
+    IKeyPointsSink,
+    IKeyPointsWriter,
+    KeyPointsSink,
+    KeyPointsWriter,
+)
 from .opencv_controller import OpenCvController
 from .periodic_timer import PeriodicTimer, PeriodicTimerSync
 from .rocket_welder_client import RocketWelderClient
+from .segmentation_result import (
+    ISegmentationResultSink,
+    ISegmentationResultWriter,
+    SegmentationResultSink,
+    SegmentationResultWriter,
+)
 from .session_id import (
     # Explicit URL functions (PREFERRED - set by rocket-welder2)
     ACTIONS_SINK_URL_ENV,
@@ -74,12 +86,20 @@ __all__ = [
     "GstMetadata",
     "GstVideoFormat",
     "IController",
+    "IKeyPointsSink",
+    "IKeyPointsWriter",
+    "ISegmentationResultSink",
+    "ISegmentationResultWriter",
+    "KeyPointsSink",
+    "KeyPointsWriter",
     "OneWayShmController",
     "OpenCvController",
     "PeriodicTimer",
     "PeriodicTimerSync",
     "Protocol",
     "RocketWelderClient",
+    "SegmentationResultSink",
+    "SegmentationResultWriter",
     "get_actions_url",
     "get_actions_url_from_env",
     "get_configured_nng_urls",
