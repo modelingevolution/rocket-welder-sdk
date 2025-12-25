@@ -1,5 +1,6 @@
 @page "/segmentation"
 @using BlazorBlaze.VectorGraphics
+@using BlazorBlaze.VectorGraphics.Protocol
 @using Microsoft.Extensions.Logging
 @using RocketWelder.SDK.Blazor
 @inject ILoggerFactory LoggerFactory
@@ -71,17 +72,14 @@ Uses two-thread architecture: decode thread + render loop.</p>
 
     protected override void OnInitialized()
     {
-        // Build RenderingStreamV2 with our SegmentationDecoder
-        _stream = new RenderingStreamBuilder(CanvasWidth, CanvasHeight, LoggerFactory)
-            .WithDecoder(stage =>
-            {
-                var decoder = new SegmentationDecoder(stage, layerId: 0);
-                foreach (var kvp in ClassColors)
-                    decoder.Brushes.Add(kvp.Key, kvp.Value);
-                decoder.Thickness = 2;
-                return decoder;
-            })
-            .Build();
+        // Create RenderingStreamV2 with our SegmentationDecoder
+        var pool = new LayerPool(CanvasWidth, CanvasHeight);
+        var stage = new RenderingStage(CanvasWidth, CanvasHeight, pool);
+        var decoder = new SegmentationDecoder(stage, layerId: 0);
+        foreach (var kvp in ClassColors)
+            decoder.Brushes.Add(kvp.Key, kvp.Value);
+        decoder.Thickness = 2;
+        _stream = new RenderingStreamV2(stage, pool, decoder, LoggerFactory, 8 * 1024 * 1024);
     }
 
     private async Task StartStreaming()

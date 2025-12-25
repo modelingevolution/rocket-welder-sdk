@@ -1,5 +1,6 @@
 @page "/keypoints"
 @using BlazorBlaze.VectorGraphics
+@using BlazorBlaze.VectorGraphics.Protocol
 @using Microsoft.Extensions.Logging
 @using RocketWelder.SDK.Blazor
 @inject ILoggerFactory LoggerFactory
@@ -69,20 +70,17 @@ Uses two-thread architecture: decode thread + render loop.</p>
 
     protected override void OnInitialized()
     {
-        // Build RenderingStreamV2 with our KeypointsDecoder
-        _stream = new RenderingStreamBuilder(CanvasWidth, CanvasHeight, LoggerFactory)
-            .WithDecoder(stage =>
-            {
-                _decoder = new KeypointsDecoder(stage, defaultColor: new RgbColor(0, 200, 0), layerId: 0);
-                _decoder.ShowLabels = _showLabels;
-                _decoder.CrossSize = 8;
-                _decoder.Thickness = 2;
-                _decoder.LabelFontSize = 10;
-                // Brushes left empty = single color mode (uses defaultColor)
-                // To use per-keypoint colors: _decoder.Brushes.Add(keypointId, color);
-                return _decoder;
-            })
-            .Build();
+        // Create RenderingStreamV2 with our KeypointsDecoder
+        var pool = new LayerPool(CanvasWidth, CanvasHeight);
+        var stage = new RenderingStage(CanvasWidth, CanvasHeight, pool);
+        _decoder = new KeypointsDecoder(stage, defaultColor: new RgbColor(0, 200, 0), layerId: 0);
+        _decoder.ShowLabels = _showLabels;
+        _decoder.CrossSize = 8;
+        _decoder.Thickness = 2;
+        _decoder.LabelFontSize = 10;
+        // Brushes left empty = single color mode (uses defaultColor)
+        // To use per-keypoint colors: _decoder.Brushes.Add(keypointId, color);
+        _stream = new RenderingStreamV2(stage, pool, _decoder, LoggerFactory, 8 * 1024 * 1024);
     }
 
     private void UpdateShowLabels()
