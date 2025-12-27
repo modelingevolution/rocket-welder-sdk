@@ -45,8 +45,13 @@ jobs:
     - name: Update version in csproj
       run: |
         VERSION="${{ steps.version.outputs.version }}"
+        # Update SDK.Shared version (must be first - no dependencies)
+        cd csharp/RocketWelder.SDK.Shared
+        sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.SDK.Shared.csproj
+        sed -i "s/<PackageVersion>.*<\/PackageVersion>/<PackageVersion>$VERSION<\/PackageVersion>/" RocketWelder.SDK.Shared.csproj
+        cd ..
         # Update SDK.Protocols version
-        cd csharp/RocketWelder.SDK.Protocols
+        cd RocketWelder.SDK.Protocols
         sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.SDK.Protocols.csproj
         sed -i "s/<PackageVersion>.*<\/PackageVersion>/<PackageVersion>$VERSION<\/PackageVersion>/" RocketWelder.SDK.Protocols.csproj
         cd ..
@@ -68,6 +73,20 @@ jobs:
       working-directory: ./csharp
       run: dotnet build --configuration Release --no-restore
     
+    - name: Pack SDK.Shared
+      working-directory: ./csharp
+      run: dotnet pack RocketWelder.SDK.Shared/RocketWelder.SDK.Shared.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
+
+    - name: Push SDK.Shared to NuGet
+      working-directory: ./csharp
+      run: |
+        dotnet nuget push ./nupkg/RocketWelder.SDK.Shared.*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
     - name: Pack SDK.Protocols
       working-directory: ./csharp
       run: dotnet pack RocketWelder.SDK.Protocols/RocketWelder.SDK.Protocols.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
@@ -115,6 +134,12 @@ jobs:
         echo "## C# Packages Published to NuGet" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### RocketWelder.SDK.Shared" >> $GITHUB_STEP_SUMMARY
+        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Shared" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo 'dotnet add package RocketWelder.SDK.Shared --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### RocketWelder.SDK.Protocols" >> $GITHUB_STEP_SUMMARY
         echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Protocols" >> $GITHUB_STEP_SUMMARY

@@ -1,9 +1,9 @@
-using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using ModelingEvolution.JsonParsableConverter;
 
-namespace RocketWelder.SDK;
+namespace RocketWelder.SDK.Shared;
 
 /// <summary>
 /// Strongly-typed identifier for streaming sessions.
@@ -15,11 +15,13 @@ namespace RocketWelder.SDK;
 /// Value is intentionally NOT exposed - use ToString() for string representation.
 /// </summary>
 [JsonConverter(typeof(JsonParsableConverter<SessionStreamId>))]
+[DataContract]
 public readonly record struct SessionStreamId : IParsable<SessionStreamId>, ISpanParsable<SessionStreamId>
 {
     private const string Prefix = "ps-";
-    private const int PrefixLength = 3; // "ps-"
+    private const int PrefixLength = 3;
 
+    [DataMember(Order = 1)]
     private readonly Guid _value;
 
     private SessionStreamId(Guid value) => _value = value;
@@ -59,7 +61,7 @@ public readonly record struct SessionStreamId : IParsable<SessionStreamId>, ISpa
     public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out SessionStreamId result)
     {
         result = default;
-        if (s is null || s.Length < PrefixLength + 32) // prefix + min guid length
+        if (s is null || s.Length < PrefixLength + 32)
             return false;
         if (!s.StartsWith(Prefix, StringComparison.Ordinal))
             return false;
@@ -95,6 +97,8 @@ public readonly record struct SessionStreamId : IParsable<SessionStreamId>, ISpa
         return true;
     }
 
-    // Implicit conversion to string for convenience
+    /// <summary>
+    /// Implicit conversion to string for convenience.
+    /// </summary>
     public static implicit operator string(SessionStreamId id) => id.ToString();
 }
