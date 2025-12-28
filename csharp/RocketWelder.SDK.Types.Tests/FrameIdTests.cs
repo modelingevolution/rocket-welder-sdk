@@ -1,8 +1,8 @@
 using System.Text.Json;
 using FluentAssertions;
-using RocketWelder.SDK.Shared;
+using RocketWelder.SDK.Types;
 
-namespace RocketWelder.SDK.Shared.Tests;
+namespace RocketWelder.SDK.Types.Tests;
 
 public class FrameIdTests
 {

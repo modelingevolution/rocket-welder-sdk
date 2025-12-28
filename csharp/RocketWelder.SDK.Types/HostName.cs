@@ -3,7 +3,7 @@ using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using ModelingEvolution.JsonParsableConverter;
 
-namespace RocketWelder.SDK.Shared;
+namespace RocketWelder.SDK.Types;
 
 /// <summary>
 /// Strongly-typed hostname identifier with case-insensitive comparison.

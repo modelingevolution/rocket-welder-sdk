@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Shared;
+namespace RocketWelder.SDK.Types;
 
 /// <summary>
 /// Video resolution (width x height).

@@ -5,7 +5,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using ModelingEvolution.JsonParsableConverter;
 
-namespace RocketWelder.SDK.Shared;
+namespace RocketWelder.SDK.Types;
 
 /// <summary>
 /// Uniquely identifies a video recording by hostname, camera number, and creation time.

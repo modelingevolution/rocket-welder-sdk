@@ -3,7 +3,7 @@ using System.Runtime.Serialization;
 using System.Text.Json.Serialization;
 using ModelingEvolution.JsonParsableConverter;
 
-namespace RocketWelder.SDK.Shared;
+namespace RocketWelder.SDK.Types;
 
 /// <summary>
 /// Represents a video recording device in the form of {HostName}/cam-{CameraNumber} or {HostName}/file-{FileName}.

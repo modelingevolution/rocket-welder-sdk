@@ -1,6 +1,6 @@
-# RocketWelder.SDK.Shared
+# RocketWelder.SDK.Types
 
-Shared value types and abstractions for the RocketWelder SDK ecosystem.
+Value types and abstractions for the RocketWelder SDK ecosystem.
 
 ## Purpose
 

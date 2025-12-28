@@ -32,9 +32,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Server", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Server.Tests", "RocketWelder.SDK.Server.Tests\RocketWelder.SDK.Server.Tests.csproj", "{24850015-5A73-4989-9B85-FB8F7FA486C0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Shared", "RocketWelder.SDK.Shared\RocketWelder.SDK.Shared.csproj", "{4D0B3BF6-CEA9-4AC6-8976-F8AB9231175A}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Types", "RocketWelder.SDK.Types\RocketWelder.SDK.Types.csproj", "{4D0B3BF6-CEA9-4AC6-8976-F8AB9231175A}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Shared.Tests", "RocketWelder.SDK.Shared.Tests\RocketWelder.SDK.Shared.Tests.csproj", "{699A4713-57FD-43EB-8963-4DE8BFF21131}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Types.Tests", "RocketWelder.SDK.Types.Tests\RocketWelder.SDK.Types.Tests.csproj", "{699A4713-57FD-43EB-8963-4DE8BFF21131}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

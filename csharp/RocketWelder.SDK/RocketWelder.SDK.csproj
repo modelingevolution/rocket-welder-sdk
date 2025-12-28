@@ -23,7 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RocketWelder.SDK.Protocols\RocketWelder.SDK.Protocols.csproj" />
-    <ProjectReference Include="..\RocketWelder.SDK.Shared\RocketWelder.SDK.Shared.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Types\RocketWelder.SDK.Types.csproj" />
   </ItemGroup>
 
   <ItemGroup>

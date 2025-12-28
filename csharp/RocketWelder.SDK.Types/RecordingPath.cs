@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Shared;
+namespace RocketWelder.SDK.Types;
 
 /// <summary>
 /// Represents paths to a video recording's data and index files.
