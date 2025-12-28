@@ -25,11 +25,11 @@ internal sealed class SegmentationDataContext : ISegmentationDataContext
     }
 
     /// <summary>
-    /// Commits the data context by flushing the underlying writer.
+    /// Commits the data context by disposing the underlying writer.
     /// Called automatically when the processing delegate returns.
     /// </summary>
     internal void Commit()
     {
-        _writer.Flush();
+        _writer.Dispose();
     }
 }

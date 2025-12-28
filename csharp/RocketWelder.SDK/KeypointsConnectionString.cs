@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
+using RocketWelder.SDK.Internal;
 
 namespace RocketWelder.SDK;
 
@@ -88,22 +89,7 @@ public readonly record struct KeypointsConnectionString : IParsable<KeypointsCon
             return false;
 
         var parameters = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-
-        // Extract query parameters
-        var queryIndex = s.IndexOf('?');
-        string endpointPart = s;
-        if (queryIndex >= 0)
-        {
-            var queryString = s[(queryIndex + 1)..];
-            endpointPart = s[..queryIndex];
-
-            foreach (var pair in queryString.Split('&'))
-            {
-                var keyValue = pair.Split('=', 2);
-                if (keyValue.Length == 2)
-                    parameters[keyValue[0].ToLowerInvariant()] = keyValue[1];
-            }
-        }
+        ConnectionStringParser.ExtractQueryParameters(s, out var endpointPart, parameters);
 
         // Parse protocol and address
         // Format: protocol://path (e.g., nng+push+ipc://tmp/foo, file:///path, socket:///tmp/sock)

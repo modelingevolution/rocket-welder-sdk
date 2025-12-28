@@ -34,7 +34,7 @@ public class TransportRoundTripTests
 
     /// <summary>
     /// Helper to read all Keypoints frames from a stream.
-    /// Returns DeltaFrame&lt;KeyPoint&gt; which includes IsDelta metadata.
+    /// Returns DeltaFrame&lt;Keypoint&gt; which includes IsDelta metadata.
     /// </summary>
     private async Task<List<DeltaKeypointsFrame>> ReadAllKeypointsFramesAsync(Stream stream)
     {

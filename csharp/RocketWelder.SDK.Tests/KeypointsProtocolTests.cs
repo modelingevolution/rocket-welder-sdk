@@ -38,7 +38,7 @@ public class KeypointsProtocolTests
 
     /// <summary>
     /// Helper to read all frames from a stream using the streaming API.
-    /// Returns DeltaFrame&lt;KeyPoint&gt; which includes IsDelta metadata.
+    /// Returns DeltaFrame&lt;Keypoint&gt; which includes IsDelta metadata.
     /// </summary>
     private async Task<List<DeltaKeypointsFrame>> ReadAllFramesAsync(Stream stream)
     {
@@ -208,7 +208,7 @@ public class KeypointsProtocolTests
     }
 
     [Fact]
-    public async Task KeyPoint_HasCorrectProperties()
+    public async Task Keypoint_HasCorrectProperties()
     {
         // Arrange
         using var stream = new MemoryStream();

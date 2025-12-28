@@ -12,13 +12,13 @@ public interface IKeypointsSchema
     /// ID is auto-assigned sequentially (0, 1, 2, ...).
     /// </summary>
     /// <param name="name">Human-readable name (e.g., "nose", "left_eye")</param>
-    /// <returns>KeyPointDefinition struct for use in data contexts</returns>
-    KeyPointDefinition DefinePoint(string name);
+    /// <returns>KeypointDefinition struct for use in data contexts</returns>
+    KeypointDefinition DefinePoint(string name);
 
     /// <summary>
     /// Gets all defined keypoints.
     /// </summary>
-    IReadOnlyList<KeyPointDefinition> DefinedPoints { get; }
+    IReadOnlyList<KeypointDefinition> DefinedPoints { get; }
 
     /// <summary>
     /// Gets metadata as JSON for readers/consumers.

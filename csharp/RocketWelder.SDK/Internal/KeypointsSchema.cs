@@ -10,19 +10,19 @@ namespace RocketWelder.SDK.Internal;
 /// </summary>
 internal sealed class KeypointsSchema : IKeypointsSchema
 {
-    private readonly List<KeyPointDefinition> _points = new();
+    private readonly List<KeypointDefinition> _points = new();
     private int _nextId;
 
-    public KeyPointDefinition DefinePoint(string name)
+    public KeypointDefinition DefinePoint(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        var point = new KeyPointDefinition(_nextId++, name);
+        var point = new KeypointDefinition(_nextId++, name);
         _points.Add(point);
         return point;
     }
 
-    public IReadOnlyList<KeyPointDefinition> DefinedPoints => _points;
+    public IReadOnlyList<KeypointDefinition> DefinedPoints => _points;
 
     public string GetMetadataJson()
     {

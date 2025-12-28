@@ -63,7 +63,7 @@ public interface IKeypointsWriter : IDisposable, IAsyncDisposable
 /// <summary>
 /// Streaming reader for keypoints via IAsyncEnumerable.
 /// Designed for real-time streaming over TCP/WebSocket/NNG.
-/// Returns DeltaFrame&lt;KeyPoint&gt; which includes IsDelta for streaming context.
+/// Returns DeltaFrame&lt;Keypoint&gt; which includes IsDelta for streaming context.
 /// </summary>
 public interface IKeypointsSource : IDisposable, IAsyncDisposable
 {
@@ -93,14 +93,14 @@ public readonly record struct KeypointsFrame(ulong FrameId, ReadOnlyMemory<Keypo
     public int Count => Keypoints.Length;
 }
 
-// KeyPoint type is now consolidated into RocketWelder.SDK.Protocols.Keypoint
+// Keypoint type is now consolidated into RocketWelder.SDK.Protocols.Keypoint
 // Confidence implicitly converts to float. Use .Position for Point access.
 
 /// <summary>
 /// Streaming reader for keypoints.
 /// Reads frames from IFrameSource and yields them via IAsyncEnumerable.
 /// Handles master/delta frame decoding automatically using KeypointsProtocol.
-/// Returns DeltaFrame&lt;KeyPoint&gt; with decoded absolute values and IsDelta metadata.
+/// Returns DeltaFrame&lt;Keypoint&gt; with decoded absolute values and IsDelta metadata.
 /// </summary>
 public class KeypointsSource : IKeypointsSource
 {
@@ -209,7 +209,7 @@ public class KeypointsSeries
     /// Returns enumerable of (frameId, point, confidence) tuples.
     /// Lazily evaluated - efficient for large series.
     /// </summary>
-    public IEnumerable<(ulong frameId, Point point, float confidence)> GetKeyPointTrajectory(int keypointId)
+    public IEnumerable<(ulong frameId, Point point, float confidence)> GetKeypointTrajectory(int keypointId)
     {
         foreach (var (frameId, keypoints) in _index)
         {
@@ -225,14 +225,14 @@ public class KeypointsSeries
     /// Returns enumerable of (frameId, point, confidence) tuples.
     /// Lazily evaluated - efficient for large series.
     /// </summary>
-    public IEnumerable<(ulong frameId, Point point, float confidence)> GetKeyPointTrajectory(string keypointName)
+    public IEnumerable<(ulong frameId, Point point, float confidence)> GetKeypointTrajectory(string keypointName)
     {
         if (!Points.TryGetValue(keypointName, out var keypointId))
         {
             yield break;
         }
 
-        foreach (var item in GetKeyPointTrajectory(keypointId))
+        foreach (var item in GetKeypointTrajectory(keypointId))
         {
             yield return item;
         }
@@ -247,7 +247,7 @@ public class KeypointsSeries
     /// Get keypoint position and confidence at specific frame.
     /// Returns null if frame or keypoint not found.
     /// </summary>
-    public (Point point, float confidence)? GetKeyPoint(ulong frameId, int keypointId)
+    public (Point point, float confidence)? GetKeypoint(ulong frameId, int keypointId)
     {
         if (_index.TryGetValue(frameId, out var keypoints) &&
             keypoints.TryGetValue(keypointId, out var data))
@@ -261,11 +261,11 @@ public class KeypointsSeries
     /// Get keypoint position and confidence at specific frame by name.
     /// Returns null if frame or keypoint not found.
     /// </summary>
-    public (Point point, float confidence)? GetKeyPoint(ulong frameId, string keypointName)
+    public (Point point, float confidence)? GetKeypoint(ulong frameId, string keypointName)
     {
         if (Points.TryGetValue(keypointName, out var keypointId))
         {
-            return GetKeyPoint(frameId, keypointId);
+            return GetKeypoint(frameId, keypointId);
         }
         return null;
     }

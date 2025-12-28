@@ -197,7 +197,7 @@ public class BallDetectorE2ETests : IDisposable
         _output.WriteLine($"Keypoints socket file exists: {_keypointsSocketPath}");
 
         // Connect to keypoints socket
-        await server.ConnectToKeyPointsSocketAsync(_keypointsSocketPath, TimeSpan.FromSeconds(10), cts.Token);
+        await server.ConnectToKeypointsSocketAsync(_keypointsSocketPath, TimeSpan.FromSeconds(10), cts.Token);
         _output.WriteLine("Connected to keypoints socket");
 
         // Wait for segmentation socket file
@@ -267,7 +267,7 @@ public class BallDetectorE2ETests : IDisposable
 
             // Read keypoints
             await Task.Delay(100, cts.Token); // Give Python time to write results
-            var kpFrame = server.TryReadKeyPointsFrame(TimeSpan.FromSeconds(5));
+            var kpFrame = server.TryReadKeypointsFrame(TimeSpan.FromSeconds(5));
             if (kpFrame.HasValue)
             {
                 receivedKeypoints.Add(kpFrame.Value);
@@ -438,7 +438,7 @@ public class BallDetectorE2ETests : IDisposable
         await Task.Delay(500, cts.Token);
 
         // Connect to sockets
-        await server.ConnectToKeyPointsSocketAsync(_keypointsSocketPath, TimeSpan.FromSeconds(5), cts.Token);
+        await server.ConnectToKeypointsSocketAsync(_keypointsSocketPath, TimeSpan.FromSeconds(5), cts.Token);
         _output.WriteLine("Connected to keypoints socket");
 
         await server.ConnectToSegmentationSocketAsync(_segmentationSocketPath, TimeSpan.FromSeconds(5), cts.Token);
@@ -452,7 +452,7 @@ public class BallDetectorE2ETests : IDisposable
         {
             await Task.Delay(200, cts.Token);
 
-            var kp = server.TryReadKeyPointsFrame(TimeSpan.FromSeconds(2));
+            var kp = server.TryReadKeypointsFrame(TimeSpan.FromSeconds(2));
             if (kp.HasValue)
             {
                 receivedKeypoints.Add(kp.Value);
