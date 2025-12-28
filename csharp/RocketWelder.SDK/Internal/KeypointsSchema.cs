@@ -6,9 +6,9 @@ using System.Text.Json;
 namespace RocketWelder.SDK.Internal;
 
 /// <summary>
-/// Implementation of <see cref="IKeyPointsSchema"/>.
+/// Implementation of <see cref="IKeypointsSchema"/>.
 /// </summary>
-internal sealed class KeyPointsSchema : IKeyPointsSchema
+internal sealed class KeypointsSchema : IKeypointsSchema
 {
     private readonly List<KeyPointDefinition> _points = new();
     private int _nextId;

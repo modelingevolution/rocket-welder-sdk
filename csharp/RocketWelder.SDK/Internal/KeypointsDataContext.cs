@@ -5,13 +5,13 @@ namespace RocketWelder.SDK.Internal;
 
 /// <summary>
 /// Unit of Work implementation for keypoints data.
-/// Wraps an <see cref="IKeyPointsWriter"/> and auto-commits on Commit().
+/// Wraps an <see cref="IKeypointsWriter"/> and auto-commits on Commit().
 /// </summary>
-internal sealed class KeyPointsDataContext : IKeyPointsDataContext
+internal sealed class KeypointsDataContext : IKeypointsDataContext
 {
-    private readonly IKeyPointsWriter _writer;
+    private readonly IKeypointsWriter _writer;
 
-    public KeyPointsDataContext(IKeyPointsWriter writer, ulong frameId)
+    public KeypointsDataContext(IKeypointsWriter writer, ulong frameId)
     {
         _writer = writer ?? throw new ArgumentNullException(nameof(writer));
         FrameId = frameId;

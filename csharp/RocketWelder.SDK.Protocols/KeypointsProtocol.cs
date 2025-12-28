@@ -56,6 +56,8 @@ public static class KeypointsProtocol
 
     /// <summary>
     /// Write a delta frame (keypoint positions relative to previous frame).
+    /// Assumes keypoints are in matching order (current[i].Id == previous[i].Id).
+    /// For variable keypoint counts, use the overload with previousLookup dictionary.
     /// </summary>
     /// <returns>Number of bytes written.</returns>
     public static int WriteDeltaFrame(Span<byte> buffer, ulong frameId,
@@ -76,6 +78,44 @@ public static class KeypointsProtocol
             writer.WriteZigZagVarint(curr.Position.X - prev.Position.X);
             writer.WriteZigZagVarint(curr.Position.Y - prev.Position.Y);
             writer.WriteZigZagVarint((ushort)curr.Confidence - (ushort)prev.Confidence);
+        }
+
+        return writer.Position;
+    }
+
+    /// <summary>
+    /// Write a delta frame with variable keypoint counts.
+    /// Keypoints are matched by ID using the previousLookup dictionary.
+    /// New keypoints (not in previous) are written as absolute values (zigzag encoded).
+    /// </summary>
+    /// <returns>Number of bytes written.</returns>
+    public static int WriteDeltaFrame(Span<byte> buffer, ulong frameId,
+        ReadOnlySpan<Keypoint> current, IReadOnlyDictionary<int, Keypoint> previousLookup)
+    {
+        var writer = new BinaryFrameWriter(buffer);
+
+        writer.WriteByte(DeltaFrameType);
+        writer.WriteUInt64LE(frameId);
+        writer.WriteVarint((uint)current.Length);
+
+        foreach (var curr in current)
+        {
+            writer.WriteVarint((uint)curr.Id);
+
+            if (previousLookup.TryGetValue(curr.Id, out var prev))
+            {
+                // Existing keypoint - write delta
+                writer.WriteZigZagVarint(curr.Position.X - prev.Position.X);
+                writer.WriteZigZagVarint(curr.Position.Y - prev.Position.Y);
+                writer.WriteZigZagVarint((ushort)curr.Confidence - (ushort)prev.Confidence);
+            }
+            else
+            {
+                // New keypoint - write absolute value as zigzag (as if previous was 0)
+                writer.WriteZigZagVarint(curr.Position.X);
+                writer.WriteZigZagVarint(curr.Position.Y);
+                writer.WriteZigZagVarint((ushort)curr.Confidence);
+            }
         }
 
         return writer.Position;
@@ -171,17 +211,89 @@ public static class KeypointsProtocol
                 var deltaY = reader.ReadZigZagVarint();
                 var deltaConf = reader.ReadZigZagVarint();
 
-                if (!prevDict!.TryGetValue(id, out var prev))
+                if (prevDict!.TryGetValue(id, out var prev))
                 {
-                    throw new InvalidOperationException($"No previous keypoint found for id {id}");
+                    // Existing keypoint - apply delta
+                    keypoints[i] = new Keypoint(
+                        id,
+                        prev.Position.X + deltaX,
+                        prev.Position.Y + deltaY,
+                        (ushort)Math.Clamp((ushort)prev.Confidence + deltaConf, 0, ushort.MaxValue)
+                    );
                 }
+                else
+                {
+                    // New keypoint - delta values are actually absolute
+                    keypoints[i] = new Keypoint(
+                        id,
+                        deltaX,
+                        deltaY,
+                        (ushort)Math.Clamp(deltaConf, 0, ushort.MaxValue)
+                    );
+                }
+            }
+        }
 
-                keypoints[i] = new Keypoint(
-                    id,
-                    prev.Position.X + deltaX,
-                    prev.Position.Y + deltaY,
-                    (ushort)Math.Clamp((ushort)prev.Confidence + deltaConf, 0, ushort.MaxValue)
-                );
+        return new DeltaFrame<Keypoint>(frameId, isDelta, keypoints);
+    }
+
+    /// <summary>
+    /// Read a keypoints frame with previous state for delta decoding.
+    /// More efficient for streaming scenarios where previous frame is already a dictionary.
+    /// </summary>
+    /// <param name="data">The binary data to read.</param>
+    /// <param name="previousLookup">Previous frame keypoints dictionary for delta decoding. Pass null for master frames.</param>
+    public static DeltaFrame<Keypoint> ReadWithPreviousState(
+        ReadOnlySpan<byte> data,
+        IReadOnlyDictionary<int, Keypoint>? previousLookup)
+    {
+        var reader = new BinaryFrameReader(data);
+
+        var frameType = reader.ReadByte();
+        bool isDelta = frameType == DeltaFrameType;
+        var frameId = reader.ReadUInt64LE();
+        var count = (int)reader.ReadVarint();
+
+        var keypoints = new Keypoint[count];
+
+        for (int i = 0; i < count; i++)
+        {
+            var id = (int)reader.ReadVarint();
+
+            if (!isDelta)
+            {
+                int x = reader.ReadInt32LE();
+                int y = reader.ReadInt32LE();
+                var confidence = reader.ReadUInt16LE();
+
+                keypoints[i] = new Keypoint(id, x, y, confidence);
+            }
+            else
+            {
+                var deltaX = reader.ReadZigZagVarint();
+                var deltaY = reader.ReadZigZagVarint();
+                var deltaConf = reader.ReadZigZagVarint();
+
+                if (previousLookup != null && previousLookup.TryGetValue(id, out var prev))
+                {
+                    // Existing keypoint - apply delta
+                    keypoints[i] = new Keypoint(
+                        id,
+                        prev.Position.X + deltaX,
+                        prev.Position.Y + deltaY,
+                        (ushort)Math.Clamp((ushort)prev.Confidence + deltaConf, 0, ushort.MaxValue)
+                    );
+                }
+                else
+                {
+                    // New keypoint - delta values are actually absolute
+                    keypoints[i] = new Keypoint(
+                        id,
+                        deltaX,
+                        deltaY,
+                        (ushort)Math.Clamp(deltaConf, 0, ushort.MaxValue)
+                    );
+                }
             }
         }
 

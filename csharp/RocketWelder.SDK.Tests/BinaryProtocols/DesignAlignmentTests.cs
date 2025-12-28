@@ -13,7 +13,7 @@ namespace RocketWelder.SDK.Tests.BinaryProtocols;
 /// TDD tests to validate BinaryProtocol API design for round-trip testing.
 ///
 /// GOAL: Enable cross-platform round-trip testing:
-/// - SDK (Linux container) encodes with SegmentationResultWriter/KeyPointsWriter
+/// - SDK (Linux container) encodes with SegmentationResultWriter/KeypointsWriter
 /// - BinaryProtocol (WASM-compatible) can decode the bytes
 /// - Assert the decoded values match what was encoded
 ///

@@ -482,10 +482,10 @@ namespace RocketWelder.SDK
     /// No-op keypoints writer used when GstCaps are not yet available.
     /// All operations are ignored silently.
     /// </summary>
-    internal sealed class NoOpKeyPointsWriter : IKeyPointsWriter
+    internal sealed class NoOpKeypointsWriter : IKeypointsWriter
     {
-        public static readonly NoOpKeyPointsWriter Instance = new();
-        private NoOpKeyPointsWriter() { }
+        public static readonly NoOpKeypointsWriter Instance = new();
+        private NoOpKeypointsWriter() { }
 
         public void Append(int keypointId, int x, int y, float confidence) { }
         public void Append(int keypointId, Point p, float confidence) { }
@@ -515,13 +515,13 @@ namespace RocketWelder.SDK
     /// Null sink that discards all keypoints data.
     /// Used when no sink URL is configured (debugging/development).
     /// </summary>
-    internal sealed class NullKeyPointsSink : IKeyPointsSink
+    internal sealed class NullKeypointsSink : IKeypointsSink
     {
-        public static readonly NullKeyPointsSink Instance = new();
-        private NullKeyPointsSink() { }
+        public static readonly NullKeypointsSink Instance = new();
+        private NullKeypointsSink() { }
 
-        public IKeyPointsWriter CreateWriter(ulong frameId)
-            => NoOpKeyPointsWriter.Instance;
+        public IKeypointsWriter CreateWriter(ulong frameId)
+            => NoOpKeypointsWriter.Instance;
 
         public void Dispose() { }
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
@@ -630,7 +630,7 @@ namespace RocketWelder.SDK
     /// <b>Example URLs:</b>
     /// <list type="bullet">
     ///   <item><description>Segmentation: <c>ipc:///tmp/ai-container-segmentation.ipc</c></description></item>
-    ///   <item><description>KeyPoints: <c>ipc:///tmp/ai-container-keypoints.ipc</c></description></item>
+    ///   <item><description>Keypoints: <c>ipc:///tmp/ai-container-keypoints.ipc</c></description></item>
     /// </list>
     /// </para>
     /// <para>
@@ -640,7 +640,7 @@ namespace RocketWelder.SDK
     ///   "RocketWelder": {
     ///     "ConnectionString": "shm://video-buffer?mode=duplex",
     ///     "SegmentationSinkUrl": "ipc:///tmp/ai-segmentation.ipc",
-    ///     "KeyPointsSinkUrl": "ipc:///tmp/ai-keypoints.ipc"
+    ///     "KeypointsSinkUrl": "ipc:///tmp/ai-keypoints.ipc"
     ///   }
     /// }
     /// </code>
@@ -667,7 +667,7 @@ namespace RocketWelder.SDK
         /// The Python AI container publishes keypoints to this URL.
         /// rocket-welder2 subscribes to receive the results.
         /// </summary>
-        public const string KeyPointsSinkUrl = "RocketWelder:KeyPointsSinkUrl";
+        public const string KeypointsSinkUrl = "RocketWelder:KeypointsSinkUrl";
 
         /// <summary>
         /// Environment variable name for segmentation sink URL (alternative to config).
@@ -677,7 +677,7 @@ namespace RocketWelder.SDK
         /// <summary>
         /// Environment variable name for keypoints sink URL (alternative to config).
         /// </summary>
-        public const string KeyPointsSinkUrlEnv = "KEYPOINTS_SINK_URL";
+        public const string KeypointsSinkUrlEnv = "KEYPOINTS_SINK_URL";
 
         /// <summary>
         /// Configuration key for the graphics sink URL.
@@ -699,14 +699,14 @@ namespace RocketWelder.SDK
     /// <remarks>
     /// <para>
     /// <b>NNG Pub/Sub Integration:</b>
-    /// When using the Start overload with ISegmentationResultWriter and IKeyPointsWriter,
+    /// When using the Start overload with ISegmentationResultWriter and IKeypointsWriter,
     /// the client creates NNG Publisher sinks for streaming AI results.
     /// </para>
     /// <para>
     /// <b>Configuration:</b> Set sink URLs via IConfiguration or environment variables:
     /// <list type="bullet">
     ///   <item><description><c>RocketWelder:SegmentationSinkUrl</c> or <c>SEGMENTATION_SINK_URL</c></description></item>
-    ///   <item><description><c>RocketWelder:KeyPointsSinkUrl</c> or <c>KEYPOINTS_SINK_URL</c></description></item>
+    ///   <item><description><c>RocketWelder:KeypointsSinkUrl</c> or <c>KEYPOINTS_SINK_URL</c></description></item>
     /// </list>
     /// </para>
     /// </remarks>
@@ -726,7 +726,7 @@ namespace RocketWelder.SDK
 
         // Sinks for AI output (lazily created when needed)
         private ISegmentationResultSink? _segmentationSink;
-        private IKeyPointsSink? _keyPointsSink;
+        private IKeypointsSink? _keyPointsSink;
         private IStageSink? _stageSink;
 
         /// <summary>
@@ -795,10 +795,10 @@ namespace RocketWelder.SDK
         /// <summary>
         /// Gets the keypoints sink URL from configuration or environment.
         /// </summary>
-        private string? GetKeyPointsSinkUrl()
+        private string? GetKeypointsSinkUrl()
         {
-            return _configuration?[RocketWelderConfigKeys.KeyPointsSinkUrl]
-                ?? Environment.GetEnvironmentVariable(RocketWelderConfigKeys.KeyPointsSinkUrlEnv);
+            return _configuration?[RocketWelderConfigKeys.KeypointsSinkUrl]
+                ?? Environment.GetEnvironmentVariable(RocketWelderConfigKeys.KeypointsSinkUrlEnv);
         }
 
         /// <summary>
@@ -807,7 +807,7 @@ namespace RocketWelder.SDK
         private void LogNngConfiguration()
         {
             var segUrl = GetSegmentationSinkUrl();
-            var kpUrl = GetKeyPointsSinkUrl();
+            var kpUrl = GetKeypointsSinkUrl();
 
             _logger.LogInformation(
                 "Sink URLs configured: seg={SegUrl}, kp={KpUrl}",
@@ -842,22 +842,22 @@ namespace RocketWelder.SDK
         /// Creates or returns the keypoints sink.
         /// Returns NullSink when URL is not configured (for debugging/development).
         /// </summary>
-        private IKeyPointsSink GetOrCreateKeyPointsSink()
+        private IKeypointsSink GetOrCreateKeypointsSink()
         {
             if (_keyPointsSink != null)
                 return _keyPointsSink;
 
-            var url = GetKeyPointsSinkUrl();
+            var url = GetKeypointsSinkUrl();
             if (string.IsNullOrWhiteSpace(url))
             {
-                _logger.LogInformation("KeyPoints sink URL not configured - using NullSink (data will be discarded)");
-                return NullKeyPointsSink.Instance;
+                _logger.LogInformation("Keypoints sink URL not configured - using NullSink (data will be discarded)");
+                return NullKeypointsSink.Instance;
             }
 
             _logger.LogInformation("Creating keypoints sink at: {Url}", url);
-            var cs = KeyPointsConnectionString.Parse(url, null);
+            var cs = KeypointsConnectionString.Parse(url, null);
             var frameSink = Transport.FrameSinkFactory.Create(cs.Protocol, cs.Address, _logger);
-            _keyPointsSink = new KeyPointsSink(frameSink, masterFrameInterval: 300, ownsSink: true);
+            _keyPointsSink = new KeypointsSink(frameSink, masterFrameInterval: 300, ownsSink: true);
             return _keyPointsSink;
         }
 
@@ -1112,7 +1112,7 @@ namespace RocketWelder.SDK
         /// <b>Configuration Required:</b>
         /// <list type="bullet">
         ///   <item><description><c>RocketWelder:SegmentationSinkUrl</c> or <c>SEGMENTATION_SINK_URL</c></description></item>
-        ///   <item><description><c>RocketWelder:KeyPointsSinkUrl</c> or <c>KEYPOINTS_SINK_URL</c></description></item>
+        ///   <item><description><c>RocketWelder:KeypointsSinkUrl</c> or <c>KEYPOINTS_SINK_URL</c></description></item>
         /// </list>
         /// </para>
         /// <para>
@@ -1128,7 +1128,7 @@ namespace RocketWelder.SDK
         ///         segWriter.Append(instance.ClassId, instance.InstanceId, instance.ContourPoints);
         ///
         ///     // Write keypoints
-        ///     foreach (var kp in result.KeyPoints)
+        ///     foreach (var kp in result.Keypoints)
         ///         kpWriter.Append(kp.Id, kp.X, kp.Y, kp.Confidence);
         ///
         ///     // Draw output
@@ -1139,7 +1139,7 @@ namespace RocketWelder.SDK
         /// </remarks>
         /// <param name="onFrame">Callback receiving input Mat, segmentation writer, keypoints writer, and output Mat</param>
         /// <param name="cancellationToken">Optional cancellation token</param>
-        public void Start(Action<Mat, ISegmentationResultWriter, IKeyPointsWriter, Mat> onFrame, CancellationToken cancellationToken = default)
+        public void Start(Action<Mat, ISegmentationResultWriter, IKeypointsWriter, Mat> onFrame, CancellationToken cancellationToken = default)
         {
             if (IsRunning)
                 throw new InvalidOperationException("Client is already running");
@@ -1153,7 +1153,7 @@ namespace RocketWelder.SDK
 
                 // Initialize sinks (will throw if not configured)
                 var segSink = GetOrCreateSegmentationSink();
-                var kpSink = GetOrCreateKeyPointsSink();
+                var kpSink = GetOrCreateKeypointsSink();
 
                 // Wrapper callback that creates per-frame writers
                 // Controller provides FrameMetadata (frame number, timestamp) and Mats
@@ -1165,7 +1165,7 @@ namespace RocketWelder.SDK
                     if (caps == null)
                     {
                         _logger.LogWarning("GstCaps not available for frame {FrameNumber}, skipping AI output", frameMetadata.FrameNumber);
-                        onFrame(inputMat, NoOpSegmentationWriter.Instance, NoOpKeyPointsWriter.Instance, outputMat);
+                        onFrame(inputMat, NoOpSegmentationWriter.Instance, NoOpKeypointsWriter.Instance, outputMat);
                         return;
                     }
 
@@ -1209,7 +1209,7 @@ namespace RocketWelder.SDK
         /// <b>Configuration Required:</b>
         /// <list type="bullet">
         ///   <item><description><c>RocketWelder:SegmentationSinkUrl</c> or <c>SEGMENTATION_SINK_URL</c></description></item>
-        ///   <item><description><c>RocketWelder:KeyPointsSinkUrl</c> or <c>KEYPOINTS_SINK_URL</c></description></item>
+        ///   <item><description><c>RocketWelder:KeypointsSinkUrl</c> or <c>KEYPOINTS_SINK_URL</c></description></item>
         ///   <item><description><c>RocketWelder:GraphicsSinkUrl</c> or <c>GRAPHICS_SINK_URL</c></description></item>
         /// </list>
         /// </para>
@@ -1239,7 +1239,7 @@ namespace RocketWelder.SDK
         /// </remarks>
         /// <param name="onFrame">Callback receiving input Mat, segmentation writer, keypoints writer, stage writer, and output Mat</param>
         /// <param name="cancellationToken">Optional cancellation token</param>
-        public void Start(Action<Mat, ISegmentationResultWriter, IKeyPointsWriter, IStageWriter, Mat> onFrame, CancellationToken cancellationToken = default)
+        public void Start(Action<Mat, ISegmentationResultWriter, IKeypointsWriter, IStageWriter, Mat> onFrame, CancellationToken cancellationToken = default)
         {
             if (IsRunning)
                 throw new InvalidOperationException("Client is already running");
@@ -1254,7 +1254,7 @@ namespace RocketWelder.SDK
 
                 // Initialize sinks (will throw if not configured)
                 var segSink = GetOrCreateSegmentationSink();
-                var kpSink = GetOrCreateKeyPointsSink();
+                var kpSink = GetOrCreateKeypointsSink();
                 var stageSink = GetOrCreateStageSink();
 
                 // Wrapper callback that creates per-frame writers
@@ -1266,7 +1266,7 @@ namespace RocketWelder.SDK
                     {
                         _logger.LogWarning("GstCaps not available for frame {FrameNumber}, skipping AI output", frameMetadata.FrameNumber);
                         using var noOpStageWriter = stageSink.CreateWriter(frameMetadata.FrameNumber);
-                        onFrame(inputMat, NoOpSegmentationWriter.Instance, NoOpKeyPointsWriter.Instance, noOpStageWriter, outputMat);
+                        onFrame(inputMat, NoOpSegmentationWriter.Instance, NoOpKeypointsWriter.Instance, noOpStageWriter, outputMat);
                         return;
                     }
 
@@ -1306,7 +1306,7 @@ namespace RocketWelder.SDK
         /// <b>Configuration Required:</b>
         /// <list type="bullet">
         ///   <item><description><c>RocketWelder:SegmentationSinkUrl</c> or <c>SEGMENTATION_SINK_URL</c></description></item>
-        ///   <item><description><c>RocketWelder:KeyPointsSinkUrl</c> or <c>KEYPOINTS_SINK_URL</c></description></item>
+        ///   <item><description><c>RocketWelder:KeypointsSinkUrl</c> or <c>KEYPOINTS_SINK_URL</c></description></item>
         ///   <item><description><c>RocketWelder:GraphicsSinkUrl</c> or <c>GRAPHICS_SINK_URL</c></description></item>
         /// </list>
         /// </para>
@@ -1331,7 +1331,7 @@ namespace RocketWelder.SDK
         /// </remarks>
         /// <param name="onFrame">Callback receiving input Mat, segmentation writer, keypoints writer, and stage writer</param>
         /// <param name="cancellationToken">Optional cancellation token</param>
-        public void Start(Action<Mat, ISegmentationResultWriter, IKeyPointsWriter, IStageWriter> onFrame, CancellationToken cancellationToken = default)
+        public void Start(Action<Mat, ISegmentationResultWriter, IKeypointsWriter, IStageWriter> onFrame, CancellationToken cancellationToken = default)
         {
             if (IsRunning)
                 throw new InvalidOperationException("Client is already running");
@@ -1346,7 +1346,7 @@ namespace RocketWelder.SDK
 
                 // Initialize sinks (will throw if not configured)
                 var segSink = GetOrCreateSegmentationSink();
-                var kpSink = GetOrCreateKeyPointsSink();
+                var kpSink = GetOrCreateKeypointsSink();
                 var stageSink = GetOrCreateStageSink();
 
                 // Track frame number for one-way mode
@@ -1364,7 +1364,7 @@ namespace RocketWelder.SDK
                     {
                         _logger.LogWarning("GstCaps not available, skipping AI output");
                         using var noOpStageWriter = stageSink.CreateWriter(frameNumber);
-                        onFrame(inputMat, NoOpSegmentationWriter.Instance, NoOpKeyPointsWriter.Instance, noOpStageWriter);
+                        onFrame(inputMat, NoOpSegmentationWriter.Instance, NoOpKeypointsWriter.Instance, noOpStageWriter);
                         return;
                     }
 
@@ -1397,7 +1397,7 @@ namespace RocketWelder.SDK
         /// Gets the keypoints sink for external use (e.g., custom frame processing).
         /// Returns null if not configured.
         /// </summary>
-        public IKeyPointsSink? KeyPointsSink => _keyPointsSink;
+        public IKeypointsSink? KeypointsSink => _keyPointsSink;
 
         /// <summary>
         /// Stops receiving frames and disconnects from the stream.

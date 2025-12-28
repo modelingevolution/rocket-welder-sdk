@@ -14,7 +14,7 @@ public interface IRocketWelderClient : IDisposable, IAsyncDisposable
     /// <summary>
     /// Schema for defining keypoints.
     /// </summary>
-    IKeyPointsSchema KeyPoints { get; }
+    IKeypointsSchema Keypoints { get; }
 
     /// <summary>
     /// Schema for defining segmentation classes.
@@ -28,19 +28,19 @@ public interface IRocketWelderClient : IDisposable, IAsyncDisposable
     /// Delegate called for each frame with:
     /// - inputFrame: Source video frame (Mat)
     /// - segmentation: Segmentation data context (UoW)
-    /// - keypoints: KeyPoints data context (UoW)
+    /// - keypoints: Keypoints data context (UoW)
     /// - outputFrame: Output frame for visualization (Mat)
     /// </param>
     /// <param name="cancellationToken">Cancellation token to stop processing</param>
     Task StartAsync(
-        Action<Mat, ISegmentationDataContext, IKeyPointsDataContext, Mat> processFrame,
+        Action<Mat, ISegmentationDataContext, IKeypointsDataContext, Mat> processFrame,
         CancellationToken cancellationToken = default);
 
     /// <summary>
     /// Starts the processing loop (keypoints only).
     /// </summary>
     Task StartAsync(
-        Action<Mat, IKeyPointsDataContext, Mat> processFrame,
+        Action<Mat, IKeypointsDataContext, Mat> processFrame,
         CancellationToken cancellationToken = default);
 
     /// <summary>

@@ -8,11 +8,11 @@ using RocketWelder.SDK.Transport;
 using RocketWelder.SDK.Protocols;
 using Xunit;
 
-using DeltaKeyPointsFrame = RocketWelder.SDK.Protocols.DeltaFrame<RocketWelder.SDK.Protocols.Keypoint>;
+using DeltaKeypointsFrame = RocketWelder.SDK.Protocols.DeltaFrame<RocketWelder.SDK.Protocols.Keypoint>;
 
 namespace RocketWelder.SDK.Tests;
 
-public class KeyPointsProtocolTests
+public class KeypointsProtocolTests
 {
     /// <summary>
     /// Helper to find keypoint by ID in a span.
@@ -40,13 +40,13 @@ public class KeyPointsProtocolTests
     /// Helper to read all frames from a stream using the streaming API.
     /// Returns DeltaFrame&lt;KeyPoint&gt; which includes IsDelta metadata.
     /// </summary>
-    private async Task<List<DeltaKeyPointsFrame>> ReadAllFramesAsync(Stream stream)
+    private async Task<List<DeltaKeypointsFrame>> ReadAllFramesAsync(Stream stream)
     {
         stream.Position = 0;
         var source = new StreamFrameSource(stream, leaveOpen: true);
-        var kpSource = new KeyPointsSource(source);
+        var kpSource = new KeypointsSource(source);
 
-        var frames = new List<DeltaKeyPointsFrame>();
+        var frames = new List<DeltaKeypointsFrame>();
         await foreach (var frame in kpSource.ReadFramesAsync())
         {
             frames.Add(frame);
@@ -60,7 +60,7 @@ public class KeyPointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeyPointsSink(stream, leaveOpen: true);
+        using var storage = new KeypointsSink(stream, leaveOpen: true);
 
         var expectedKeypoints = new[]
         {
@@ -104,7 +104,7 @@ public class KeyPointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeyPointsSink(stream, masterFrameInterval: 2, leaveOpen: true);
+        using var storage = new KeypointsSink(stream, masterFrameInterval: 2, leaveOpen: true);
 
         // Frame 1 - Master
         var frame1 = new[]
@@ -182,7 +182,7 @@ public class KeyPointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeyPointsSink(stream, leaveOpen: true);
+        using var storage = new KeypointsSink(stream, leaveOpen: true);
 
         // Write 3 frames with nose (keypointId=0) moving
         for (ulong frameId = 0; frameId < 3; frameId++)
@@ -212,7 +212,7 @@ public class KeyPointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeyPointsSink(stream, leaveOpen: true);
+        using var storage = new KeypointsSink(stream, leaveOpen: true);
 
         using (var writer = storage.CreateWriter(frameId: 10))
         {
@@ -246,7 +246,7 @@ public class KeyPointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeyPointsSink(stream, leaveOpen: true);
+        using var storage = new KeypointsSink(stream, leaveOpen: true);
 
         var testConfidences = new[] { 0.0f, 0.5f, 0.9999f, 1.0f, 0.1234f };
 
@@ -277,7 +277,7 @@ public class KeyPointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeyPointsSink(stream, leaveOpen: true);
+        using var storage = new KeypointsSink(stream, leaveOpen: true);
 
         // Frame 1 - 2 keypoints
         using (var writer1 = storage.CreateWriter(frameId: 0))
@@ -321,7 +321,7 @@ public class KeyPointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeyPointsSink(stream, leaveOpen: true);
+        using var storage = new KeypointsSink(stream, leaveOpen: true);
 
         var testPoints = new[]
         {
@@ -358,7 +358,7 @@ public class KeyPointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeyPointsSink(stream, leaveOpen: true);
+        using var storage = new KeypointsSink(stream, leaveOpen: true);
 
         var expectedKeypoints = new[]
         {
@@ -399,7 +399,7 @@ public class KeyPointsProtocolTests
         // Arrange
         using var stream = new MemoryStream();
         var frameSink = new StreamFrameSink(stream, leaveOpen: true);
-        using var sink = new KeyPointsSink(frameSink, ownsSink: true);
+        using var sink = new KeypointsSink(frameSink, ownsSink: true);
 
         // Act - Write multiple frames via sink
         using (var writer1 = sink.CreateWriter(1))
@@ -425,7 +425,7 @@ public class KeyPointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeyPointsSink(stream, leaveOpen: true);
+        using var storage = new KeypointsSink(stream, leaveOpen: true);
 
         // Write 3 frames
         for (int i = 0; i < 3; i++)
@@ -437,7 +437,7 @@ public class KeyPointsProtocolTests
         // Act - Stream frames
         stream.Position = 0;
         var source = new StreamFrameSource(stream, leaveOpen: true);
-        var kpSource = new KeyPointsSource(source);
+        var kpSource = new KeypointsSource(source);
 
         int frameCount = 0;
         await foreach (var frame in kpSource.ReadFramesAsync())

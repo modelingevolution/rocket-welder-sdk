@@ -6,7 +6,7 @@ namespace RocketWelder.SDK;
 /// Unit of Work for keypoints data, scoped to a single frame.
 /// Auto-commits when the delegate returns.
 /// </summary>
-public interface IKeyPointsDataContext
+public interface IKeypointsDataContext
 {
     /// <summary>
     /// Current frame ID.

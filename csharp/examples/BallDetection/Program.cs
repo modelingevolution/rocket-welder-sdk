@@ -21,7 +21,7 @@ using ErrorEventArgs = ZeroBuffer.ErrorEventArgs;
 ///
 /// Optional configuration (uses NullSink if not set):
 ///   - RocketWelder:SegmentationSinkUrl or SEGMENTATION_SINK_URL
-///   - RocketWelder:KeyPointsSinkUrl or KEYPOINTS_SINK_URL
+///   - RocketWelder:KeypointsSinkUrl or KEYPOINTS_SINK_URL
 ///   - RocketWelder:GraphicsSinkUrl or GRAPHICS_SINK_URL
 /// </summary>
 class Program
@@ -162,7 +162,7 @@ public class BallDetectionService : BackgroundService
 
         // Log sink configuration (NullSink used if not configured)
         var segUrl = _configuration["RocketWelder:SegmentationSinkUrl"] ?? Environment.GetEnvironmentVariable("SEGMENTATION_SINK_URL");
-        var kpUrl = _configuration["RocketWelder:KeyPointsSinkUrl"] ?? Environment.GetEnvironmentVariable("KEYPOINTS_SINK_URL");
+        var kpUrl = _configuration["RocketWelder:KeypointsSinkUrl"] ?? Environment.GetEnvironmentVariable("KEYPOINTS_SINK_URL");
         var gfxUrl = _configuration["RocketWelder:GraphicsSinkUrl"] ?? Environment.GetEnvironmentVariable("GRAPHICS_SINK_URL");
 
         _logger.LogInformation("Segmentation sink: {Url}", segUrl ?? "(NullSink)");
@@ -208,7 +208,7 @@ public class BallDetectionService : BackgroundService
         _lifetime.StopApplication();
     }
 
-    private void ProcessFrameWithWriters(Mat input, ISegmentationResultWriter segWriter, IKeyPointsWriter kpWriter, IStageWriter stageWriter, Mat output)
+    private void ProcessFrameWithWriters(Mat input, ISegmentationResultWriter segWriter, IKeypointsWriter kpWriter, IStageWriter stageWriter, Mat output)
     {
         _frameCount++;
 
@@ -246,7 +246,7 @@ public class BallDetectionService : BackgroundService
         {
             if (center.HasValue)
             {
-                _logger.LogInformation("Frame {Frame}: Ball at ({X}, {Y}), confidence: {Conf:F2}, Segmentations written: {Seg}, KeyPoints written: {Keys}",
+                _logger.LogInformation("Frame {Frame}: Ball at ({X}, {Y}), confidence: {Conf:F2}, Segmentations written: {Seg}, Keypoints written: {Keys}",
                     _frameCount, center.Value.X, center.Value.Y, confidence, _segWritten, _keyWritten);
             }
             else

@@ -9,7 +9,7 @@ namespace RocketWelder.SDK.Transport
     /// Transport-agnostic interface that handles the question: "where do frames come from?"
     /// </summary>
     /// <remarks>
-    /// This abstraction decouples protocol logic (KeyPoints, SegmentationResults) from
+    /// This abstraction decouples protocol logic (Keypoints, SegmentationResults) from
     /// transport mechanisms (File, NNG, TCP, WebSocket). Each frame is read atomically.
     /// </remarks>
     public interface IFrameSource : IDisposable, IAsyncDisposable

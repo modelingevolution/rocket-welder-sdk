@@ -13,10 +13,10 @@ namespace RocketWelder.SDK.Internal;
 internal sealed class RocketWelderClientImpl : IRocketWelderClient
 {
     private readonly RocketWelderClientOptions _options;
-    private readonly KeyPointsSchema _keyPointsSchema = new();
+    private readonly KeypointsSchema _keyPointsSchema = new();
     private readonly SegmentationSchema _segmentationSchema = new();
 
-    private IKeyPointsSink? _keyPointsSink;
+    private IKeypointsSink? _keyPointsSink;
     private ISegmentationResultSink? _segmentationSink;
     private bool _disposed;
 
@@ -25,11 +25,11 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
         _options = options ?? throw new ArgumentNullException(nameof(options));
     }
 
-    public IKeyPointsSchema KeyPoints => _keyPointsSchema;
+    public IKeypointsSchema Keypoints => _keyPointsSchema;
     public ISegmentationSchema Segmentation => _segmentationSchema;
 
     public Task StartAsync(
-        Action<Mat, ISegmentationDataContext, IKeyPointsDataContext, Mat> processFrame,
+        Action<Mat, ISegmentationDataContext, IKeypointsDataContext, Mat> processFrame,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(processFrame);
@@ -37,7 +37,7 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
         return RunProcessingLoopAsync(
             (input, output, frameId, width, height) =>
             {
-                var keypointsContext = CreateKeyPointsContext(frameId);
+                var keypointsContext = CreateKeypointsContext(frameId);
                 var segmentationContext = CreateSegmentationContext(frameId, width, height);
 
                 try
@@ -54,13 +54,13 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
                     throw;
                 }
             },
-            useKeyPoints: true,
+            useKeypoints: true,
             useSegmentation: true,
             cancellationToken);
     }
 
     public Task StartAsync(
-        Action<Mat, IKeyPointsDataContext, Mat> processFrame,
+        Action<Mat, IKeypointsDataContext, Mat> processFrame,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(processFrame);
@@ -68,7 +68,7 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
         return RunProcessingLoopAsync(
             (input, output, frameId, width, height) =>
             {
-                var keypointsContext = CreateKeyPointsContext(frameId);
+                var keypointsContext = CreateKeypointsContext(frameId);
 
                 try
                 {
@@ -80,7 +80,7 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
                     throw;
                 }
             },
-            useKeyPoints: true,
+            useKeypoints: true,
             useSegmentation: false,
             cancellationToken);
     }
@@ -106,18 +106,18 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
                     throw;
                 }
             },
-            useKeyPoints: false,
+            useKeypoints: false,
             useSegmentation: true,
             cancellationToken);
     }
 
-    private KeyPointsDataContext CreateKeyPointsContext(ulong frameId)
+    private KeypointsDataContext CreateKeypointsContext(ulong frameId)
     {
         if (_keyPointsSink == null)
-            throw new InvalidOperationException("KeyPoints sink not initialized");
+            throw new InvalidOperationException("Keypoints sink not initialized");
 
         var writer = _keyPointsSink.CreateWriter(frameId);
-        return new KeyPointsDataContext(writer, frameId);
+        return new KeypointsDataContext(writer, frameId);
     }
 
     private SegmentationDataContext CreateSegmentationContext(ulong frameId, uint width, uint height)
@@ -131,16 +131,16 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
 
     private async Task RunProcessingLoopAsync(
         Action<Mat, Mat, ulong, uint, uint> processFrame,
-        bool useKeyPoints,
+        bool useKeypoints,
         bool useSegmentation,
         CancellationToken cancellationToken)
     {
         // Initialize transports from strongly-typed connection strings
-        if (useKeyPoints)
+        if (useKeypoints)
         {
-            var cs = _options.KeyPoints;
+            var cs = _options.Keypoints;
             var frameSink = CreateFrameSink(cs);
-            _keyPointsSink = new KeyPointsSink(frameSink, cs.MasterFrameInterval, ownsSink: true);
+            _keyPointsSink = new KeypointsSink(frameSink, cs.MasterFrameInterval, ownsSink: true);
         }
 
         if (useSegmentation)
@@ -193,7 +193,7 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
         };
     }
 
-    private static IFrameSink CreateFrameSink(KeyPointsConnectionString cs)
+    private static IFrameSink CreateFrameSink(KeypointsConnectionString cs)
         => CreateFrameSink(cs.Protocol, cs.Address);
 
     private static IFrameSink CreateFrameSink(SegmentationConnectionString cs)

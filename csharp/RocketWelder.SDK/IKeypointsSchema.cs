@@ -5,7 +5,7 @@ namespace RocketWelder.SDK;
 /// <summary>
 /// Schema for defining keypoints. Static, defined once at startup.
 /// </summary>
-public interface IKeyPointsSchema
+public interface IKeypointsSchema
 {
     /// <summary>
     /// Defines a keypoint with a human-readable name.

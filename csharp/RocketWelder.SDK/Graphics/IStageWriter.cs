@@ -14,7 +14,7 @@ namespace RocketWelder.SDK.Graphics;
 /// </para>
 /// <para>
 /// The writer auto-flushes on dispose, following the same pattern as
-/// ISegmentationResultWriter and IKeyPointsWriter.
+/// ISegmentationResultWriter and IKeypointsWriter.
 /// </para>
 /// <para>
 /// <b>Example:</b>

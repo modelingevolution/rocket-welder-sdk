@@ -31,9 +31,7 @@
     <PackageReference Include="Emgu.CV" Version="4.11.0.5746" />
     <PackageReference Include="Emgu.CV.runtime.ubuntu-x64" Version="4.11.0.5746" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
-    <!-- Use local ZeroBuffer for development/testing - switch back to NuGet for release -->
-    <ProjectReference Include="/mnt/d/source/modelingevolution/streamer/src/zerobuffer/csharp/ZeroBuffer/ZeroBuffer.csproj" />
-    <!-- <PackageReference Include="ZeroBuffer" Version="1.2.8" /> -->
+    <PackageReference Include="ZeroBuffer" Version="1.2.8" />
   </ItemGroup>
 
 </Project>

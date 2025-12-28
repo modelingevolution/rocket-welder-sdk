@@ -8,7 +8,7 @@ namespace RocketWelder.SDK.Transport
     /// Transport-agnostic interface that handles the question: "where do frames go?"
     /// </summary>
     /// <remarks>
-    /// This abstraction decouples protocol logic (KeyPoints, SegmentationResults) from
+    /// This abstraction decouples protocol logic (Keypoints, SegmentationResults) from
     /// transport mechanisms (File, NNG, TCP, WebSocket). Each frame is written atomically.
     /// </remarks>
     public interface IFrameSink : IDisposable, IAsyncDisposable

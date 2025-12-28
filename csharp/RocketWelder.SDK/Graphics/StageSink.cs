@@ -12,7 +12,7 @@ namespace RocketWelder.SDK.Graphics;
 
 /// <summary>
 /// Factory for creating per-frame stage writers.
-/// Follows the same pattern as SegmentationResultSink and KeyPointsSink.
+/// Follows the same pattern as SegmentationResultSink and KeypointsSink.
 /// </summary>
 public sealed class StageSink : IStageSink
 {
@@ -67,7 +67,7 @@ public sealed class StageSink : IStageSink
 
 /// <summary>
 /// Per-frame stage writer that auto-flushes on dispose.
-/// Follows the same pattern as SegmentationResultWriter and KeyPointsWriter.
+/// Follows the same pattern as SegmentationResultWriter and KeypointsWriter.
 /// </summary>
 internal sealed class StageWriter : IStageWriter
 {

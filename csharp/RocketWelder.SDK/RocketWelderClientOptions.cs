@@ -16,11 +16,11 @@ public class RocketWelderClientOptions
     public VideoSourceConnectionString VideoSource { get; set; } = VideoSourceConnectionString.Default;
 
     /// <summary>
-    /// KeyPoints output connection string.
+    /// Keypoints output connection string.
     /// Supports parameters: masterFrameInterval
     /// Default: "nng+push://ipc:///tmp/rocket-welder-keypoints?masterFrameInterval=300"
     /// </summary>
-    public KeyPointsConnectionString KeyPoints { get; set; } = KeyPointsConnectionString.Default;
+    public KeypointsConnectionString Keypoints { get; set; } = KeypointsConnectionString.Default;
 
     /// <summary>
     /// Segmentation output connection string.
@@ -32,7 +32,7 @@ public class RocketWelderClientOptions
     /// Creates options from environment variables.
     /// Environment variables:
     /// - VIDEO_SOURCE or CONNECTION_STRING: Video input
-    /// - KEYPOINTS_CONNECTION_STRING: KeyPoints output
+    /// - KEYPOINTS_CONNECTION_STRING: Keypoints output
     /// - SEGMENTATION_CONNECTION_STRING: Segmentation output
     /// </summary>
     public static RocketWelderClientOptions FromEnvironment()
@@ -40,7 +40,7 @@ public class RocketWelderClientOptions
         return new RocketWelderClientOptions
         {
             VideoSource = VideoSourceConnectionString.FromEnvironment(),
-            KeyPoints = KeyPointsConnectionString.FromEnvironment(),
+            Keypoints = KeypointsConnectionString.FromEnvironment(),
             Segmentation = SegmentationConnectionString.FromEnvironment()
         };
     }

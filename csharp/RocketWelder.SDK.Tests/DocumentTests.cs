@@ -156,12 +156,12 @@ public class SegmentationDocumentTests
     }
 }
 
-public class KeyPointsDocumentTests
+public class KeypointsDocumentTests
 {
-    private static byte[] CreateKeyPointsData(ulong frameId, IEnumerable<(int id, Point point, float confidence)> keypoints)
+    private static byte[] CreateKeypointsData(ulong frameId, IEnumerable<(int id, Point point, float confidence)> keypoints)
     {
         using var stream = new MemoryStream();
-        using var sink = new KeyPointsSink(stream, masterFrameInterval: 1, leaveOpen: true);
+        using var sink = new KeypointsSink(stream, masterFrameInterval: 1, leaveOpen: true);
 
         using (var writer = sink.CreateWriter(frameId))
         {
@@ -178,7 +178,7 @@ public class KeyPointsDocumentTests
     public void Load_EmptyData_ReturnsEmptyDocument()
     {
         var data = Array.Empty<byte>();
-        var doc = KeyPointsDocument.Load(data);
+        var doc = KeypointsDocument.Load(data);
 
         Assert.Equal(0, doc.FrameCount);
         Assert.Empty(doc.FrameIds);
@@ -195,10 +195,10 @@ public class KeyPointsDocumentTests
             (id: 1, point: new Point(150, 250), confidence: 0.88f)
         };
 
-        var data = CreateKeyPointsData(frameId, keypoints);
+        var data = CreateKeypointsData(frameId, keypoints);
 
         // Act
-        using var doc = KeyPointsDocument.Load(data);
+        using var doc = KeypointsDocument.Load(data);
 
         // Assert
         Assert.Equal(1, doc.FrameCount);
@@ -207,16 +207,17 @@ public class KeyPointsDocumentTests
         var decoded = doc.GetFrame(frameId);
         Assert.Equal(frameId, decoded.FrameId);
         // IsDelta is no longer exposed - it's a wire format detail
-        Assert.Equal(2, decoded.KeyPoints.Count);
-        Assert.Equal(0, decoded.KeyPoints[0].Id);
-        Assert.Equal(100, decoded.KeyPoints[0].Position.X);
-        Assert.Equal(200, decoded.KeyPoints[0].Position.Y);
+        Assert.Equal(2, decoded.Count);
+        var kps = decoded.Keypoints.Span;
+        Assert.Equal(0, kps[0].Id);
+        Assert.Equal(100, kps[0].Position.X);
+        Assert.Equal(200, kps[0].Position.Y);
     }
 
     [Fact]
     public void TryGetFrame_NonExistent_ReturnsFalse()
     {
-        var doc = KeyPointsDocument.Load(Array.Empty<byte>());
+        var doc = KeypointsDocument.Load(Array.Empty<byte>());
 
         Assert.False(doc.TryGetFrame(999, out _));
     }
@@ -224,7 +225,7 @@ public class KeyPointsDocumentTests
     [Fact]
     public void GetFrame_NonExistent_ThrowsKeyNotFoundException()
     {
-        var doc = KeyPointsDocument.Load(Array.Empty<byte>());
+        var doc = KeypointsDocument.Load(Array.Empty<byte>());
 
         Assert.Throws<KeyNotFoundException>(() => doc.GetFrame(999));
     }
@@ -235,9 +236,9 @@ public class KeyPointsDocumentTests
         // Arrange
         ulong frameId = 50;
         var keypoints = new[] { (id: 0, point: new Point(10, 20), confidence: 0.9f) };
-        var data = CreateKeyPointsData(frameId, keypoints);
+        var data = CreateKeypointsData(frameId, keypoints);
 
-        using var doc = KeyPointsDocument.Load(data);
+        using var doc = KeypointsDocument.Load(data);
 
         // Act
         var fromIndexer = doc[frameId];
@@ -245,13 +246,13 @@ public class KeyPointsDocumentTests
 
         // Assert
         Assert.Equal(fromGet.FrameId, fromIndexer.FrameId);
-        Assert.Equal(fromGet.KeyPoints.Count, fromIndexer.KeyPoints.Count);
+        Assert.Equal(fromGet.Count, fromIndexer.Count);
     }
 
     [Fact]
     public void Dispose_PreventsFurtherAccess()
     {
-        var doc = KeyPointsDocument.Load(Array.Empty<byte>());
+        var doc = KeypointsDocument.Load(Array.Empty<byte>());
         doc.Dispose();
 
         Assert.Throws<ObjectDisposedException>(() => doc.GetFrame(1));
@@ -263,9 +264,9 @@ public class KeyPointsDocumentTests
         // Arrange
         ulong frameId = 77;
         var keypoints = new[] { (id: 0, point: new Point(5, 10), confidence: 0.8f) };
-        var data = CreateKeyPointsData(frameId, keypoints);
+        var data = CreateKeypointsData(frameId, keypoints);
 
-        using var doc = KeyPointsDocument.Load(data);
+        using var doc = KeypointsDocument.Load(data);
 
         // Act & Assert
         var frames = doc.Frames.ToList();
@@ -281,11 +282,11 @@ public class KeyPointsDocumentTests
         {
             ulong frameId = 99;
             var keypoints = new[] { (id: 0, point: new Point(30, 40), confidence: 0.75f) };
-            var data = CreateKeyPointsData(frameId, keypoints);
+            var data = CreateKeypointsData(frameId, keypoints);
 
             await File.WriteAllBytesAsync(tempFile, data);
 
-            using var doc = await KeyPointsDocument.LoadAsync(tempFile);
+            using var doc = await KeypointsDocument.LoadAsync(tempFile);
 
             Assert.Equal(1, doc.FrameCount);
             Assert.True(doc.ContainsFrame(frameId));

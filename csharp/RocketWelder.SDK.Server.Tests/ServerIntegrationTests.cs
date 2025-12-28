@@ -219,13 +219,13 @@ public class ServerIntegrationTests : IDisposable
         await Task.Delay(200);
 
         // Act - Connect to socket and read keypoints
-        await server.ConnectToKeyPointsSocketAsync(socketPath, TimeSpan.FromSeconds(5));
+        await server.ConnectToKeypointsSocketAsync(socketPath, TimeSpan.FromSeconds(5));
         _output.WriteLine("Server connected to keypoints socket");
 
         // Wait for writer to send data
         await Task.Delay(500);
 
-        var frame = server.TryReadKeyPointsFrame(TimeSpan.FromSeconds(5));
+        var frame = server.TryReadKeypointsFrame(TimeSpan.FromSeconds(5));
 
         // Assert
         Assert.NotNull(frame);
