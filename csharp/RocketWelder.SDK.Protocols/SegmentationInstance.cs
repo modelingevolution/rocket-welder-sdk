@@ -1,3 +1,4 @@
+using System;
 using System.Drawing;
 
 namespace RocketWelder.SDK.Protocols;
@@ -6,28 +7,45 @@ namespace RocketWelder.SDK.Protocols;
 /// Represents a single segmentation instance (object mask) in a frame.
 /// Contains the class, instance ID, and polygon points defining the mask boundary.
 /// </summary>
-public readonly struct SegmentationInstance
+/// <param name="ClassId">Class identifier (e.g., 0=person, 1=car, etc.)</param>
+/// <param name="InstanceId">Instance identifier within the class (for distinguishing multiple objects of same class).</param>
+/// <param name="Points">Polygon points defining the segmentation mask boundary in pixel coordinates.</param>
+public readonly record struct SegmentationInstance(byte ClassId, byte InstanceId, ReadOnlyMemory<Point> Points)
 {
     /// <summary>
-    /// Class identifier (e.g., 0=person, 1=car, etc.)
+    /// Creates an instance with a Point array.
     /// </summary>
-    public byte ClassId { get; init; }
-
-    /// <summary>
-    /// Instance identifier within the class (for distinguishing multiple objects of same class).
-    /// </summary>
-    public byte InstanceId { get; init; }
-
-    /// <summary>
-    /// Polygon points defining the segmentation mask boundary.
-    /// Points are in pixel coordinates.
-    /// </summary>
-    public Point[] Points { get; init; }
-
     public SegmentationInstance(byte classId, byte instanceId, Point[] points)
+        : this(classId, instanceId, (ReadOnlyMemory<Point>)points) { }
+}
+
+/// <summary>
+/// Extension methods for <see cref="SegmentationInstance"/>.
+/// </summary>
+public static class SegmentationInstanceExtensions
+{
+    /// <summary>
+    /// Converts points to normalized coordinates [0-1] range.
+    /// </summary>
+    /// <param name="instance">The segmentation instance.</param>
+    /// <param name="width">Frame width in pixels.</param>
+    /// <param name="height">Frame height in pixels.</param>
+    /// <returns>Array of normalized points.</returns>
+    public static PointF[] ToNormalized(this SegmentationInstance instance, uint width, uint height)
     {
-        ClassId = classId;
-        InstanceId = instanceId;
-        Points = points;
+        if (width == 0 || height == 0)
+            throw new ArgumentException("Width and height must be greater than zero");
+
+        var points = instance.Points.Span;
+        var result = new PointF[points.Length];
+        float widthF = width;
+        float heightF = height;
+
+        for (int i = 0; i < points.Length; i++)
+        {
+            result[i] = new PointF(points[i].X / widthF, points[i].Y / heightF);
+        }
+
+        return result;
     }
 }

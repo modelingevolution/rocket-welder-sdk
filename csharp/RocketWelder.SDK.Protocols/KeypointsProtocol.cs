@@ -48,7 +48,7 @@ public static class KeypointsProtocol
             writer.WriteVarint((uint)kp.Id);
             writer.WriteInt32LE(kp.Position.X);
             writer.WriteInt32LE(kp.Position.Y);
-            writer.WriteUInt16LE(kp.Confidence);
+            writer.WriteUInt16LE((ushort)kp.Confidence);
         }
 
         return writer.Position;
@@ -75,7 +75,7 @@ public static class KeypointsProtocol
             writer.WriteVarint((uint)curr.Id);
             writer.WriteZigZagVarint(curr.Position.X - prev.Position.X);
             writer.WriteZigZagVarint(curr.Position.Y - prev.Position.Y);
-            writer.WriteZigZagVarint(curr.Confidence - prev.Confidence);
+            writer.WriteZigZagVarint((ushort)curr.Confidence - (ushort)prev.Confidence);
         }
 
         return writer.Position;
@@ -93,16 +93,16 @@ public static class KeypointsProtocol
     /// Read a keypoints frame (master frame only, no previous state needed).
     /// For delta frames, use ReadWithPreviousState.
     /// </summary>
-    public static KeypointsFrame Read(ReadOnlySpan<byte> data)
+    public static DeltaFrame<Keypoint> Read(ReadOnlySpan<byte> data)
     {
         var reader = new BinaryFrameReader(data);
 
         var frameType = reader.ReadByte();
-        bool isMaster = frameType == MasterFrameType;
+        bool isDelta = frameType == DeltaFrameType;
         var frameId = reader.ReadUInt64LE();
         var count = (int)reader.ReadVarint();
 
-        if (!isMaster)
+        if (isDelta)
         {
             throw new InvalidOperationException(
                 "Cannot read delta frame without previous state. Use ReadWithPreviousState instead.");
@@ -120,28 +120,35 @@ public static class KeypointsProtocol
             keypoints[i] = new Keypoint(id, x, y, confidence);
         }
 
-        return new KeypointsFrame(frameId, isMaster, keypoints);
+        return new DeltaFrame<Keypoint>(frameId, isDelta, keypoints);
     }
 
     /// <summary>
     /// Read a keypoints frame with previous state for delta decoding.
     /// </summary>
-    public static KeypointsFrame ReadWithPreviousState(ReadOnlySpan<byte> data, ReadOnlySpan<Keypoint> previous)
+    /// <param name="data">The binary data to read.</param>
+    /// <param name="previous">Previous frame keypoints for delta decoding.</param>
+    /// <param name="reuseDict">Optional dictionary to reuse for lookups (reduces allocations in streaming scenarios).</param>
+    public static DeltaFrame<Keypoint> ReadWithPreviousState(
+        ReadOnlySpan<byte> data,
+        ReadOnlySpan<Keypoint> previous,
+        Dictionary<int, Keypoint>? reuseDict = null)
     {
         var reader = new BinaryFrameReader(data);
 
         var frameType = reader.ReadByte();
-        bool isMaster = frameType == MasterFrameType;
+        bool isDelta = frameType == DeltaFrameType;
         var frameId = reader.ReadUInt64LE();
         var count = (int)reader.ReadVarint();
 
         var keypoints = new Keypoint[count];
 
-        // Build lookup for previous keypoints
+        // Build lookup for previous keypoints (reuse dictionary if provided)
         Dictionary<int, Keypoint>? prevDict = null;
-        if (!isMaster)
+        if (isDelta)
         {
-            prevDict = new Dictionary<int, Keypoint>(previous.Length);
+            prevDict = reuseDict ?? new Dictionary<int, Keypoint>(previous.Length);
+            prevDict.Clear();
             foreach (var p in previous)
                 prevDict[p.Id] = p;
         }
@@ -150,7 +157,7 @@ public static class KeypointsProtocol
         {
             var id = (int)reader.ReadVarint();
 
-            if (isMaster)
+            if (!isDelta)
             {
                 int x = reader.ReadInt32LE();
                 int y = reader.ReadInt32LE();
@@ -173,12 +180,12 @@ public static class KeypointsProtocol
                     id,
                     prev.Position.X + deltaX,
                     prev.Position.Y + deltaY,
-                    (ushort)(prev.Confidence + deltaConf)
+                    (ushort)Math.Clamp((ushort)prev.Confidence + deltaConf, 0, ushort.MaxValue)
                 );
             }
         }
 
-        return new KeypointsFrame(frameId, isMaster, keypoints);
+        return new DeltaFrame<Keypoint>(frameId, isDelta, keypoints);
     }
 
     /// <summary>

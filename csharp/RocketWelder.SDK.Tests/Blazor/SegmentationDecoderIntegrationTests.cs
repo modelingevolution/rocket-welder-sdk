@@ -28,15 +28,15 @@ public class SegmentationDecoderIntegrationTests
 
         // Create and encode a segmentation frame
         var frame = new ProtocolSegmentationFrame(
-            frameId: 42,
-            width: 1920,
-            height: 1080,
-            instances: new[]
+            FrameId: 42,
+            Width: 1920,
+            Height: 1080,
+            Instances: new[]
             {
                 new ProtocolSegmentationInstance(
-                    classId: 0,
-                    instanceId: 1,
-                    points: new Point[] { new(100, 100), new(200, 100), new(150, 200) }
+                    ClassId: 0,
+                    InstanceId: 1,
+                    Points: new Point[] { new(100, 100), new(200, 100), new(150, 200) }
                 )
             });
 
@@ -69,10 +69,10 @@ public class SegmentationDecoderIntegrationTests
         var decoder = new SegmentationDecoder(stage);
 
         var frame = new ProtocolSegmentationFrame(
-            frameId: 1,
-            width: 1920,
-            height: 1080,
-            instances: new[]
+            FrameId: 1,
+            Width: 1920,
+            Height: 1080,
+            Instances: new[]
             {
                 new ProtocolSegmentationInstance(0, 0, new Point[] { new(10, 10), new(20, 10), new(15, 20) }),
                 new ProtocolSegmentationInstance(1, 0, new Point[] { new(100, 100), new(200, 100) }),
@@ -103,10 +103,10 @@ public class SegmentationDecoderIntegrationTests
         decoder.Brushes.Add(1, color1);
 
         var frame = new ProtocolSegmentationFrame(
-            frameId: 1,
-            width: 1920,
-            height: 1080,
-            instances: new[]
+            FrameId: 1,
+            Width: 1920,
+            Height: 1080,
+            Instances: new[]
             {
                 new ProtocolSegmentationInstance(0, 0, new Point[] { new(10, 10), new(20, 10), new(15, 20) }),
                 new ProtocolSegmentationInstance(1, 0, new Point[] { new(100, 100), new(200, 100), new(150, 200) })
@@ -133,10 +133,10 @@ public class SegmentationDecoderIntegrationTests
         var decoder = new SegmentationDecoder(stage);
 
         var frame = new ProtocolSegmentationFrame(
-            frameId: 1,
-            width: 1920,
-            height: 1080,
-            instances: Array.Empty<ProtocolSegmentationInstance>());
+            FrameId: 1,
+            Width: 1920,
+            Height: 1080,
+            Instances: Array.Empty<ProtocolSegmentationInstance>());
 
         Span<byte> buffer = stackalloc byte[32];
         int written = SegmentationProtocol.Write(buffer, frame);
@@ -183,10 +183,10 @@ public class SegmentationDecoderIntegrationTests
         }
 
         var frame = new ProtocolSegmentationFrame(
-            frameId: 1,
-            width: 1920,
-            height: 1080,
-            instances: new[]
+            FrameId: 1,
+            Width: 1920,
+            Height: 1080,
+            Instances: new[]
             {
                 new ProtocolSegmentationInstance(0, 0, points)
             });
@@ -212,10 +212,10 @@ public class SegmentationDecoderIntegrationTests
         var decoder = new SegmentationDecoder(stage);
 
         var frame = new ProtocolSegmentationFrame(
-            frameId: 42,
-            width: 1920,
-            height: 1080,
-            instances: new[]
+            FrameId: 42,
+            Width: 1920,
+            Height: 1080,
+            Instances: new[]
             {
                 new ProtocolSegmentationInstance(0, 0, new Point[] { new(10, 10), new(20, 10) })
             });
@@ -243,10 +243,10 @@ public class SegmentationDecoderIntegrationTests
 
         // Points with varying deltas to test delta encoding
         var frame = new ProtocolSegmentationFrame(
-            frameId: 1,
-            width: 1920,
-            height: 1080,
-            instances: new[]
+            FrameId: 1,
+            Width: 1920,
+            Height: 1080,
+            Instances: new[]
             {
                 new ProtocolSegmentationInstance(0, 0, new Point[]
                 {

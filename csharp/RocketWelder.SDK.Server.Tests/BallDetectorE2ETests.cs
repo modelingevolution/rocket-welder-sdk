@@ -245,7 +245,7 @@ public class BallDetectorE2ETests : IDisposable
 
         // Send frames and collect results
         var latencies = new List<double>();
-        var receivedKeypoints = new List<KeypointsFrame>();
+        var receivedKeypoints = new List<DeltaFrame<Keypoint>>();
         var receivedSegmentations = new List<RocketWelder.SDK.Protocols.SegmentationFrame>();
 
         _output.WriteLine("\n--- Sending Frames ---");
@@ -271,7 +271,7 @@ public class BallDetectorE2ETests : IDisposable
             if (kpFrame.HasValue)
             {
                 receivedKeypoints.Add(kpFrame.Value);
-                _output.WriteLine($"  Keypoints: FrameId={kpFrame.Value.FrameId}, Count={kpFrame.Value.Keypoints.Length}");
+                _output.WriteLine($"  Keypoints: FrameId={kpFrame.Value.FrameId}, Count={kpFrame.Value.Items.Length}");
             }
 
             // Read segmentation
@@ -279,7 +279,7 @@ public class BallDetectorE2ETests : IDisposable
             if (segFrame.HasValue)
             {
                 receivedSegmentations.Add(segFrame.Value);
-                _output.WriteLine($"  Segmentation: FrameId={segFrame.Value.FrameId}, Instances={segFrame.Value.Instances.Length}");
+                _output.WriteLine($"  Segmentation: FrameId={segFrame.Value.FrameId}, Instances={segFrame.Value.Instances.Count}");
             }
         }
 
@@ -329,9 +329,9 @@ public class BallDetectorE2ETests : IDisposable
             var kpFrame = receivedKeypoints[i];
             var (_, expectedX, expectedY, _) = testFrames[i];
 
-            if (kpFrame.Keypoints.Length > 0)
+            if (kpFrame.Items.Length > 0)
             {
-                var detectedKp = kpFrame.Keypoints[0];
+                var detectedKp = kpFrame.Items.Span[0];
                 var distanceX = Math.Abs(detectedKp.Position.X - expectedX);
                 var distanceY = Math.Abs(detectedKp.Position.Y - expectedY);
 
@@ -445,7 +445,7 @@ public class BallDetectorE2ETests : IDisposable
         _output.WriteLine("Connected to segmentation socket");
 
         // Read results
-        var receivedKeypoints = new List<KeypointsFrame>();
+        var receivedKeypoints = new List<DeltaFrame<Keypoint>>();
         var receivedSegmentations = new List<RocketWelder.SDK.Protocols.SegmentationFrame>();
 
         for (int i = 0; i < 3; i++)

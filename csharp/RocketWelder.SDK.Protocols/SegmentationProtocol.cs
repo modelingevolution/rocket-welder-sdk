@@ -38,7 +38,7 @@ public static class SegmentationProtocol
         // Write instances
         foreach (var instance in frame.Instances)
         {
-            WriteInstanceCore(ref writer, instance.ClassId, instance.InstanceId, instance.Points);
+            WriteInstanceCore(ref writer, instance.ClassId, instance.InstanceId, instance.Points.Span);
         }
 
         return writer.Position;
@@ -119,7 +119,26 @@ public static class SegmentationProtocol
         var width = reader.ReadVarint();
         var height = reader.ReadVarint();
 
-        var instances = new List<SegmentationInstance>();
+        // First pass: count instances
+        int instancesStart = reader.Position;
+        int instanceCount = 0;
+        while (reader.HasMore)
+        {
+            reader.ReadByte(); // classId
+            reader.ReadByte(); // instanceId
+            var pointCount = (int)reader.ReadVarint();
+            for (int i = 0; i < pointCount; i++)
+            {
+                reader.ReadZigZagVarint(); // x
+                reader.ReadZigZagVarint(); // y
+            }
+            instanceCount++;
+        }
+
+        // Second pass: allocate and fill
+        reader.Position = instancesStart;
+        var instances = new SegmentationInstance[instanceCount];
+        int instanceIndex = 0;
 
         while (reader.HasMore)
         {
@@ -147,10 +166,10 @@ public static class SegmentationProtocol
                 prevY = y;
             }
 
-            instances.Add(new SegmentationInstance(classId, instanceId, points));
+            instances[instanceIndex++] = new SegmentationInstance(classId, instanceId, points);
         }
 
-        return new SegmentationFrame(frameId, width, height, instances.ToArray());
+        return new SegmentationFrame(frameId, width, height, instances);
     }
 
     /// <summary>

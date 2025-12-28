@@ -12,6 +12,10 @@ using System.Threading.Tasks;
 using RocketWelder.SDK.Transport;
 using RocketWelder.SDK.Protocols;
 
+// Import DeltaFrame<Keypoint> for streaming use - uses Protocols.Keypoint with ushort confidence
+// Use .NormalizedConfidence() extension to get float 0.0-1.0 value
+using DeltaKeyPointsFrame = RocketWelder.SDK.Protocols.DeltaFrame<RocketWelder.SDK.Protocols.Keypoint>;
+
 namespace RocketWelder.SDK;
 
 // ============================================================================
@@ -62,64 +66,40 @@ public interface IKeyPointsWriter : IDisposable, IAsyncDisposable
 /// <summary>
 /// Streaming reader for keypoints via IAsyncEnumerable.
 /// Designed for real-time streaming over TCP/WebSocket/NNG.
+/// Returns DeltaFrame&lt;KeyPoint&gt; which includes IsDelta for streaming context.
 /// </summary>
 public interface IKeyPointsSource : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Stream frames as they arrive from the transport.
     /// Supports cancellation and backpressure.
+    /// Returns DeltaFrame with IsDelta indicating master vs delta frame.
     /// </summary>
-    IAsyncEnumerable<KeyPointsFrame> ReadFramesAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<DeltaKeyPointsFrame> ReadFramesAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>
-/// A single keypoints frame with all keypoints.
+/// A decoded keypoints frame with absolute keypoint values.
+/// Used by Document classes after delta decoding is complete.
+/// For streaming with delta info, use DeltaFrame&lt;Keypoint&gt; instead.
 /// </summary>
-public readonly struct KeyPointsFrame
-{
-    public ulong FrameId { get; }
-    public bool IsDelta { get; }
-    public IReadOnlyList<KeyPoint> KeyPoints { get; }
+/// <remarks>
+/// Uses Protocols.Keypoint with Confidence type (ushort 0-65535).
+/// Confidence implicitly converts to float (0.0-1.0).
+/// </remarks>
+public readonly record struct KeyPointsFrame(ulong FrameId, IReadOnlyList<Keypoint> KeyPoints);
 
-    public KeyPointsFrame(ulong frameId, bool isDelta, IReadOnlyList<KeyPoint> keyPoints)
-    {
-        FrameId = frameId;
-        IsDelta = isDelta;
-        KeyPoints = keyPoints;
-    }
-}
-
-/// <summary>
-/// A single keypoint with ID, position, and confidence.
-/// </summary>
-public readonly struct KeyPoint
-{
-    public int Id { get; }
-    public int X { get; }
-    public int Y { get; }
-    public float Confidence { get; }
-
-    public KeyPoint(int id, int x, int y, float confidence)
-    {
-        Id = id;
-        X = x;
-        Y = y;
-        Confidence = confidence;
-    }
-
-    public Point ToPoint() => new Point(X, Y);
-}
+// KeyPoint type is now consolidated into RocketWelder.SDK.Protocols.Keypoint
+// Confidence implicitly converts to float. Use .Position for Point access.
 
 /// <summary>
 /// Streaming reader for keypoints.
 /// Reads frames from IFrameSource and yields them via IAsyncEnumerable.
 /// Handles master/delta frame decoding automatically.
+/// Returns DeltaFrame&lt;KeyPoint&gt; with decoded absolute values and IsDelta metadata.
 /// </summary>
 public class KeyPointsSource : IKeyPointsSource
 {
-    private const byte MasterFrameType = 0x00;
-    private const byte DeltaFrameType = 0x01;
-
     private readonly IFrameSource _frameSource;
     private Dictionary<int, (Point point, ushort confidence)>? _previousFrame;
     private bool _disposed;
@@ -129,7 +109,7 @@ public class KeyPointsSource : IKeyPointsSource
         _frameSource = frameSource ?? throw new ArgumentNullException(nameof(frameSource));
     }
 
-    public async IAsyncEnumerable<KeyPointsFrame> ReadFramesAsync(
+    public async IAsyncEnumerable<DeltaKeyPointsFrame> ReadFramesAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         while (!cancellationToken.IsCancellationRequested && !_disposed)
@@ -143,7 +123,7 @@ public class KeyPointsSource : IKeyPointsSource
         }
     }
 
-    private KeyPointsFrame ParseFrame(ReadOnlyMemory<byte> frameData)
+    private DeltaKeyPointsFrame ParseFrame(ReadOnlyMemory<byte> frameData)
     {
         // Zero-copy: get underlying array segment without allocation
         if (!MemoryMarshal.TryGetArray(frameData, out var segment))
@@ -157,7 +137,7 @@ public class KeyPointsSource : IKeyPointsSource
             throw new EndOfStreamException("Unexpected end of frame");
 
         byte frameType = (byte)frameTypeByte;
-        bool isDelta = frameType == DeltaFrameType;
+        bool isDelta = frameType == KeypointsProtocol.DeltaFrameType;
 
         // Read frame ID (8 bytes LE)
         Span<byte> frameIdBytes = stackalloc byte[8];
@@ -169,8 +149,8 @@ public class KeyPointsSource : IKeyPointsSource
         // Read keypoint count
         uint keypointCount = stream.ReadVarint();
 
-        // Read keypoints
-        var keypoints = new List<KeyPoint>((int)keypointCount);
+        // Read keypoints - use array for ReadOnlyMemory<T> compatibility
+        var keypoints = new Keypoint[(int)keypointCount];
         var currentFrame = new Dictionary<int, (Point point, ushort confidence)>();
 
         if (isDelta && _previousFrame != null)
@@ -191,7 +171,7 @@ public class KeyPointsSource : IKeyPointsSource
                 {
                     x = prev.point.X + deltaX;
                     y = prev.point.Y + deltaY;
-                    confidence = (ushort)(prev.confidence + deltaConfidence);
+                    confidence = (ushort)Math.Clamp(prev.confidence + deltaConfidence, 0, ushort.MaxValue);
                 }
                 else
                 {
@@ -201,7 +181,7 @@ public class KeyPointsSource : IKeyPointsSource
                     confidence = (ushort)deltaConfidence;
                 }
 
-                keypoints.Add(new KeyPoint(keypointId, x, y, confidence / 10000f));
+                keypoints[i] = new Keypoint(keypointId, x, y, confidence);
                 currentFrame[keypointId] = (new Point(x, y), confidence);
             }
         }
@@ -224,7 +204,7 @@ public class KeyPointsSource : IKeyPointsSource
                 stream.Read(confBytes);
                 ushort confidence = BinaryPrimitives.ReadUInt16LittleEndian(confBytes);
 
-                keypoints.Add(new KeyPoint(keypointId, x, y, confidence / 10000f));
+                keypoints[i] = new Keypoint(keypointId, x, y, confidence);
                 currentFrame[keypointId] = (new Point(x, y), confidence);
             }
         }
@@ -232,7 +212,8 @@ public class KeyPointsSource : IKeyPointsSource
         // Update previous frame for next delta decoding
         _previousFrame = currentFrame;
 
-        return new KeyPointsFrame(frameId, isDelta, keypoints);
+        // Return DeltaFrame with decoded absolute values and IsDelta metadata
+        return new DeltaKeyPointsFrame(frameId, isDelta, keypoints);
     }
 
     public void Dispose()
@@ -371,10 +352,6 @@ public class KeyPointsSeries
 
 internal class KeyPointsWriter : IKeyPointsWriter
 {
-    // Frame types
-    private const byte MasterFrameType = 0x00;
-    private const byte DeltaFrameType = 0x01;
-
     private readonly ulong _frameId;
     private readonly IFrameSink _frameSink;
     private readonly MemoryStream _buffer;
@@ -403,8 +380,8 @@ internal class KeyPointsWriter : IKeyPointsWriter
     {
         if (_disposed) throw new ObjectDisposedException(nameof(KeyPointsWriter));
 
-        // Convert confidence from float (0.0-1.0) to ushort (0-10000)
-        ushort confidenceUshort = (ushort)Math.Clamp(confidence * 10000f, 0, 10000);
+        // Convert confidence from float (0.0-1.0) to ushort (0-65535)
+        ushort confidenceUshort = (ushort)Math.Clamp(confidence * ushort.MaxValue, 0, ushort.MaxValue);
         _keypoints.Add((keypointId, new Point(x, y), confidenceUshort));
     }
 
@@ -475,7 +452,7 @@ internal class KeyPointsWriter : IKeyPointsWriter
     private void WriteFrame()
     {
         // Write frame type
-        _buffer.WriteByte(_isDelta ? DeltaFrameType : MasterFrameType);
+        _buffer.WriteByte(_isDelta ? KeypointsProtocol.DeltaFrameType : KeypointsProtocol.MasterFrameType);
 
         // Write frame ID
         Span<byte> frameIdBytes = stackalloc byte[8];

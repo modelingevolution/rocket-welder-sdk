@@ -26,7 +26,11 @@ public ref struct BinaryFrameReader
     /// <summary>
     /// Current read position in the buffer.
     /// </summary>
-    public int Position => _position;
+    public int Position
+    {
+        get => _position;
+        set => _position = value;
+    }
 
     /// <summary>
     /// Remaining bytes available to read.
@@ -96,25 +100,9 @@ public ref struct BinaryFrameReader
     /// </summary>
     public uint ReadVarint()
     {
-        uint result = 0;
-        int shift = 0;
-
-        while (true)
-        {
-            if (_position >= _data.Length)
-                throw new EndOfStreamException("Unexpected end of varint");
-
-            byte b = _data[_position++];
-            result |= (uint)(b & 0x7F) << shift;
-
-            if ((b & 0x80) == 0)
-                break;
-
-            shift += 7;
-            if (shift >= 35)
-                throw new InvalidDataException("Varint too long");
-        }
-
+        var remaining = _data[_position..];
+        var result = Varint.Read(remaining, out int bytesRead);
+        _position += bytesRead;
         return result;
     }
 
@@ -123,8 +111,10 @@ public ref struct BinaryFrameReader
     /// </summary>
     public int ReadZigZagVarint()
     {
-        uint encoded = ReadVarint();
-        return encoded.ZigZagDecode();
+        var remaining = _data[_position..];
+        var result = Varint.ReadZigZag(remaining, out int bytesRead);
+        _position += bytesRead;
+        return result;
     }
 
     /// <summary>

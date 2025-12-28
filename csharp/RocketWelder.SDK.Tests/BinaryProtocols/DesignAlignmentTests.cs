@@ -6,7 +6,6 @@ using Xunit;
 using ProtocolSegmentationFrame = RocketWelder.SDK.Protocols.SegmentationFrame;
 using ProtocolSegmentationInstance = RocketWelder.SDK.Protocols.SegmentationInstance;
 using ProtocolKeypoint = RocketWelder.SDK.Protocols.Keypoint;
-using ProtocolKeypointsFrame = RocketWelder.SDK.Protocols.KeypointsFrame;
 
 namespace RocketWelder.SDK.Tests.BinaryProtocols;
 
@@ -22,7 +21,7 @@ namespace RocketWelder.SDK.Tests.BinaryProtocols;
 /// - BinaryFrameWriter (symmetric to BinaryFrameReader)
 /// - SegmentationProtocol.Read/Write (pure protocol, no transport)
 /// - KeypointsProtocol.Read/Write (pure protocol, no transport)
-/// - Data structures: SegmentationFrame, SegmentationInstance, KeypointsFrame, Keypoint
+/// - Data structures: SegmentationFrame, SegmentationInstance, DeltaFrame&lt;Keypoint&gt;, Keypoint
 /// </summary>
 public class DesignAlignmentTests
 {
@@ -71,20 +70,20 @@ public class DesignAlignmentTests
     {
         // Create frame with instances
         var frame = new ProtocolSegmentationFrame(
-            frameId: 42,
-            width: 1920,
-            height: 1080,
-            instances: new[]
+            FrameId: 42,
+            Width: 1920,
+            Height: 1080,
+            Instances: new[]
             {
                 new ProtocolSegmentationInstance(
-                    classId: 0,
-                    instanceId: 1,
-                    points: new Point[] { new(100, 100), new(200, 100), new(150, 200) }
+                    ClassId: 0,
+                    InstanceId: 1,
+                    Points: new Point[] { new(100, 100), new(200, 100), new(150, 200) }
                 ),
                 new ProtocolSegmentationInstance(
-                    classId: 1,
-                    instanceId: 0,
-                    points: new Point[] { new(300, 300), new(400, 350) }
+                    ClassId: 1,
+                    InstanceId: 0,
+                    Points: new Point[] { new(300, 300), new(400, 350) }
                 )
             }
         );
@@ -100,9 +99,9 @@ public class DesignAlignmentTests
         Assert.Equal(frame.FrameId, decoded.FrameId);
         Assert.Equal(frame.Width, decoded.Width);
         Assert.Equal(frame.Height, decoded.Height);
-        Assert.Equal(frame.Instances.Length, decoded.Instances.Length);
+        Assert.Equal(frame.Instances.Count, decoded.Instances.Count);
 
-        for (int i = 0; i < frame.Instances.Length; i++)
+        for (int i = 0; i < frame.Instances.Count; i++)
         {
             Assert.Equal(frame.Instances[i].ClassId, decoded.Instances[i].ClassId);
             Assert.Equal(frame.Instances[i].InstanceId, decoded.Instances[i].InstanceId);
@@ -110,7 +109,7 @@ public class DesignAlignmentTests
 
             for (int j = 0; j < frame.Instances[i].Points.Length; j++)
             {
-                Assert.Equal(frame.Instances[i].Points[j], decoded.Instances[i].Points[j]);
+                Assert.Equal(frame.Instances[i].Points.Span[j], decoded.Instances[i].Points.Span[j]);
             }
         }
     }
@@ -161,14 +160,14 @@ public class DesignAlignmentTests
         var decoded = KeypointsProtocol.Read(buffer[..written]);
 
         Assert.Equal(1UL, decoded.FrameId);
-        Assert.True(decoded.IsMasterFrame);
-        Assert.Equal(keypoints.Length, decoded.Keypoints.Length);
+        Assert.False(decoded.IsDelta);  // Master frame = not delta
+        Assert.Equal(keypoints.Length, decoded.Items.Length);
 
         for (int i = 0; i < keypoints.Length; i++)
         {
-            Assert.Equal(keypoints[i].Id, decoded.Keypoints[i].Id);
-            Assert.Equal(keypoints[i].Position, decoded.Keypoints[i].Position);
-            Assert.Equal(keypoints[i].Confidence, decoded.Keypoints[i].Confidence);
+            Assert.Equal(keypoints[i].Id, decoded.Items.Span[i].Id);
+            Assert.Equal(keypoints[i].Position, decoded.Items.Span[i].Position);
+            Assert.Equal(keypoints[i].Confidence, decoded.Items.Span[i].Confidence);
         }
     }
 
@@ -190,11 +189,11 @@ public class DesignAlignmentTests
         var decoded = KeypointsProtocol.ReadWithPreviousState(buffer[..written], previous);
 
         Assert.Equal(2UL, decoded.FrameId);
-        Assert.False(decoded.IsMasterFrame);
-        Assert.Single(decoded.Keypoints);
-        Assert.Equal(102, decoded.Keypoints[0].Position.X);
-        Assert.Equal(201, decoded.Keypoints[0].Position.Y);
-        Assert.Equal(9500, decoded.Keypoints[0].Confidence);
+        Assert.True(decoded.IsDelta);  // Delta frame
+        Assert.Equal(1, decoded.Items.Length);
+        Assert.Equal(102, decoded.Items.Span[0].Position.X);
+        Assert.Equal(201, decoded.Items.Span[0].Position.Y);
+        Assert.Equal((ushort)9500, (ushort)decoded.Items.Span[0].Confidence);
     }
 
     #endregion
@@ -263,9 +262,9 @@ public class DesignAlignmentTests
         Assert.Equal(classId, decoded.Instances[0].ClassId);
         Assert.Equal(instanceId, decoded.Instances[0].InstanceId);
         Assert.Equal(3, decoded.Instances[0].Points.Length);
-        Assert.Equal(new Point(100, 100), decoded.Instances[0].Points[0]);
-        Assert.Equal(new Point(200, 100), decoded.Instances[0].Points[1]);
-        Assert.Equal(new Point(150, 200), decoded.Instances[0].Points[2]);
+        Assert.Equal(new Point(100, 100), decoded.Instances[0].Points.Span[0]);
+        Assert.Equal(new Point(200, 100), decoded.Instances[0].Points.Span[1]);
+        Assert.Equal(new Point(150, 200), decoded.Instances[0].Points.Span[2]);
     }
 
     #endregion

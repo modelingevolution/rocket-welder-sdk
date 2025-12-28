@@ -8,7 +8,10 @@ using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
 using RocketWelder.SDK.Transport;
+using RocketWelder.SDK.Protocols;
 using Xunit;
+
+using DeltaKeyPointsFrame = RocketWelder.SDK.Protocols.DeltaFrame<RocketWelder.SDK.Protocols.Keypoint>;
 
 namespace RocketWelder.SDK.Tests;
 
@@ -19,15 +22,27 @@ namespace RocketWelder.SDK.Tests;
 public class TransportRoundTripTests
 {
     /// <summary>
-    /// Helper to read all KeyPoints frames from a stream.
+    /// Helper to find keypoint by ID in a span.
     /// </summary>
-    private async Task<List<KeyPointsFrame>> ReadAllKeyPointsFramesAsync(Stream stream)
+    private static Keypoint FindKeypointById(ReadOnlySpan<Keypoint> items, int id)
+    {
+        foreach (var kp in items)
+            if (kp.Id == id)
+                return kp;
+        throw new InvalidOperationException($"Keypoint with Id {id} not found");
+    }
+
+    /// <summary>
+    /// Helper to read all KeyPoints frames from a stream.
+    /// Returns DeltaFrame&lt;KeyPoint&gt; which includes IsDelta metadata.
+    /// </summary>
+    private async Task<List<DeltaKeyPointsFrame>> ReadAllKeyPointsFramesAsync(Stream stream)
     {
         stream.Position = 0;
         var source = new StreamFrameSource(stream, leaveOpen: true);
         var kpSource = new KeyPointsSource(source);
 
-        var frames = new List<KeyPointsFrame>();
+        var frames = new List<DeltaKeyPointsFrame>();
         await foreach (var frame in kpSource.ReadFramesAsync())
         {
             frames.Add(frame);
@@ -69,12 +84,12 @@ public class TransportRoundTripTests
         Assert.Single(frames);
         var frame = frames[0];
         Assert.Equal(1ul, frame.FrameId);
-        Assert.Equal(3, frame.KeyPoints.Count);
+        Assert.Equal(3, frame.Items.Length);
 
         foreach (var (id, expectedPoint, expectedConfidence) in expectedKeypoints)
         {
-            var kp = frame.KeyPoints.First(k => k.Id == id);
-            Assert.Equal(expectedPoint, kp.ToPoint());
+            var kp = FindKeypointById(frame.Items.Span, id);
+            Assert.Equal(expectedPoint, kp.Position);
             Assert.Equal(expectedConfidence, kp.Confidence, precision: 4);
         }
     }
@@ -166,7 +181,7 @@ public class TransportRoundTripTests
         var frames = await ReadAllKeyPointsFramesAsync(memStream);
         Assert.Single(frames);
         Assert.Equal(1ul, frames[0].FrameId);
-        Assert.Equal(2, frames[0].KeyPoints.Count);
+        Assert.Equal(2, frames[0].Items.Length);
     }
 
     [Fact]
@@ -344,7 +359,7 @@ public class TransportRoundTripTests
             var source = new StreamFrameSource(readStream, leaveOpen: false);
             var kpSource = new KeyPointsSource(source);
 
-            var frames = new List<KeyPointsFrame>();
+            var frames = new List<DeltaKeyPointsFrame>();
             await foreach (var frame in kpSource.ReadFramesAsync())
             {
                 frames.Add(frame);
@@ -354,12 +369,12 @@ public class TransportRoundTripTests
             Assert.Single(frames);
             var readFrame = frames[0];
             Assert.Equal(1ul, readFrame.FrameId);
-            Assert.Equal(3, readFrame.KeyPoints.Count);
+            Assert.Equal(3, readFrame.Items.Length);
 
             foreach (var (id, expectedPoint, expectedConfidence) in expectedKeypoints)
             {
-                var kp = readFrame.KeyPoints.First(k => k.Id == id);
-                Assert.Equal(expectedPoint, kp.ToPoint());
+                var kp = FindKeypointById(readFrame.Items.Span, id);
+                Assert.Equal(expectedPoint, kp.Position);
                 Assert.Equal(expectedConfidence, kp.Confidence, precision: 4);
             }
         }

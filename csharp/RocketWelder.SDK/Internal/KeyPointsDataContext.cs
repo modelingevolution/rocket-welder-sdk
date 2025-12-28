@@ -1,4 +1,5 @@
 using System;
+using RocketWelder.SDK.Protocols;
 
 namespace RocketWelder.SDK.Internal;
 
@@ -18,7 +19,7 @@ internal sealed class KeyPointsDataContext : IKeyPointsDataContext
 
     public ulong FrameId { get; }
 
-    public void Add(KeyPoint point, int x, int y, float confidence)
+    public void Add(Keypoint point, int x, int y, float confidence)
     {
         _writer.Append(point.Id, x, y, confidence);
     }

@@ -292,64 +292,8 @@ namespace RocketWelder.SDK
         IAsyncEnumerable<SegmentationFrame> ReadFramesAsync(CancellationToken cancellationToken = default);
     }
 
-    /// <summary>
-    /// A complete segmentation frame with all instances.
-    /// Non-ref struct for use with IAsyncEnumerable.
-    /// </summary>
-    public readonly struct SegmentationFrame
-    {
-        public ulong FrameId { get; }
-        public uint Width { get; }
-        public uint Height { get; }
-        public IReadOnlyList<SegmentationInstance> Instances { get; }
-
-        public SegmentationFrame(ulong frameId, uint width, uint height, IReadOnlyList<SegmentationInstance> instances)
-        {
-            FrameId = frameId;
-            Width = width;
-            Height = height;
-            Instances = instances;
-        }
-    }
-
-    /// <summary>
-    /// A single instance in a segmentation frame.
-    /// Contains class ID, instance ID, and contour points.
-    /// </summary>
-    public readonly struct SegmentationInstance
-    {
-        public byte ClassId { get; }
-        public byte InstanceId { get; }
-        public ReadOnlyMemory<Point> Points { get; }
-
-        public SegmentationInstance(byte classId, byte instanceId, Point[] points)
-        {
-            ClassId = classId;
-            InstanceId = instanceId;
-            Points = points;
-        }
-
-        /// <summary>
-        /// Converts points to normalized coordinates [0-1] range.
-        /// </summary>
-        public PointF[] ToNormalized(uint width, uint height)
-        {
-            if (width == 0 || height == 0)
-                throw new ArgumentException("Width and height must be greater than zero");
-
-            var points = Points.Span;
-            var result = new PointF[points.Length];
-            float widthF = width;
-            float heightF = height;
-
-            for (int i = 0; i < points.Length; i++)
-            {
-                result[i] = new PointF(points[i].X / widthF, points[i].Y / heightF);
-            }
-
-            return result;
-        }
-    }
+    // SegmentationFrame and SegmentationInstance are now defined in RocketWelder.SDK.Protocols
+    // Use the extension method SegmentationInstanceExtensions.ToNormalized() for normalized coordinates.
 
     /// <summary>
     /// Streaming reader for segmentation results.

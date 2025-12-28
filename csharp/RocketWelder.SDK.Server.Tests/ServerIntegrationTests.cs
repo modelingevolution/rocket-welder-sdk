@@ -230,12 +230,12 @@ public class ServerIntegrationTests : IDisposable
         // Assert
         Assert.NotNull(frame);
         Assert.Equal(42UL, frame.Value.FrameId);
-        Assert.True(frame.Value.IsMasterFrame);
-        Assert.Equal(3, frame.Value.Keypoints.Length);
-        Assert.Equal(100, frame.Value.Keypoints[0].Position.X);
-        Assert.Equal(200, frame.Value.Keypoints[0].Position.Y);
+        Assert.False(frame.Value.IsDelta);  // Master frame = not delta
+        Assert.Equal(3, frame.Value.Items.Length);
+        Assert.Equal(100, frame.Value.Items.Span[0].Position.X);
+        Assert.Equal(200, frame.Value.Items.Span[0].Position.Y);
 
-        _output.WriteLine($"Read keypoints frame: FrameId={frame.Value.FrameId}, Points={frame.Value.Keypoints.Length}");
+        _output.WriteLine($"Read keypoints frame: FrameId={frame.Value.FrameId}, Points={frame.Value.Items.Length}");
 
         await writerTask;
 
@@ -267,11 +267,11 @@ public class ServerIntegrationTests : IDisposable
             // Write a segmentation frame
             var instances = new RocketWelder.SDK.Protocols.SegmentationInstance[]
             {
-                new(classId: 1, instanceId: 0, new Point[] { new(10, 20), new(30, 40), new(50, 60) }),
-                new(classId: 2, instanceId: 1, new Point[] { new(100, 110), new(120, 130) })
+                new(ClassId: 1, InstanceId: 0, new Point[] { new(10, 20), new(30, 40), new(50, 60) }),
+                new(ClassId: 2, InstanceId: 1, new Point[] { new(100, 110), new(120, 130) })
             };
 
-            var frame = new RocketWelder.SDK.Protocols.SegmentationFrame(frameId: 123, width: 640, height: 480, instances);
+            var frame = new RocketWelder.SDK.Protocols.SegmentationFrame(FrameId: 123, Width: 640, Height: 480, instances);
             var buffer = new byte[1024];
             var bytesWritten = SegmentationProtocol.Write(buffer, frame);
 
@@ -297,11 +297,11 @@ public class ServerIntegrationTests : IDisposable
         Assert.Equal(123UL, result.Value.FrameId);
         Assert.Equal(640U, result.Value.Width);
         Assert.Equal(480U, result.Value.Height);
-        Assert.Equal(2, result.Value.Instances.Length);
+        Assert.Equal(2, result.Value.Instances.Count);
         Assert.Equal(1, result.Value.Instances[0].ClassId);
         Assert.Equal(3, result.Value.Instances[0].Points.Length);
 
-        _output.WriteLine($"Read segmentation frame: FrameId={result.Value.FrameId}, Instances={result.Value.Instances.Length}");
+        _output.WriteLine($"Read segmentation frame: FrameId={result.Value.FrameId}, Instances={result.Value.Instances.Count}");
 
         await writerTask;
 

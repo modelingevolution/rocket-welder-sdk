@@ -5,22 +5,48 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using RocketWelder.SDK.Transport;
+using RocketWelder.SDK.Protocols;
 using Xunit;
+
+using DeltaKeyPointsFrame = RocketWelder.SDK.Protocols.DeltaFrame<RocketWelder.SDK.Protocols.Keypoint>;
 
 namespace RocketWelder.SDK.Tests;
 
 public class KeyPointsProtocolTests
 {
     /// <summary>
-    /// Helper to read all frames from a stream using the streaming API.
+    /// Helper to find keypoint by ID in a span.
     /// </summary>
-    private async Task<List<KeyPointsFrame>> ReadAllFramesAsync(Stream stream)
+    private static Keypoint FindKeypointById(ReadOnlySpan<Keypoint> items, int id)
+    {
+        foreach (var kp in items)
+            if (kp.Id == id)
+                return kp;
+        throw new InvalidOperationException($"Keypoint with Id {id} not found");
+    }
+
+    /// <summary>
+    /// Helper to check if a span contains a keypoint with the given ID.
+    /// </summary>
+    private static bool ContainsKeypointById(ReadOnlySpan<Keypoint> items, int id)
+    {
+        foreach (var kp in items)
+            if (kp.Id == id)
+                return true;
+        return false;
+    }
+
+    /// <summary>
+    /// Helper to read all frames from a stream using the streaming API.
+    /// Returns DeltaFrame&lt;KeyPoint&gt; which includes IsDelta metadata.
+    /// </summary>
+    private async Task<List<DeltaKeyPointsFrame>> ReadAllFramesAsync(Stream stream)
     {
         stream.Position = 0;
         var source = new StreamFrameSource(stream, leaveOpen: true);
         var kpSource = new KeyPointsSource(source);
 
-        var frames = new List<KeyPointsFrame>();
+        var frames = new List<DeltaKeyPointsFrame>();
         await foreach (var frame in kpSource.ReadFramesAsync())
         {
             frames.Add(frame);
@@ -62,13 +88,13 @@ public class KeyPointsProtocolTests
         var frame = frames[0];
         Assert.Equal(1ul, frame.FrameId);
         Assert.False(frame.IsDelta);
-        Assert.Equal(5, frame.KeyPoints.Count);
+        Assert.Equal(5, frame.Items.Length);
 
         foreach (var (id, expectedPoint, expectedConfidence) in expectedKeypoints)
         {
-            var kp = frame.KeyPoints.First(k => k.Id == id);
-            Assert.Equal(expectedPoint.X, kp.X);
-            Assert.Equal(expectedPoint.Y, kp.Y);
+            var kp = FindKeypointById(frame.Items.Span, id);
+            Assert.Equal(expectedPoint.X, kp.Position.X);
+            Assert.Equal(expectedPoint.Y, kp.Position.Y);
             Assert.Equal(expectedConfidence, kp.Confidence, precision: 4);
         }
     }
@@ -129,25 +155,25 @@ public class KeyPointsProtocolTests
         // Verify Frame 1 (master)
         Assert.Equal(0ul, frames[0].FrameId);
         Assert.False(frames[0].IsDelta);
-        var actualFrame1 = frames[0].KeyPoints.First(k => k.Id == 0);
-        Assert.Equal(frame1[0].point.X, actualFrame1.X);
-        Assert.Equal(frame1[0].point.Y, actualFrame1.Y);
+        var actualFrame1 = FindKeypointById(frames[0].Items.Span, 0);
+        Assert.Equal(frame1[0].point.X, actualFrame1.Position.X);
+        Assert.Equal(frame1[0].point.Y, actualFrame1.Position.Y);
         Assert.Equal(frame1[0].confidence, actualFrame1.Confidence, precision: 4);
 
         // Verify Frame 2 (delta decoded correctly)
         Assert.Equal(1ul, frames[1].FrameId);
         Assert.True(frames[1].IsDelta);
-        var actualFrame2 = frames[1].KeyPoints.First(k => k.Id == 0);
-        Assert.Equal(frame2[0].point.X, actualFrame2.X);
-        Assert.Equal(frame2[0].point.Y, actualFrame2.Y);
+        var actualFrame2 = FindKeypointById(frames[1].Items.Span, 0);
+        Assert.Equal(frame2[0].point.X, actualFrame2.Position.X);
+        Assert.Equal(frame2[0].point.Y, actualFrame2.Position.Y);
         Assert.Equal(frame2[0].confidence, actualFrame2.Confidence, precision: 4);
 
         // Verify Frame 3 (master)
         Assert.Equal(2ul, frames[2].FrameId);
         Assert.False(frames[2].IsDelta);
-        var actualFrame3 = frames[2].KeyPoints.First(k => k.Id == 0);
-        Assert.Equal(frame3[0].point.X, actualFrame3.X);
-        Assert.Equal(frame3[0].point.Y, actualFrame3.Y);
+        var actualFrame3 = FindKeypointById(frames[2].Items.Span, 0);
+        Assert.Equal(frame3[0].point.X, actualFrame3.Position.X);
+        Assert.Equal(frame3[0].point.Y, actualFrame3.Position.Y);
         Assert.Equal(frame3[0].confidence, actualFrame3.Confidence, precision: 4);
     }
 
@@ -173,12 +199,12 @@ public class KeyPointsProtocolTests
         Assert.Equal(3, frames.Count);
 
         // Verify trajectory - nose moving
-        Assert.Equal(100, frames[0].KeyPoints.First(k => k.Id == 0).X);
-        Assert.Equal(200, frames[0].KeyPoints.First(k => k.Id == 0).Y);
-        Assert.Equal(110, frames[1].KeyPoints.First(k => k.Id == 0).X);
-        Assert.Equal(205, frames[1].KeyPoints.First(k => k.Id == 0).Y);
-        Assert.Equal(120, frames[2].KeyPoints.First(k => k.Id == 0).X);
-        Assert.Equal(210, frames[2].KeyPoints.First(k => k.Id == 0).Y);
+        Assert.Equal(100, FindKeypointById(frames[0].Items.Span, 0).Position.X);
+        Assert.Equal(200, FindKeypointById(frames[0].Items.Span, 0).Position.Y);
+        Assert.Equal(110, FindKeypointById(frames[1].Items.Span, 0).Position.X);
+        Assert.Equal(205, FindKeypointById(frames[1].Items.Span, 0).Position.Y);
+        Assert.Equal(120, FindKeypointById(frames[2].Items.Span, 0).Position.X);
+        Assert.Equal(210, FindKeypointById(frames[2].Items.Span, 0).Position.Y);
     }
 
     [Fact]
@@ -201,17 +227,17 @@ public class KeyPointsProtocolTests
         Assert.Single(frames);
         var frame = frames[0];
         Assert.Equal(10ul, frame.FrameId);
-        Assert.Equal(2, frame.KeyPoints.Count);
+        Assert.Equal(2, frame.Items.Length);
 
-        var kp0 = frame.KeyPoints.First(k => k.Id == 0);
-        Assert.Equal(100, kp0.X);
-        Assert.Equal(200, kp0.Y);
+        var kp0 = FindKeypointById(frame.Items.Span, 0);
+        Assert.Equal(100, kp0.Position.X);
+        Assert.Equal(200, kp0.Position.Y);
         Assert.Equal(0.95f, kp0.Confidence, precision: 4);
-        Assert.Equal(new Point(100, 200), kp0.ToPoint());
+        Assert.Equal(new Point(100, 200), kp0.Position);
 
-        var kp1 = frame.KeyPoints.First(k => k.Id == 1);
-        Assert.Equal(120, kp1.X);
-        Assert.Equal(190, kp1.Y);
+        var kp1 = FindKeypointById(frame.Items.Span, 1);
+        Assert.Equal(120, kp1.Position.X);
+        Assert.Equal(190, kp1.Position.Y);
         Assert.Equal(0.92f, kp1.Confidence, precision: 4);
     }
 
@@ -241,7 +267,7 @@ public class KeyPointsProtocolTests
 
         for (int i = 0; i < testConfidences.Length; i++)
         {
-            var kp = frame.KeyPoints.First(k => k.Id == i);
+            var kp = FindKeypointById(frame.Items.Span, i);
             Assert.Equal(testConfidences[i], kp.Confidence, precision: 4);
         }
     }
@@ -280,14 +306,14 @@ public class KeyPointsProtocolTests
 
         // Assert
         Assert.Equal(3, frames.Count);
-        Assert.Equal(2, frames[0].KeyPoints.Count);
-        Assert.Equal(4, frames[1].KeyPoints.Count);
-        Assert.Equal(1, frames[2].KeyPoints.Count);
+        Assert.Equal(2, frames[0].Items.Length);
+        Assert.Equal(4, frames[1].Items.Length);
+        Assert.Equal(1, frames[2].Items.Length);
 
         // Verify keypoint 3 only exists in frame 2
-        Assert.DoesNotContain(frames[0].KeyPoints, k => k.Id == 3);
-        Assert.Contains(frames[1].KeyPoints, k => k.Id == 3);
-        Assert.DoesNotContain(frames[2].KeyPoints, k => k.Id == 3);
+        Assert.False(ContainsKeypointById(frames[0].Items.Span, 3));
+        Assert.True(ContainsKeypointById(frames[1].Items.Span, 3));
+        Assert.False(ContainsKeypointById(frames[2].Items.Span, 3));
     }
 
     [Fact]
@@ -322,8 +348,8 @@ public class KeyPointsProtocolTests
 
         for (int i = 0; i < testPoints.Length; i++)
         {
-            var kp = frame.KeyPoints.First(k => k.Id == i);
-            Assert.Equal(testPoints[i], kp.ToPoint());
+            var kp = FindKeypointById(frame.Items.Span, i);
+            Assert.Equal(testPoints[i], kp.Position);
         }
     }
 
@@ -357,12 +383,12 @@ public class KeyPointsProtocolTests
         Assert.Single(frames);
         var frame = frames[0];
         Assert.Equal(1ul, frame.FrameId);
-        Assert.Equal(3, frame.KeyPoints.Count);
+        Assert.Equal(3, frame.Items.Length);
 
         foreach (var (id, expectedPoint, expectedConfidence) in expectedKeypoints)
         {
-            var kp = frame.KeyPoints.First(k => k.Id == id);
-            Assert.Equal(expectedPoint, kp.ToPoint());
+            var kp = FindKeypointById(frame.Items.Span, id);
+            Assert.Equal(expectedPoint, kp.Position);
             Assert.Equal(expectedConfidence, kp.Confidence, precision: 4);
         }
     }

@@ -6,34 +6,26 @@ namespace RocketWelder.SDK.Protocols;
 /// Represents a single keypoint in a pose estimation result.
 /// Used for both encoding and decoding keypoints data.
 /// </summary>
-public readonly struct Keypoint
+/// <param name="Id">Keypoint identifier (e.g., 0=nose, 1=left_eye, etc.)</param>
+/// <param name="Position">Position of the keypoint in pixel coordinates.</param>
+/// <param name="Confidence">Confidence score (uses full ushort precision 0-65535).</param>
+public readonly record struct Keypoint(int Id, Point Position, Confidence Confidence)
 {
     /// <summary>
-    /// Keypoint identifier (e.g., 0=nose, 1=left_eye, etc.)
+    /// Creates a keypoint with explicit x, y coordinates and raw ushort confidence.
     /// </summary>
-    public int Id { get; init; }
-
-    /// <summary>
-    /// Position of the keypoint in pixel coordinates.
-    /// </summary>
-    public Point Position { get; init; }
-
-    /// <summary>
-    /// Confidence score (0-10000 representing 0.0-1.0)
-    /// </summary>
-    public ushort Confidence { get; init; }
-
-    public Keypoint(int id, Point position, ushort confidence)
-    {
-        Id = id;
-        Position = position;
-        Confidence = confidence;
-    }
-
     public Keypoint(int id, int x, int y, ushort confidence)
-    {
-        Id = id;
-        Position = new Point(x, y);
-        Confidence = confidence;
-    }
+        : this(id, new Point(x, y), (Confidence)confidence) { }
+
+    /// <summary>
+    /// Creates a keypoint with explicit x, y coordinates and float confidence (0.0-1.0).
+    /// </summary>
+    public Keypoint(int id, int x, int y, float confidence)
+        : this(id, new Point(x, y), confidence) { }
+
+    /// <summary>
+    /// Creates a keypoint with position and float confidence (0.0-1.0).
+    /// </summary>
+    public Keypoint(int id, Point position, float confidence)
+        : this(id, position, (Confidence)confidence) { }
 }

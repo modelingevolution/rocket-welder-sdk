@@ -8,6 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using RocketWelder.SDK.Transport;
+using RocketWelder.SDK.Protocols;
 using CliWrap;
 using CliWrap.Buffered;
 using Xunit;

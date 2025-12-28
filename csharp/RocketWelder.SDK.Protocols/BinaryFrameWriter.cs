@@ -92,16 +92,11 @@ public ref struct BinaryFrameWriter
     /// </summary>
     public void WriteVarint(uint value)
     {
-        while (value >= 0x80)
-        {
-            if (_position >= _buffer.Length)
-                throw new InvalidOperationException("Buffer overflow: not enough space for varint");
-            _buffer[_position++] = (byte)(value | 0x80);
-            value >>= 7;
-        }
-        if (_position >= _buffer.Length)
+        if (_position + Varint.MaxBytesUInt32 > _buffer.Length && _position + Varint.GetByteCount(value) > _buffer.Length)
             throw new InvalidOperationException("Buffer overflow: not enough space for varint");
-        _buffer[_position++] = (byte)value;
+
+        var remaining = _buffer[_position..];
+        _position += Varint.Write(remaining, value);
     }
 
     /// <summary>
@@ -109,8 +104,11 @@ public ref struct BinaryFrameWriter
     /// </summary>
     public void WriteZigZagVarint(int value)
     {
-        uint encoded = value.ZigZagEncode();
-        WriteVarint(encoded);
+        if (_position + Varint.MaxBytesUInt32 > _buffer.Length)
+            throw new InvalidOperationException("Buffer overflow: not enough space for varint");
+
+        var remaining = _buffer[_position..];
+        _position += Varint.WriteZigZag(remaining, value);
     }
 
     /// <summary>

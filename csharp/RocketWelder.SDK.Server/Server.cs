@@ -261,8 +261,8 @@ namespace RocketWelder.SDK.Server
         /// Reads keypoints frames from connected socket.
         /// </summary>
         /// <param name="timeout">Read timeout</param>
-        /// <returns>KeypointsFrame if available, null if timeout or end of stream</returns>
-        public RocketWelder.SDK.Protocols.KeypointsFrame? TryReadKeyPointsFrame(TimeSpan timeout)
+        /// <returns>DeltaFrame with keypoints if available, null if timeout or end of stream</returns>
+        public DeltaFrame<Keypoint>? TryReadKeyPointsFrame(TimeSpan timeout)
         {
             if (_keypointsSource == null)
                 throw new InvalidOperationException("Not connected to keypoints socket");
