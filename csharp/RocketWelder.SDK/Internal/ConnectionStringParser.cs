@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Net;
 
 namespace RocketWelder.SDK.Internal;
 
@@ -31,8 +32,8 @@ internal static class ConnectionStringParser
             foreach (var pair in queryString.Split('&'))
             {
                 var keyValue = pair.Split('=', 2);
-                if (keyValue.Length == 2)
-                    parameters[keyValue[0].ToLowerInvariant()] = keyValue[1];
+                if (keyValue.Length == 2 && !string.IsNullOrEmpty(keyValue[0]))
+                    parameters[keyValue[0].ToLowerInvariant()] = WebUtility.UrlDecode(keyValue[1]);
             }
         }
     }
