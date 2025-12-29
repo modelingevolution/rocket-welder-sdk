@@ -1,12 +1,13 @@
+using System;
 using RocketWelder.SDK.Protocols;
 
 namespace RocketWelder.SDK;
 
 /// <summary>
 /// Unit of Work for keypoints data, scoped to a single frame.
-/// Auto-commits when the delegate returns.
+/// Dispose to commit data.
 /// </summary>
-public interface IKeypointsDataContext
+public interface IKeypointsDataContext : IDisposable
 {
     /// <summary>
     /// Current frame ID.

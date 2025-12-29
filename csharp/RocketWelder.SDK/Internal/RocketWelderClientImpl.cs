@@ -37,22 +37,10 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
         return RunProcessingLoopAsync(
             (input, output, frameId, width, height) =>
             {
-                var keypointsContext = CreateKeypointsContext(frameId);
-                var segmentationContext = CreateSegmentationContext(frameId, width, height);
+                using var keypointsContext = CreateKeypointsContext(frameId);
+                using var segmentationContext = CreateSegmentationContext(frameId, width, height);
 
-                try
-                {
-                    processFrame(input, segmentationContext, keypointsContext, output);
-
-                    // Auto-commit both contexts
-                    keypointsContext.Commit();
-                    segmentationContext.Commit();
-                }
-                catch
-                {
-                    // On error, still try to clean up
-                    throw;
-                }
+                processFrame(input, segmentationContext, keypointsContext, output);
             },
             useKeypoints: true,
             useSegmentation: true,
@@ -68,17 +56,9 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
         return RunProcessingLoopAsync(
             (input, output, frameId, width, height) =>
             {
-                var keypointsContext = CreateKeypointsContext(frameId);
+                using var keypointsContext = CreateKeypointsContext(frameId);
 
-                try
-                {
-                    processFrame(input, keypointsContext, output);
-                    keypointsContext.Commit();
-                }
-                catch
-                {
-                    throw;
-                }
+                processFrame(input, keypointsContext, output);
             },
             useKeypoints: true,
             useSegmentation: false,
@@ -94,17 +74,9 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
         return RunProcessingLoopAsync(
             (input, output, frameId, width, height) =>
             {
-                var segmentationContext = CreateSegmentationContext(frameId, width, height);
+                using var segmentationContext = CreateSegmentationContext(frameId, width, height);
 
-                try
-                {
-                    processFrame(input, segmentationContext, output);
-                    segmentationContext.Commit();
-                }
-                catch
-                {
-                    throw;
-                }
+                processFrame(input, segmentationContext, output);
             },
             useKeypoints: false,
             useSegmentation: true,

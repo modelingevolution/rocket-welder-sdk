@@ -5,11 +5,12 @@ namespace RocketWelder.SDK.Internal;
 
 /// <summary>
 /// Unit of Work implementation for segmentation data.
-/// Wraps an <see cref="ISegmentationResultWriter"/> and auto-commits on Commit().
+/// Wraps an <see cref="ISegmentationResultWriter"/> and commits on Dispose.
 /// </summary>
 internal sealed class SegmentationDataContext : ISegmentationDataContext
 {
     private readonly ISegmentationResultWriter _writer;
+    private bool _disposed;
 
     public SegmentationDataContext(ISegmentationResultWriter writer, ulong frameId)
     {
@@ -24,12 +25,10 @@ internal sealed class SegmentationDataContext : ISegmentationDataContext
         _writer.Append(segmentClass.ClassId, instanceId, points);
     }
 
-    /// <summary>
-    /// Commits the data context by disposing the underlying writer.
-    /// Called automatically when the processing delegate returns.
-    /// </summary>
-    internal void Commit()
+    public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         _writer.Dispose();
     }
 }

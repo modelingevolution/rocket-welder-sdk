@@ -5,11 +5,12 @@ namespace RocketWelder.SDK.Internal;
 
 /// <summary>
 /// Unit of Work implementation for keypoints data.
-/// Wraps an <see cref="IKeypointsWriter"/> and auto-commits on Commit().
+/// Wraps an <see cref="IKeypointsWriter"/> and commits on Dispose.
 /// </summary>
 internal sealed class KeypointsDataContext : IKeypointsDataContext
 {
     private readonly IKeypointsWriter _writer;
+    private bool _disposed;
 
     public KeypointsDataContext(IKeypointsWriter writer, ulong frameId)
     {
@@ -24,12 +25,10 @@ internal sealed class KeypointsDataContext : IKeypointsDataContext
         _writer.Append(point.Id, x, y, confidence);
     }
 
-    /// <summary>
-    /// Commits the data context by disposing the underlying writer.
-    /// Called automatically when the processing delegate returns.
-    /// </summary>
-    internal void Commit()
+    public void Dispose()
     {
+        if (_disposed) return;
+        _disposed = true;
         _writer.Dispose();
     }
 }

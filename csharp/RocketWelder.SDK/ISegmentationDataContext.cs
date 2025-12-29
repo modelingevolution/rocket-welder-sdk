@@ -5,9 +5,9 @@ namespace RocketWelder.SDK;
 
 /// <summary>
 /// Unit of Work for segmentation data, scoped to a single frame.
-/// Auto-commits when the delegate returns.
+/// Dispose to commit data.
 /// </summary>
-public interface ISegmentationDataContext
+public interface ISegmentationDataContext : IDisposable
 {
     /// <summary>
     /// Current frame ID.
