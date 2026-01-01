@@ -128,7 +128,16 @@ jobs:
           --skip-duplicate
       env:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-    
+
+    - name: Publish to ModelingEvolution NuGet
+      working-directory: ./csharp
+      run: |
+        dotnet nuget push "./nupkg/*.nupkg" \
+          --api-key ${{ secrets.NUGET_API_KEY_ME }} \
+          --source https://nuget.modelingevolution.com/v3/index.json \
+          --skip-duplicate
+      continue-on-error: true
+
     - name: Summary
       run: |
         echo "## C# Packages Published to NuGet" >> $GITHUB_STEP_SUMMARY
