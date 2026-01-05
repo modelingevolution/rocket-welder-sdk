@@ -180,7 +180,7 @@ public class ServerIntegrationTests : IDisposable
     }
 
     [Fact]
-    public async Task Server_CanRead_KeypointsFromSocket()
+    public async Task Server_CanRead_KeyPointsFromSocket()
     {
         // Arrange
         var socketPath = $"/tmp/test-keypoints-{Guid.NewGuid():N}.sock";
@@ -194,21 +194,21 @@ public class ServerIntegrationTests : IDisposable
         {
             // Create socket sink that binds (server mode)
             using var sink = UnixSocketFrameSink.Bind(socketPath);
-            _output.WriteLine("Keypoints sink bound, waiting for connection...");
+            _output.WriteLine("KeyPoints sink bound, waiting for connection...");
 
             // Wait for server to connect
             await Task.Delay(500);
 
             // Write a keypoints frame
-            var keypoints = new Keypoint[]
+            var keypoints = new KeyPoint[]
             {
                 new(0, 100, 200, 950),
                 new(1, 150, 250, 900),
                 new(2, 200, 300, 850)
             };
 
-            var buffer = new byte[KeypointsProtocol.CalculateMasterFrameSize(keypoints.Length)];
-            var bytesWritten = KeypointsProtocol.WriteMasterFrame(buffer, frameId: 42, keypoints);
+            var buffer = new byte[KeyPointsProtocol.CalculateMasterFrameSize(keypoints.Length)];
+            var bytesWritten = KeyPointsProtocol.WriteMasterFrame(buffer, frameId: 42, keypoints);
 
             _output.WriteLine($"Writing {bytesWritten} bytes of keypoints data");
             sink.WriteFrame(buffer.AsSpan(0, bytesWritten).ToArray());
@@ -219,13 +219,13 @@ public class ServerIntegrationTests : IDisposable
         await Task.Delay(200);
 
         // Act - Connect to socket and read keypoints
-        await server.ConnectToKeypointsSocketAsync(socketPath, TimeSpan.FromSeconds(5));
+        await server.ConnectToKeyPointsSocketAsync(socketPath, TimeSpan.FromSeconds(5));
         _output.WriteLine("Server connected to keypoints socket");
 
         // Wait for writer to send data
         await Task.Delay(500);
 
-        var frame = server.TryReadKeypointsFrame(TimeSpan.FromSeconds(5));
+        var frame = server.TryReadKeyPointsFrame(TimeSpan.FromSeconds(5));
 
         // Assert
         Assert.NotNull(frame);

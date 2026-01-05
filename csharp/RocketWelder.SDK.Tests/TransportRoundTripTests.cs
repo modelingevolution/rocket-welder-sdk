@@ -11,7 +11,7 @@ using RocketWelder.SDK.Transport;
 using RocketWelder.SDK.Protocols;
 using Xunit;
 
-using DeltaKeypointsFrame = RocketWelder.SDK.Protocols.DeltaFrame<RocketWelder.SDK.Protocols.Keypoint>;
+using DeltaKeyPointsFrame = RocketWelder.SDK.Protocols.DeltaFrame<RocketWelder.SDK.Protocols.KeyPoint>;
 
 namespace RocketWelder.SDK.Tests;
 
@@ -24,25 +24,25 @@ public class TransportRoundTripTests
     /// <summary>
     /// Helper to find keypoint by ID in a span.
     /// </summary>
-    private static Keypoint FindKeypointById(ReadOnlySpan<Keypoint> items, int id)
+    private static KeyPoint FindKeyPointById(ReadOnlySpan<KeyPoint> items, int id)
     {
         foreach (var kp in items)
             if (kp.Id == id)
                 return kp;
-        throw new InvalidOperationException($"Keypoint with Id {id} not found");
+        throw new InvalidOperationException($"KeyPoint with Id {id} not found");
     }
 
     /// <summary>
-    /// Helper to read all Keypoints frames from a stream.
-    /// Returns DeltaFrame&lt;Keypoint&gt; which includes IsDelta metadata.
+    /// Helper to read all KeyPoints frames from a stream.
+    /// Returns DeltaFrame&lt;KeyPoint&gt; which includes IsDelta metadata.
     /// </summary>
-    private async Task<List<DeltaKeypointsFrame>> ReadAllKeypointsFramesAsync(Stream stream)
+    private async Task<List<DeltaKeyPointsFrame>> ReadAllKeyPointsFramesAsync(Stream stream)
     {
         stream.Position = 0;
         var source = new StreamFrameSource(stream, leaveOpen: true);
-        var kpSource = new KeypointsSource(source);
+        var kpSource = new KeyPointsSource(source);
 
-        var frames = new List<DeltaKeypointsFrame>();
+        var frames = new List<DeltaKeyPointsFrame>();
         await foreach (var frame in kpSource.ReadFramesAsync())
         {
             frames.Add(frame);
@@ -59,9 +59,9 @@ public class TransportRoundTripTests
         // Arrange
         using var stream = new MemoryStream();
         using var frameSink = new StreamFrameSink(stream, leaveOpen: true);
-        using var sink = new KeypointsSink(frameSink, ownsSink: true);
+        using var sink = new KeyPointsSink(frameSink, ownsSink: true);
 
-        var expectedKeypoints = new[]
+        var expectedKeyPoints = new[]
         {
             (id: 0, point: new Point(100, 200), confidence: 0.95f),
             (id: 1, point: new Point(120, 190), confidence: 0.92f),
@@ -71,14 +71,14 @@ public class TransportRoundTripTests
         // Act - Write via IFrameSink
         using (var writer = sink.CreateWriter(frameId: 1))
         {
-            foreach (var (id, point, confidence) in expectedKeypoints)
+            foreach (var (id, point, confidence) in expectedKeyPoints)
             {
                 writer.Append(id, point, confidence);
             }
         }
 
-        // Act - Read via KeypointsSource
-        var frames = await ReadAllKeypointsFramesAsync(stream);
+        // Act - Read via KeyPointsSource
+        var frames = await ReadAllKeyPointsFramesAsync(stream);
 
         // Assert
         Assert.Single(frames);
@@ -86,9 +86,9 @@ public class TransportRoundTripTests
         Assert.Equal(1ul, frame.FrameId);
         Assert.Equal(3, frame.Items.Length);
 
-        foreach (var (id, expectedPoint, expectedConfidence) in expectedKeypoints)
+        foreach (var (id, expectedPoint, expectedConfidence) in expectedKeyPoints)
         {
-            var kp = FindKeypointById(frame.Items.Span, id);
+            var kp = FindKeyPointById(frame.Items.Span, id);
             Assert.Equal(expectedPoint, kp.Position);
             Assert.Equal(expectedConfidence, kp.Confidence, precision: 4);
         }
@@ -99,7 +99,7 @@ public class TransportRoundTripTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var sink = new KeypointsSink(stream); // Convenience constructor
+        using var sink = new KeyPointsSink(stream); // Convenience constructor
 
         // Act - Write
         using (var writer = sink.CreateWriter(frameId: 0))
@@ -145,7 +145,7 @@ public class TransportRoundTripTests
         await client.ConnectAsync(IPAddress.Loopback, port);
         using var clientStream = client.GetStream();
 
-        var expectedKeypoints = new[]
+        var expectedKeyPoints = new[]
         {
             (id: 0, point: new Point(100, 200), confidence: 0.95f),
             (id: 1, point: new Point(120, 190), confidence: 0.92f)
@@ -154,9 +154,9 @@ public class TransportRoundTripTests
         // Write via TCP
         using (var frameSink = new TcpFrameSink(clientStream, leaveOpen: true))
         {
-            using var sink = new KeypointsSink(frameSink, ownsSink: true);
+            using var sink = new KeyPointsSink(frameSink, ownsSink: true);
             using var writer = sink.CreateWriter(frameId: 1);
-            foreach (var (id, point, confidence) in expectedKeypoints)
+            foreach (var (id, point, confidence) in expectedKeyPoints)
             {
                 writer.Append(id, point, confidence);
             }
@@ -170,7 +170,7 @@ public class TransportRoundTripTests
         await serverTask;
         listener.Stop();
 
-        // Verify the echoed frame - parse using KeypointsSource
+        // Verify the echoed frame - parse using KeyPointsSource
         using var memStream = new MemoryStream();
         // Write with length-prefix framing so StreamFrameSource can read it
         using (var tempFrameSink = new StreamFrameSink(memStream, leaveOpen: true))
@@ -178,7 +178,7 @@ public class TransportRoundTripTests
             tempFrameSink.WriteFrame(responseFrame.Span);
         }
 
-        var frames = await ReadAllKeypointsFramesAsync(memStream);
+        var frames = await ReadAllKeyPointsFramesAsync(memStream);
         Assert.Single(frames);
         Assert.Equal(1ul, frames[0].FrameId);
         Assert.Equal(2, frames[0].Items.Length);
@@ -216,7 +216,7 @@ public class TransportRoundTripTests
         using var clientStream = client.GetStream();
         using var frameSink = new TcpFrameSink(clientStream);
 
-        using var sink = new KeypointsSink(frameSink, ownsSink: true);
+        using var sink = new KeyPointsSink(frameSink, ownsSink: true);
 
         for (ulong frameId = 0; frameId < 3; frameId++)
         {
@@ -256,7 +256,7 @@ public class TransportRoundTripTests
         using var clientStream = client.GetStream();
         using var frameSink = new TcpFrameSink(clientStream);
 
-        using var sink = new KeypointsSink(frameSink, ownsSink: true);
+        using var sink = new KeyPointsSink(frameSink, ownsSink: true);
 
         // Add 100 keypoints to create a large frame
         using (var writer = sink.CreateWriter(frameId: 0))
@@ -281,7 +281,7 @@ public class TransportRoundTripTests
         // Test that data written via stream can be sent over TCP
         // Arrange - Write to memory stream
         using var memStream = new MemoryStream();
-        using var streamSink = new KeypointsSink(memStream, leaveOpen: true);
+        using var streamSink = new KeyPointsSink(memStream, leaveOpen: true);
 
         using (var writer = streamSink.CreateWriter(frameId: 0))
         {
@@ -336,7 +336,7 @@ public class TransportRoundTripTests
 
         try
         {
-            var expectedKeypoints = new[]
+            var expectedKeyPoints = new[]
             {
                 (id: 0, point: new Point(100, 200), confidence: 0.95f),
                 (id: 1, point: new Point(120, 190), confidence: 0.92f),
@@ -346,9 +346,9 @@ public class TransportRoundTripTests
             // Act - Write to file
             using (var writeStream = File.Open(tempFile, FileMode.Create))
             {
-                using var sink = new KeypointsSink(writeStream);
+                using var sink = new KeyPointsSink(writeStream);
                 using var writer = sink.CreateWriter(frameId: 1);
-                foreach (var (id, point, confidence) in expectedKeypoints)
+                foreach (var (id, point, confidence) in expectedKeyPoints)
                 {
                     writer.Append(id, point, confidence);
                 }
@@ -357,9 +357,9 @@ public class TransportRoundTripTests
             // Act - Read from file using streaming API
             using var readStream = File.OpenRead(tempFile);
             var source = new StreamFrameSource(readStream, leaveOpen: false);
-            var kpSource = new KeypointsSource(source);
+            var kpSource = new KeyPointsSource(source);
 
-            var frames = new List<DeltaKeypointsFrame>();
+            var frames = new List<DeltaKeyPointsFrame>();
             await foreach (var frame in kpSource.ReadFramesAsync())
             {
                 frames.Add(frame);
@@ -371,9 +371,9 @@ public class TransportRoundTripTests
             Assert.Equal(1ul, readFrame.FrameId);
             Assert.Equal(3, readFrame.Items.Length);
 
-            foreach (var (id, expectedPoint, expectedConfidence) in expectedKeypoints)
+            foreach (var (id, expectedPoint, expectedConfidence) in expectedKeyPoints)
             {
-                var kp = FindKeypointById(readFrame.Items.Span, id);
+                var kp = FindKeyPointById(readFrame.Items.Span, id);
                 Assert.Equal(expectedPoint, kp.Position);
                 Assert.Equal(expectedConfidence, kp.Confidence, precision: 4);
             }

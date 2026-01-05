@@ -2,7 +2,7 @@
 
 ## Overview
 
-The KeyPoints protocol provides efficient binary serialization for arbitrary point data across video frames. It captures the **state** of keypoints without assumptions about their semantic meaning. Keypoints can represent:
+The KeyPoints protocol provides efficient binary serialization for arbitrary point data across video frames. It captures the **state** of keypoints without assumptions about their semantic meaning. KeyPoints can represent:
 - Pose/skeleton joints
 - Segmentation boundary points
 - Geometric centers
@@ -52,10 +52,10 @@ It uses a two-file system with master/delta frame compression for optimal storag
 ```
 [FrameType: 1B = 0x00]         // 0x00 = Master Frame
 [FrameId: 8B little-endian]
-[KeypointCount: varint]        // Number of keypoints in this frame
+[KeyPointCount: varint]        // Number of keypoints in this frame
 
 For each keypoint:
-  [KeypointId: varint]         // Maps to keypoints.json
+  [KeyPointId: varint]         // Maps to keypoints.json
   [X: 4B int32 LE]             // Absolute pixel X coordinate
   [Y: 4B int32 LE]             // Absolute pixel Y coordinate
   [Confidence: 2B ushort LE]   // Encoded as 0-10000 (API uses float 0.0-1.0)
@@ -65,10 +65,10 @@ For each keypoint:
 ```
 [FrameType: 1B = 0x01]         // 0x01 = Delta Frame
 [FrameId: 8B little-endian]
-[KeypointCount: varint]
+[KeyPointCount: varint]
 
 For each keypoint:
-  [KeypointId: varint]
+  [KeyPointId: varint]
   [DeltaX: varint]             // ZigZag encoded delta (signed)
   [DeltaY: varint]             // ZigZag encoded delta (signed)
   [ConfidenceDelta: varint]    // ZigZag encoded delta of ushort value (signed)
@@ -216,7 +216,7 @@ public interface IKeyPointsWriter : IDisposable
     /// <summary>
     /// Append a keypoint to this frame.
     /// </summary>
-    /// <param name="keypointId">Keypoint identifier</param>
+    /// <param name="keypointId">KeyPoint identifier</param>
     /// <param name="x">X coordinate in pixels</param>
     /// <param name="y">Y coordinate in pixels</param>
     /// <param name="confidence">Confidence value (0.0-1.0)</param>
@@ -225,7 +225,7 @@ public interface IKeyPointsWriter : IDisposable
     /// <summary>
     /// Append a keypoint to this frame.
     /// </summary>
-    /// <param name="keypointId">Keypoint identifier</param>
+    /// <param name="keypointId">KeyPoint identifier</param>
     /// <param name="p">Point coordinates</param>
     /// <param name="confidence">Confidence value (0.0-1.0)</param>
     void Append(int keypointId, Point p, float confidence);
@@ -387,7 +387,7 @@ var series = await sink.Read(json, frameSource);
 
 // Metadata from definition
 Console.WriteLine($"Model: {series.ComputeModuleName} v{series.Version}");
-Console.WriteLine($"Keypoints defined: {series.Points.Count}");
+Console.WriteLine($"KeyPoints defined: {series.Points.Count}");
 
 // Query 1: Iterate through all frames
 foreach (var frameId in series.FrameIds)
@@ -561,11 +561,11 @@ The protocol follows these principles:
 - Master frames provide natural recovery points
 - Recommended: Log error with frame ID
 
-### Variable Keypoint Count
+### Variable KeyPoint Count
 - Different frames can have different keypoint counts
 - KeyPointsSeries handles dynamic frame structures automatically
 - Common scenarios:
-  - Keypoints appear/disappear as objects enter/leave frame
+  - KeyPoints appear/disappear as objects enter/leave frame
   - Different objects have different keypoint sets
 - GetFrame() returns only keypoints present in that specific frame
 

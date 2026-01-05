@@ -8,27 +8,27 @@ using RocketWelder.SDK.Transport;
 using RocketWelder.SDK.Protocols;
 using Xunit;
 
-using DeltaKeypointsFrame = RocketWelder.SDK.Protocols.DeltaFrame<RocketWelder.SDK.Protocols.Keypoint>;
+using DeltaKeyPointsFrame = RocketWelder.SDK.Protocols.DeltaFrame<RocketWelder.SDK.Protocols.KeyPoint>;
 
 namespace RocketWelder.SDK.Tests;
 
-public class KeypointsProtocolTests
+public class KeyPointsProtocolTests
 {
     /// <summary>
     /// Helper to find keypoint by ID in a span.
     /// </summary>
-    private static Keypoint FindKeypointById(ReadOnlySpan<Keypoint> items, int id)
+    private static KeyPoint FindKeyPointById(ReadOnlySpan<KeyPoint> items, int id)
     {
         foreach (var kp in items)
             if (kp.Id == id)
                 return kp;
-        throw new InvalidOperationException($"Keypoint with Id {id} not found");
+        throw new InvalidOperationException($"KeyPoint with Id {id} not found");
     }
 
     /// <summary>
     /// Helper to check if a span contains a keypoint with the given ID.
     /// </summary>
-    private static bool ContainsKeypointById(ReadOnlySpan<Keypoint> items, int id)
+    private static bool ContainsKeyPointById(ReadOnlySpan<KeyPoint> items, int id)
     {
         foreach (var kp in items)
             if (kp.Id == id)
@@ -38,15 +38,15 @@ public class KeypointsProtocolTests
 
     /// <summary>
     /// Helper to read all frames from a stream using the streaming API.
-    /// Returns DeltaFrame&lt;Keypoint&gt; which includes IsDelta metadata.
+    /// Returns DeltaFrame&lt;KeyPoint&gt; which includes IsDelta metadata.
     /// </summary>
-    private async Task<List<DeltaKeypointsFrame>> ReadAllFramesAsync(Stream stream)
+    private async Task<List<DeltaKeyPointsFrame>> ReadAllFramesAsync(Stream stream)
     {
         stream.Position = 0;
         var source = new StreamFrameSource(stream, leaveOpen: true);
-        var kpSource = new KeypointsSource(source);
+        var kpSource = new KeyPointsSource(source);
 
-        var frames = new List<DeltaKeypointsFrame>();
+        var frames = new List<DeltaKeyPointsFrame>();
         await foreach (var frame in kpSource.ReadFramesAsync())
         {
             frames.Add(frame);
@@ -60,9 +60,9 @@ public class KeypointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeypointsSink(stream, leaveOpen: true);
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
-        var expectedKeypoints = new[]
+        var expectedKeyPoints = new[]
         {
             (id: 0, point: new Point(100, 200), confidence: 0.95f),
             (id: 1, point: new Point(120, 190), confidence: 0.92f),
@@ -74,7 +74,7 @@ public class KeypointsProtocolTests
         // Act - Write
         using (var writer = storage.CreateWriter(frameId: 1))
         {
-            foreach (var (id, point, confidence) in expectedKeypoints)
+            foreach (var (id, point, confidence) in expectedKeyPoints)
             {
                 writer.Append(id, point, confidence);
             }
@@ -90,9 +90,9 @@ public class KeypointsProtocolTests
         Assert.False(frame.IsDelta);
         Assert.Equal(5, frame.Items.Length);
 
-        foreach (var (id, expectedPoint, expectedConfidence) in expectedKeypoints)
+        foreach (var (id, expectedPoint, expectedConfidence) in expectedKeyPoints)
         {
-            var kp = FindKeypointById(frame.Items.Span, id);
+            var kp = FindKeyPointById(frame.Items.Span, id);
             Assert.Equal(expectedPoint.X, kp.Position.X);
             Assert.Equal(expectedPoint.Y, kp.Position.Y);
             Assert.Equal(expectedConfidence, kp.Confidence, precision: 4);
@@ -104,7 +104,7 @@ public class KeypointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeypointsSink(stream, masterFrameInterval: 2, leaveOpen: true);
+        using var storage = new KeyPointsSink(stream, masterFrameInterval: 2, leaveOpen: true);
 
         // Frame 1 - Master
         var frame1 = new[]
@@ -155,7 +155,7 @@ public class KeypointsProtocolTests
         // Verify Frame 1 (master)
         Assert.Equal(0ul, frames[0].FrameId);
         Assert.False(frames[0].IsDelta);
-        var actualFrame1 = FindKeypointById(frames[0].Items.Span, 0);
+        var actualFrame1 = FindKeyPointById(frames[0].Items.Span, 0);
         Assert.Equal(frame1[0].point.X, actualFrame1.Position.X);
         Assert.Equal(frame1[0].point.Y, actualFrame1.Position.Y);
         Assert.Equal(frame1[0].confidence, actualFrame1.Confidence, precision: 4);
@@ -163,7 +163,7 @@ public class KeypointsProtocolTests
         // Verify Frame 2 (delta decoded correctly)
         Assert.Equal(1ul, frames[1].FrameId);
         Assert.True(frames[1].IsDelta);
-        var actualFrame2 = FindKeypointById(frames[1].Items.Span, 0);
+        var actualFrame2 = FindKeyPointById(frames[1].Items.Span, 0);
         Assert.Equal(frame2[0].point.X, actualFrame2.Position.X);
         Assert.Equal(frame2[0].point.Y, actualFrame2.Position.Y);
         Assert.Equal(frame2[0].confidence, actualFrame2.Confidence, precision: 4);
@@ -171,7 +171,7 @@ public class KeypointsProtocolTests
         // Verify Frame 3 (master)
         Assert.Equal(2ul, frames[2].FrameId);
         Assert.False(frames[2].IsDelta);
-        var actualFrame3 = FindKeypointById(frames[2].Items.Span, 0);
+        var actualFrame3 = FindKeyPointById(frames[2].Items.Span, 0);
         Assert.Equal(frame3[0].point.X, actualFrame3.Position.X);
         Assert.Equal(frame3[0].point.Y, actualFrame3.Position.Y);
         Assert.Equal(frame3[0].confidence, actualFrame3.Confidence, precision: 4);
@@ -182,7 +182,7 @@ public class KeypointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeypointsSink(stream, leaveOpen: true);
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         // Write 3 frames with nose (keypointId=0) moving
         for (ulong frameId = 0; frameId < 3; frameId++)
@@ -199,20 +199,20 @@ public class KeypointsProtocolTests
         Assert.Equal(3, frames.Count);
 
         // Verify trajectory - nose moving
-        Assert.Equal(100, FindKeypointById(frames[0].Items.Span, 0).Position.X);
-        Assert.Equal(200, FindKeypointById(frames[0].Items.Span, 0).Position.Y);
-        Assert.Equal(110, FindKeypointById(frames[1].Items.Span, 0).Position.X);
-        Assert.Equal(205, FindKeypointById(frames[1].Items.Span, 0).Position.Y);
-        Assert.Equal(120, FindKeypointById(frames[2].Items.Span, 0).Position.X);
-        Assert.Equal(210, FindKeypointById(frames[2].Items.Span, 0).Position.Y);
+        Assert.Equal(100, FindKeyPointById(frames[0].Items.Span, 0).Position.X);
+        Assert.Equal(200, FindKeyPointById(frames[0].Items.Span, 0).Position.Y);
+        Assert.Equal(110, FindKeyPointById(frames[1].Items.Span, 0).Position.X);
+        Assert.Equal(205, FindKeyPointById(frames[1].Items.Span, 0).Position.Y);
+        Assert.Equal(120, FindKeyPointById(frames[2].Items.Span, 0).Position.X);
+        Assert.Equal(210, FindKeyPointById(frames[2].Items.Span, 0).Position.Y);
     }
 
     [Fact]
-    public async Task Keypoint_HasCorrectProperties()
+    public async Task KeyPoint_HasCorrectProperties()
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeypointsSink(stream, leaveOpen: true);
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         using (var writer = storage.CreateWriter(frameId: 10))
         {
@@ -229,13 +229,13 @@ public class KeypointsProtocolTests
         Assert.Equal(10ul, frame.FrameId);
         Assert.Equal(2, frame.Items.Length);
 
-        var kp0 = FindKeypointById(frame.Items.Span, 0);
+        var kp0 = FindKeyPointById(frame.Items.Span, 0);
         Assert.Equal(100, kp0.Position.X);
         Assert.Equal(200, kp0.Position.Y);
         Assert.Equal(0.95f, kp0.Confidence, precision: 4);
         Assert.Equal(new Point(100, 200), kp0.Position);
 
-        var kp1 = FindKeypointById(frame.Items.Span, 1);
+        var kp1 = FindKeyPointById(frame.Items.Span, 1);
         Assert.Equal(120, kp1.Position.X);
         Assert.Equal(190, kp1.Position.Y);
         Assert.Equal(0.92f, kp1.Confidence, precision: 4);
@@ -246,7 +246,7 @@ public class KeypointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeypointsSink(stream, leaveOpen: true);
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         var testConfidences = new[] { 0.0f, 0.5f, 0.9999f, 1.0f, 0.1234f };
 
@@ -267,17 +267,17 @@ public class KeypointsProtocolTests
 
         for (int i = 0; i < testConfidences.Length; i++)
         {
-            var kp = FindKeypointById(frame.Items.Span, i);
+            var kp = FindKeyPointById(frame.Items.Span, i);
             Assert.Equal(testConfidences[i], kp.Confidence, precision: 4);
         }
     }
 
     [Fact]
-    public async Task VariableKeypointCount_HandledCorrectly()
+    public async Task VariableKeyPointCount_HandledCorrectly()
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeypointsSink(stream, leaveOpen: true);
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         // Frame 1 - 2 keypoints
         using (var writer1 = storage.CreateWriter(frameId: 0))
@@ -311,9 +311,9 @@ public class KeypointsProtocolTests
         Assert.Equal(1, frames[2].Items.Length);
 
         // Verify keypoint 3 only exists in frame 2
-        Assert.False(ContainsKeypointById(frames[0].Items.Span, 3));
-        Assert.True(ContainsKeypointById(frames[1].Items.Span, 3));
-        Assert.False(ContainsKeypointById(frames[2].Items.Span, 3));
+        Assert.False(ContainsKeyPointById(frames[0].Items.Span, 3));
+        Assert.True(ContainsKeyPointById(frames[1].Items.Span, 3));
+        Assert.False(ContainsKeyPointById(frames[2].Items.Span, 3));
     }
 
     [Fact]
@@ -321,7 +321,7 @@ public class KeypointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeypointsSink(stream, leaveOpen: true);
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         var testPoints = new[]
         {
@@ -348,7 +348,7 @@ public class KeypointsProtocolTests
 
         for (int i = 0; i < testPoints.Length; i++)
         {
-            var kp = FindKeypointById(frame.Items.Span, i);
+            var kp = FindKeyPointById(frame.Items.Span, i);
             Assert.Equal(testPoints[i], kp.Position);
         }
     }
@@ -358,9 +358,9 @@ public class KeypointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeypointsSink(stream, leaveOpen: true);
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
-        var expectedKeypoints = new[]
+        var expectedKeyPoints = new[]
         {
             (id: 0, point: new Point(100, 200), confidence: 0.95f),
             (id: 1, point: new Point(120, 190), confidence: 0.92f),
@@ -370,7 +370,7 @@ public class KeypointsProtocolTests
         // Act - Write using async methods
         await using (var writer = storage.CreateWriter(frameId: 1))
         {
-            foreach (var (id, point, confidence) in expectedKeypoints)
+            foreach (var (id, point, confidence) in expectedKeyPoints)
             {
                 await writer.AppendAsync(id, point, confidence);
             }
@@ -385,9 +385,9 @@ public class KeypointsProtocolTests
         Assert.Equal(1ul, frame.FrameId);
         Assert.Equal(3, frame.Items.Length);
 
-        foreach (var (id, expectedPoint, expectedConfidence) in expectedKeypoints)
+        foreach (var (id, expectedPoint, expectedConfidence) in expectedKeyPoints)
         {
-            var kp = FindKeypointById(frame.Items.Span, id);
+            var kp = FindKeyPointById(frame.Items.Span, id);
             Assert.Equal(expectedPoint, kp.Position);
             Assert.Equal(expectedConfidence, kp.Confidence, precision: 4);
         }
@@ -399,7 +399,7 @@ public class KeypointsProtocolTests
         // Arrange
         using var stream = new MemoryStream();
         var frameSink = new StreamFrameSink(stream, leaveOpen: true);
-        using var sink = new KeypointsSink(frameSink, ownsSink: true);
+        using var sink = new KeyPointsSink(frameSink, ownsSink: true);
 
         // Act - Write multiple frames via sink
         using (var writer1 = sink.CreateWriter(1))
@@ -425,7 +425,7 @@ public class KeypointsProtocolTests
     {
         // Arrange
         using var stream = new MemoryStream();
-        using var storage = new KeypointsSink(stream, leaveOpen: true);
+        using var storage = new KeyPointsSink(stream, leaveOpen: true);
 
         // Write 3 frames
         for (int i = 0; i < 3; i++)
@@ -437,7 +437,7 @@ public class KeypointsProtocolTests
         // Act - Stream frames
         stream.Position = 0;
         var source = new StreamFrameSource(stream, leaveOpen: true);
-        var kpSource = new KeypointsSource(source);
+        var kpSource = new KeyPointsSource(source);
 
         int frameCount = 0;
         await foreach (var frame in kpSource.ReadFramesAsync())

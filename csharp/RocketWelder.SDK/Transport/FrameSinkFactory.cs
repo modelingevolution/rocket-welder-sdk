@@ -6,7 +6,7 @@ namespace RocketWelder.SDK.Transport;
 
 /// <summary>
 /// Factory for creating IFrameSink instances from parsed protocol and address.
-/// Does NOT parse URLs - use SegmentationConnectionString or KeypointsConnectionString for parsing.
+/// Does NOT parse URLs - use SegmentationConnectionString or KeyPointsConnectionString for parsing.
 /// </summary>
 public static class FrameSinkFactory
 {

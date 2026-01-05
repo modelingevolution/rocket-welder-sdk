@@ -5,7 +5,7 @@ using Xunit;
 // Use aliases to avoid conflict with RocketWelder.SDK types
 using ProtocolSegmentationFrame = RocketWelder.SDK.Protocols.SegmentationFrame;
 using ProtocolSegmentationInstance = RocketWelder.SDK.Protocols.SegmentationInstance;
-using ProtocolKeypoint = RocketWelder.SDK.Protocols.Keypoint;
+using ProtocolKeyPoint = RocketWelder.SDK.Protocols.KeyPoint;
 
 namespace RocketWelder.SDK.Tests.BinaryProtocols;
 
@@ -13,15 +13,15 @@ namespace RocketWelder.SDK.Tests.BinaryProtocols;
 /// TDD tests to validate BinaryProtocol API design for round-trip testing.
 ///
 /// GOAL: Enable cross-platform round-trip testing:
-/// - SDK (Linux container) encodes with SegmentationResultWriter/KeypointsWriter
+/// - SDK (Linux container) encodes with SegmentationResultWriter/KeyPointsWriter
 /// - BinaryProtocol (WASM-compatible) can decode the bytes
 /// - Assert the decoded values match what was encoded
 ///
 /// NEW ABSTRACTIONS NEEDED:
 /// - BinaryFrameWriter (symmetric to BinaryFrameReader)
 /// - SegmentationProtocol.Read/Write (pure protocol, no transport)
-/// - KeypointsProtocol.Read/Write (pure protocol, no transport)
-/// - Data structures: SegmentationFrame, SegmentationInstance, DeltaFrame&lt;Keypoint&gt;, Keypoint
+/// - KeyPointsProtocol.Read/Write (pure protocol, no transport)
+/// - Data structures: SegmentationFrame, SegmentationInstance, DeltaFrame&lt;KeyPoint&gt;, KeyPoint
 /// </summary>
 public class DesignAlignmentTests
 {
@@ -143,21 +143,21 @@ public class DesignAlignmentTests
 
     #endregion
 
-    #region KeypointsProtocol Tests
+    #region KeyPointsProtocol Tests
 
     [Fact]
-    public void KeypointsProtocol_MasterFrame_RoundTrip()
+    public void KeyPointsProtocol_MasterFrame_RoundTrip()
     {
-        var keypoints = new ProtocolKeypoint[]
+        var keypoints = new ProtocolKeyPoint[]
         {
             new(id: 0, x: 100, y: 200, confidence: 9500),
             new(id: 1, x: 80, y: 180, confidence: 8500)
         };
 
         Span<byte> buffer = stackalloc byte[256];
-        int written = KeypointsProtocol.WriteMasterFrame(buffer, frameId: 1, keypoints);
+        int written = KeyPointsProtocol.WriteMasterFrame(buffer, frameId: 1, keypoints);
 
-        var decoded = KeypointsProtocol.Read(buffer[..written]);
+        var decoded = KeyPointsProtocol.Read(buffer[..written]);
 
         Assert.Equal(1UL, decoded.FrameId);
         Assert.False(decoded.IsDelta);  // Master frame = not delta
@@ -172,21 +172,21 @@ public class DesignAlignmentTests
     }
 
     [Fact]
-    public void KeypointsProtocol_DeltaFrame_RoundTrip()
+    public void KeyPointsProtocol_DeltaFrame_RoundTrip()
     {
-        var previous = new ProtocolKeypoint[]
+        var previous = new ProtocolKeyPoint[]
         {
             new(id: 0, x: 100, y: 200, confidence: 9500)
         };
-        var current = new ProtocolKeypoint[]
+        var current = new ProtocolKeyPoint[]
         {
             new(id: 0, x: 102, y: 201, confidence: 9500)
         };
 
         Span<byte> buffer = stackalloc byte[64];
-        int written = KeypointsProtocol.WriteDeltaFrame(buffer, frameId: 2, current, previous);
+        int written = KeyPointsProtocol.WriteDeltaFrame(buffer, frameId: 2, current, previous);
 
-        var decoded = KeypointsProtocol.ReadWithPreviousState(buffer[..written], previous);
+        var decoded = KeyPointsProtocol.ReadWithPreviousState(buffer[..written], previous);
 
         Assert.Equal(2UL, decoded.FrameId);
         Assert.True(decoded.IsDelta);  // Delta frame

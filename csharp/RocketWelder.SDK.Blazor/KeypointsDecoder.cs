@@ -9,19 +9,19 @@ namespace RocketWelder.SDK.Blazor;
 /// <summary>
 /// WASM-side decoder for keypoint detection data with delta encoding support.
 /// Renders keypoints as crosses with optional coordinate labels.
-/// Protocol: [FrameType:1B][FrameId:8B][KeypointCount:varint][Keypoints...]
-/// Master (0x00): [KeypointId:varint][X:int32][Y:int32][Confidence:uint16]
-/// Delta (0x01): [KeypointId:varint][DeltaX:zigzag][DeltaY:zigzag][DeltaConf:zigzag]
+/// Protocol: [FrameType:1B][FrameId:8B][KeyPointCount:varint][KeyPoints...]
+/// Master (0x00): [KeyPointId:varint][X:int32][Y:int32][Confidence:uint16]
+/// Delta (0x01): [KeyPointId:varint][DeltaX:zigzag][DeltaY:zigzag][DeltaConf:zigzag]
 /// </summary>
-public class KeypointsDecoder : IFrameDecoder
+public class KeyPointsDecoder : IFrameDecoder
 {
     private readonly IStage _stage;
     private readonly byte _layerId;
     private readonly RgbColor _defaultColor;
 
     // Pre-allocated dictionaries for zero-allocation hot path
-    private Dictionary<int, (int x, int y, ushort confidence)> _previousKeypoints;
-    private Dictionary<int, (int x, int y, ushort confidence)> _currentKeypoints;
+    private Dictionary<int, (int x, int y, ushort confidence)> _previousKeyPoints;
+    private Dictionary<int, (int x, int y, ushort confidence)> _currentKeyPoints;
 
     /// <summary>
     /// Per-keypoint color mapping. If a keypoint ID is not in this dictionary,
@@ -56,7 +56,7 @@ public class KeypointsDecoder : IFrameDecoder
     /// </summary>
     public int LabelFontSize { get; set; } = 12;
 
-    public KeypointsDecoder(
+    public KeyPointsDecoder(
         IStage stage,
         RgbColor? defaultColor = null,
         byte layerId = 0)
@@ -66,8 +66,8 @@ public class KeypointsDecoder : IFrameDecoder
         _layerId = layerId;
 
         // Pre-allocate with typical keypoint count (COCO has 17)
-        _previousKeypoints = new Dictionary<int, (int x, int y, ushort confidence)>(32);
-        _currentKeypoints = new Dictionary<int, (int x, int y, ushort confidence)>(32);
+        _previousKeyPoints = new Dictionary<int, (int x, int y, ushort confidence)>(32);
+        _currentKeyPoints = new Dictionary<int, (int x, int y, ushort confidence)>(32);
     }
 
     public DecodeResultV2 Decode(ReadOnlySpan<byte> data)
@@ -95,7 +95,7 @@ public class KeypointsDecoder : IFrameDecoder
             var canvas = _stage[_layerId];
 
             // Clear and reuse current frame dictionary
-            _currentKeypoints.Clear();
+            _currentKeyPoints.Clear();
 
             for (uint i = 0; i < keypointCount; i++)
             {
@@ -103,14 +103,14 @@ public class KeypointsDecoder : IFrameDecoder
                 int x, y;
                 ushort confidence;
 
-                if (isDelta && _previousKeypoints.Count > 0)
+                if (isDelta && _previousKeyPoints.Count > 0)
                 {
                     // Delta frame: read deltas
                     var deltaX = reader.ReadZigZagVarint();
                     var deltaY = reader.ReadZigZagVarint();
                     var deltaConf = reader.ReadZigZagVarint();
 
-                    if (_previousKeypoints.TryGetValue(keypointId, out var prev))
+                    if (_previousKeyPoints.TryGetValue(keypointId, out var prev))
                     {
                         x = prev.x + deltaX;
                         y = prev.y + deltaY;
@@ -132,7 +132,7 @@ public class KeypointsDecoder : IFrameDecoder
                     confidence = reader.ReadUInt16LE();
                 }
 
-                _currentKeypoints[keypointId] = (x, y, confidence);
+                _currentKeyPoints[keypointId] = (x, y, confidence);
 
                 // Get color: check Brushes mapping first, then use default
                 var color = Brushes.TryGetValue(keypointId, out var brushColor)
@@ -151,7 +151,7 @@ public class KeypointsDecoder : IFrameDecoder
             }
 
             // Swap dictionaries for next frame (zero allocation)
-            (_previousKeypoints, _currentKeypoints) = (_currentKeypoints, _previousKeypoints);
+            (_previousKeyPoints, _currentKeyPoints) = (_currentKeyPoints, _previousKeyPoints);
 
             _stage.OnFrameEnd();
             return DecodeResultV2.Ok(data.Length, frameId, layerCount: 1);

@@ -4,7 +4,7 @@ namespace RocketWelder.SDK.Graphics;
 
 /// <summary>
 /// Factory for creating per-frame stage writers (transport-agnostic).
-/// Follows the same pattern as ISegmentationResultSink and IKeypointsSink.
+/// Follows the same pattern as ISegmentationResultSink and IKeyPointsSink.
 /// </summary>
 public interface IStageSink : IDisposable, IAsyncDisposable
 {

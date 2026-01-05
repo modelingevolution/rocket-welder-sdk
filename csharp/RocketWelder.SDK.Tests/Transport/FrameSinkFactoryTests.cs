@@ -294,9 +294,9 @@ public class FrameSinkFactoryTests
     }
 
     [Fact]
-    public void Integration_KeypointsConnectionString_ToFrameSink_Socket()
+    public void Integration_KeyPointsConnectionString_ToFrameSink_Socket()
     {
-        var cs = KeypointsConnectionString.Parse("socket:///tmp/kp-test.sock", null);
+        var cs = KeyPointsConnectionString.Parse("socket:///tmp/kp-test.sock", null);
 
         Assert.Equal(TransportKind.Socket, cs.Protocol.Kind);
         Assert.Equal("/tmp/kp-test.sock", cs.Address);

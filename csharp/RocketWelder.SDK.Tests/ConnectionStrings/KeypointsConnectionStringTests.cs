@@ -4,14 +4,14 @@ using Xunit;
 
 namespace RocketWelder.SDK.Tests.HighLevel;
 
-public class KeypointsConnectionStringTests
+public class KeyPointsConnectionStringTests
 {
     #region Parse - File protocol
 
     [Fact]
     public void Parse_FileWithAbsolutePath_ParsesCorrectly()
     {
-        var cs = KeypointsConnectionString.Parse("file:///home/user/output.bin", null);
+        var cs = KeyPointsConnectionString.Parse("file:///home/user/output.bin", null);
 
         Assert.Equal(TransportKind.File, cs.Protocol.Kind);
         Assert.Equal("/home/user/output.bin", cs.Address);
@@ -21,7 +21,7 @@ public class KeypointsConnectionStringTests
     [Fact]
     public void Parse_FileWithRelativePath_ParsesCorrectly()
     {
-        var cs = KeypointsConnectionString.Parse("file://relative/path.bin", null);
+        var cs = KeyPointsConnectionString.Parse("file://relative/path.bin", null);
 
         Assert.Equal(TransportKind.File, cs.Protocol.Kind);
         Assert.Equal("/relative/path.bin", cs.Address);
@@ -34,7 +34,7 @@ public class KeypointsConnectionStringTests
     [Fact]
     public void Parse_Socket_ParsesCorrectly()
     {
-        var cs = KeypointsConnectionString.Parse("socket:///tmp/keypoints.sock", null);
+        var cs = KeyPointsConnectionString.Parse("socket:///tmp/keypoints.sock", null);
 
         Assert.Equal(TransportKind.Socket, cs.Protocol.Kind);
         Assert.Equal("/tmp/keypoints.sock", cs.Address);
@@ -47,7 +47,7 @@ public class KeypointsConnectionStringTests
     [Fact]
     public void Parse_NngPushIpc_ParsesCorrectly()
     {
-        var cs = KeypointsConnectionString.Parse("nng+push+ipc://tmp/keypoints", null);
+        var cs = KeyPointsConnectionString.Parse("nng+push+ipc://tmp/keypoints", null);
 
         Assert.Equal(TransportKind.NngPushIpc, cs.Protocol.Kind);
         Assert.Equal("ipc:///tmp/keypoints", cs.Address);
@@ -56,7 +56,7 @@ public class KeypointsConnectionStringTests
     [Fact]
     public void Parse_NngPushTcp_ParsesCorrectly()
     {
-        var cs = KeypointsConnectionString.Parse("nng+push+tcp://localhost:5555", null);
+        var cs = KeyPointsConnectionString.Parse("nng+push+tcp://localhost:5555", null);
 
         Assert.Equal(TransportKind.NngPushTcp, cs.Protocol.Kind);
         Assert.Equal("tcp://localhost:5555", cs.Address);
@@ -65,7 +65,7 @@ public class KeypointsConnectionStringTests
     [Fact]
     public void Parse_NngPubIpc_ParsesCorrectly()
     {
-        var cs = KeypointsConnectionString.Parse("nng+pub+ipc://tmp/keypoints", null);
+        var cs = KeyPointsConnectionString.Parse("nng+pub+ipc://tmp/keypoints", null);
 
         Assert.Equal(TransportKind.NngPubIpc, cs.Protocol.Kind);
         Assert.Equal("ipc:///tmp/keypoints", cs.Address);
@@ -78,7 +78,7 @@ public class KeypointsConnectionStringTests
     [Fact]
     public void Parse_WithMasterFrameInterval_ParsesParameter()
     {
-        var cs = KeypointsConnectionString.Parse("nng+push+ipc://tmp/kp?masterFrameInterval=500", null);
+        var cs = KeyPointsConnectionString.Parse("nng+push+ipc://tmp/kp?masterFrameInterval=500", null);
 
         Assert.Equal(500, cs.MasterFrameInterval);
     }
@@ -86,7 +86,7 @@ public class KeypointsConnectionStringTests
     [Fact]
     public void Parse_WithMultipleParameters_ParsesAll()
     {
-        var cs = KeypointsConnectionString.Parse("nng+push+ipc://tmp/kp?masterFrameInterval=100&custom=value", null);
+        var cs = KeyPointsConnectionString.Parse("nng+push+ipc://tmp/kp?masterFrameInterval=100&custom=value", null);
 
         Assert.Equal(100, cs.MasterFrameInterval);
         Assert.True(cs.Parameters.ContainsKey("custom"));
@@ -106,7 +106,7 @@ public class KeypointsConnectionStringTests
     [InlineData("nng://path")] // incomplete
     public void Parse_InvalidConnectionString_ThrowsFormatException(string? input)
     {
-        Assert.Throws<FormatException>(() => KeypointsConnectionString.Parse(input!, null));
+        Assert.Throws<FormatException>(() => KeyPointsConnectionString.Parse(input!, null));
     }
 
     #endregion
@@ -116,7 +116,7 @@ public class KeypointsConnectionStringTests
     [Fact]
     public void Default_ReturnsValidConnectionString()
     {
-        var cs = KeypointsConnectionString.Default;
+        var cs = KeyPointsConnectionString.Default;
 
         Assert.Equal(TransportKind.NngPushIpc, cs.Protocol.Kind);
         Assert.Contains("keypoints", cs.Address);
@@ -128,9 +128,9 @@ public class KeypointsConnectionStringTests
     {
         var uniqueVar = $"KEYPOINTS_TEST_{Guid.NewGuid():N}";
 
-        var cs = KeypointsConnectionString.FromEnvironment(uniqueVar);
+        var cs = KeyPointsConnectionString.FromEnvironment(uniqueVar);
 
-        Assert.Equal(KeypointsConnectionString.Default.Protocol, cs.Protocol);
+        Assert.Equal(KeyPointsConnectionString.Default.Protocol, cs.Protocol);
     }
 
     [Fact]
@@ -141,7 +141,7 @@ public class KeypointsConnectionStringTests
 
         try
         {
-            var cs = KeypointsConnectionString.FromEnvironment(uniqueVar);
+            var cs = KeyPointsConnectionString.FromEnvironment(uniqueVar);
 
             Assert.Equal(TransportKind.Socket, cs.Protocol.Kind);
             Assert.Equal("/tmp/test.sock", cs.Address);
@@ -160,7 +160,7 @@ public class KeypointsConnectionStringTests
     public void ToString_ReturnsOriginalValue()
     {
         var input = "nng+push+ipc://tmp/keypoints?masterFrameInterval=300";
-        var cs = KeypointsConnectionString.Parse(input, null);
+        var cs = KeyPointsConnectionString.Parse(input, null);
 
         Assert.Equal(input, cs.ToString());
     }
@@ -168,7 +168,7 @@ public class KeypointsConnectionStringTests
     [Fact]
     public void ImplicitConversion_ReturnsValue()
     {
-        var cs = KeypointsConnectionString.Parse("file:///path/to/file", null);
+        var cs = KeyPointsConnectionString.Parse("file:///path/to/file", null);
         string value = cs;
 
         Assert.Equal("file:///path/to/file", value);

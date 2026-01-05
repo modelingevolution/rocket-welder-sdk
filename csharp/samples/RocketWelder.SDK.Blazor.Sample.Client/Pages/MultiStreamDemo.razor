@@ -24,7 +24,7 @@ with independent decode threads and unified rendering on a single canvas.</p>
 
 <div class="stats mb-3 p-2 bg-dark text-light rounded">
     <span class="me-3">Segmentation: <strong>@_segFps.ToString("F1") FPS</strong></span>
-    <span class="me-3">Keypoints: <strong>@_kpFps.ToString("F1") FPS</strong></span>
+    <span class="me-3">KeyPoints: <strong>@_kpFps.ToString("F1") FPS</strong></span>
     <span class="me-3">Transfer: <strong>@_composite?.TotalTransferRate/s</strong></span>
     <span>Streams: <strong>@(_composite?.Count ?? 0)</strong></span>
 </div>
@@ -47,7 +47,7 @@ DECODE THREADS (independent)              RENDER THREAD
 | Thread 1 (Segmentation)  |              | OnPaint()          |
 | WS -> Decode -> Stage    |---+          |                    |
 +--------------------------+   |          | for stream in list:|
-| Thread 2 (Keypoints)     |   +--------->|   stream.Render()  |
+| Thread 2 (KeyPoints)     |   +--------->|   stream.Render()  |
 | WS -> Decode -> Stage    |---+          |                    |
 +--------------------------+              | (sequential, no    |
                                           |  contention)       |
@@ -100,7 +100,7 @@ DECODE THREADS (independent)              RENDER THREAD
         // Create keypoints stream (layer 0 within its own stage)
         var kpPool = new LayerPool(Width, Height);
         var kpStage = new RenderingStage(Width, Height, kpPool);
-        var kpDecoder = new KeypointsDecoder(kpStage, layerId: 0);
+        var kpDecoder = new KeyPointsDecoder(kpStage, layerId: 0);
         kpDecoder.CrossSize = 8;
         kpDecoder.Thickness = 2;
         kpDecoder.ShowLabels = false;

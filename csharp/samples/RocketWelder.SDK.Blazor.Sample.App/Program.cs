@@ -54,7 +54,7 @@ app.Map("/ws/keypoints", async context =>
     }
 
     using var ws = await context.WebSockets.AcceptWebSocketAsync();
-    await StreamKeypointsAsync(ws, context.RequestAborted);
+    await StreamKeyPointsAsync(ws, context.RequestAborted);
 });
 
 app.MapRazorComponents<App>()
@@ -141,9 +141,9 @@ static async Task StreamSegmentationAsync(WebSocket ws, CancellationToken ct)
 /// Stream keypoints at 30 FPS with master/delta encoding.
 /// Simulates pose estimation output with smoothly moving keypoints.
 /// </summary>
-static async Task StreamKeypointsAsync(WebSocket ws, CancellationToken ct)
+static async Task StreamKeyPointsAsync(WebSocket ws, CancellationToken ct)
 {
-    const int KeypointCount = 17; // Standard pose model (COCO format)
+    const int KeyPointCount = 17; // Standard pose model (COCO format)
     const int MasterInterval = 30; // Send master frame every 30 frames (1 second at 30 FPS)
 
     var buffer = new byte[4096];
@@ -171,13 +171,13 @@ static async Task StreamKeypointsAsync(WebSocket ws, CancellationToken ct)
         (450, 560), // 16: right ankle
     };
 
-    var previousKeypoints = new Keypoint[KeypointCount];
-    var currentKeypoints = new Keypoint[KeypointCount];
+    var previousKeyPoints = new KeyPoint[KeyPointCount];
+    var currentKeyPoints = new KeyPoint[KeyPointCount];
 
     // Initialize keypoints
-    for (int i = 0; i < KeypointCount; i++)
+    for (int i = 0; i < KeyPointCount; i++)
     {
-        currentKeypoints[i] = new Keypoint(i, basePositions[i].x, basePositions[i].y, 900);
+        currentKeyPoints[i] = new KeyPoint(i, basePositions[i].x, basePositions[i].y, 900);
     }
 
     using var timer = new PeriodicTimer(TimeSpan.FromMilliseconds(33)); // ~30 FPS
@@ -188,10 +188,10 @@ static async Task StreamKeypointsAsync(WebSocket ws, CancellationToken ct)
         float time = frameId * 0.1f;
 
         // Copy current to previous
-        Array.Copy(currentKeypoints, previousKeypoints, KeypointCount);
+        Array.Copy(currentKeyPoints, previousKeyPoints, KeyPointCount);
 
         // Animate keypoints with smooth sine wave motion
-        for (int i = 0; i < KeypointCount; i++)
+        for (int i = 0; i < KeyPointCount; i++)
         {
             var (bx, by) = basePositions[i];
             float phase = i * 0.5f;
@@ -203,17 +203,17 @@ static async Task StreamKeypointsAsync(WebSocket ws, CancellationToken ct)
             // Confidence varies smoothly
             ushort confidence = (ushort)(800 + (int)(100 * MathF.Sin(time * 0.3f + phase)));
 
-            currentKeypoints[i] = new Keypoint(i, bx + dx, by + dy, confidence);
+            currentKeyPoints[i] = new KeyPoint(i, bx + dx, by + dy, confidence);
         }
 
         int written;
-        if (KeypointsProtocol.ShouldWriteMasterFrame(frameId, MasterInterval))
+        if (KeyPointsProtocol.ShouldWriteMasterFrame(frameId, MasterInterval))
         {
-            written = KeypointsProtocol.WriteMasterFrame(buffer, frameId, currentKeypoints);
+            written = KeyPointsProtocol.WriteMasterFrame(buffer, frameId, currentKeyPoints);
         }
         else
         {
-            written = KeypointsProtocol.WriteDeltaFrame(buffer, frameId, currentKeypoints, previousKeypoints);
+            written = KeyPointsProtocol.WriteDeltaFrame(buffer, frameId, currentKeyPoints, previousKeyPoints);
         }
 
         await ws.SendAsync(

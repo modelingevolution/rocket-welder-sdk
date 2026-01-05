@@ -17,22 +17,22 @@ namespace RocketWelder.SDK;
 /// may reference the previous frame. This requires sequential decoding on load.
 /// The decoded frames are small (~200 bytes each) so keeping them in memory is fine.
 /// <code>
-/// using var doc = await KeypointsDocument.LoadAsync("keypoints.bin");
+/// using var doc = await KeyPointsDocument.LoadAsync("keypoints.bin");
 ///
 /// // Random access by FrameId
 /// if (doc.TryGetFrame(frameId, out var frame))
 /// {
-///     foreach (var kp in frame.Keypoints)
-///         RenderKeypoint(kp.Id, kp.X, kp.Y, kp.Confidence);
+///     foreach (var kp in frame.KeyPoints)
+///         RenderKeyPoint(kp.Id, kp.X, kp.Y, kp.Confidence);
 /// }
 /// </code>
 /// </remarks>
-public sealed class KeypointsDocument : IDisposable
+public sealed class KeyPointsDocument : IDisposable
 {
-    private readonly Dictionary<ulong, KeypointsFrame> _frames;
+    private readonly Dictionary<ulong, KeyPointsFrame> _frames;
     private bool _disposed;
 
-    private KeypointsDocument(Dictionary<ulong, KeypointsFrame> frames)
+    private KeyPointsDocument(Dictionary<ulong, KeyPointsFrame> frames)
     {
         _frames = frames;
     }
@@ -55,24 +55,24 @@ public sealed class KeypointsDocument : IDisposable
     /// <summary>
     /// All frames in the document (for enumeration).
     /// </summary>
-    public IEnumerable<KeypointsFrame> Frames => _frames.Values;
+    public IEnumerable<KeyPointsFrame> Frames => _frames.Values;
 
     #region Factory Methods
 
     /// <summary>
     /// Load a keypoints document from a file.
     /// </summary>
-    public static async Task<KeypointsDocument> LoadAsync(string path, CancellationToken cancellationToken = default)
+    public static async Task<KeyPointsDocument> LoadAsync(string path, CancellationToken cancellationToken = default)
     {
         var data = await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
         var frames = DecodeAllFrames(data);
-        return new KeypointsDocument(frames);
+        return new KeyPointsDocument(frames);
     }
 
     /// <summary>
     /// Load a keypoints document from a stream.
     /// </summary>
-    public static async Task<KeypointsDocument> LoadAsync(Stream stream, CancellationToken cancellationToken = default)
+    public static async Task<KeyPointsDocument> LoadAsync(Stream stream, CancellationToken cancellationToken = default)
     {
         byte[] data;
         if (stream.CanSeek)
@@ -90,16 +90,16 @@ public sealed class KeypointsDocument : IDisposable
             data = ms.ToArray();
         }
         var frames = DecodeAllFrames(data);
-        return new KeypointsDocument(frames);
+        return new KeyPointsDocument(frames);
     }
 
     /// <summary>
     /// Load a keypoints document from a byte array.
     /// </summary>
-    public static KeypointsDocument Load(byte[] data)
+    public static KeyPointsDocument Load(byte[] data)
     {
         var frames = DecodeAllFrames(data);
-        return new KeypointsDocument(frames);
+        return new KeyPointsDocument(frames);
     }
 
     #endregion
@@ -110,7 +110,7 @@ public sealed class KeypointsDocument : IDisposable
     /// Get a frame by ID.
     /// </summary>
     /// <exception cref="KeyNotFoundException">Frame not found</exception>
-    public KeypointsFrame GetFrame(ulong frameId)
+    public KeyPointsFrame GetFrame(ulong frameId)
     {
         ThrowIfDisposed();
 
@@ -123,7 +123,7 @@ public sealed class KeypointsDocument : IDisposable
     /// <summary>
     /// Try to get a frame by ID.
     /// </summary>
-    public bool TryGetFrame(ulong frameId, out KeypointsFrame frame)
+    public bool TryGetFrame(ulong frameId, out KeyPointsFrame frame)
     {
         ThrowIfDisposed();
         return _frames.TryGetValue(frameId, out frame);
@@ -132,16 +132,16 @@ public sealed class KeypointsDocument : IDisposable
     /// <summary>
     /// Indexer for frame access.
     /// </summary>
-    public KeypointsFrame this[ulong frameId] => GetFrame(frameId);
+    public KeyPointsFrame this[ulong frameId] => GetFrame(frameId);
 
     #endregion
 
     #region Decoding
 
-    private static Dictionary<ulong, KeypointsFrame> DecodeAllFrames(byte[] data)
+    private static Dictionary<ulong, KeyPointsFrame> DecodeAllFrames(byte[] data)
     {
-        var frames = new Dictionary<ulong, KeypointsFrame>();
-        Dictionary<int, Keypoint>? previousFrame = null;
+        var frames = new Dictionary<ulong, KeyPointsFrame>();
+        Dictionary<int, KeyPoint>? previousFrame = null;
 
         using var stream = new MemoryStream(data, writable: false);
 
@@ -153,15 +153,15 @@ public sealed class KeypointsDocument : IDisposable
 
             // Read frame data using Protocol - single source of truth
             var frameSpan = data.AsSpan((int)payloadStart, (int)payloadLength);
-            var result = KeypointsProtocol.ReadWithPreviousState(frameSpan, previousFrame);
+            var result = KeyPointsProtocol.ReadWithPreviousState(frameSpan, previousFrame);
 
             // Store decoded frame (IsDelta is wire format detail, not exposed in Document)
             // Zero-allocation: pass ReadOnlyMemory directly instead of converting to array
-            frames[result.FrameId] = new KeypointsFrame(result.FrameId, result.Items);
+            frames[result.FrameId] = new KeyPointsFrame(result.FrameId, result.Items);
 
             // Update previous frame state for next delta decoding
             var itemsSpan = result.Items.Span;
-            previousFrame = new Dictionary<int, Keypoint>(itemsSpan.Length);
+            previousFrame = new Dictionary<int, KeyPoint>(itemsSpan.Length);
             foreach (var kp in itemsSpan)
                 previousFrame[kp.Id] = kp;
 
@@ -177,7 +177,7 @@ public sealed class KeypointsDocument : IDisposable
     private void ThrowIfDisposed()
     {
         if (_disposed)
-            throw new ObjectDisposedException(nameof(KeypointsDocument));
+            throw new ObjectDisposedException(nameof(KeyPointsDocument));
     }
 
     public void Dispose()

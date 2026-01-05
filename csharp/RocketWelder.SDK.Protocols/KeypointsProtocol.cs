@@ -10,16 +10,16 @@ namespace RocketWelder.SDK.Protocols;
 /// Master Frame Format:
 /// [FrameType: 1 byte (0x00=Master)]
 /// [FrameId: 8 bytes, little-endian uint64]
-/// [KeypointCount: varint]
-/// [Keypoints: Id(varint), X(int32 LE), Y(int32 LE), Confidence(uint16 LE)]
+/// [KeyPointCount: varint]
+/// [KeyPoints: Id(varint), X(int32 LE), Y(int32 LE), Confidence(uint16 LE)]
 ///
 /// Delta Frame Format:
 /// [FrameType: 1 byte (0x01=Delta)]
 /// [FrameId: 8 bytes, little-endian uint64]
-/// [KeypointCount: varint]
-/// [Keypoints: Id(varint), DeltaX(zigzag), DeltaY(zigzag), DeltaConfidence(zigzag)]
+/// [KeyPointCount: varint]
+/// [KeyPoints: Id(varint), DeltaX(zigzag), DeltaY(zigzag), DeltaConfidence(zigzag)]
 /// </summary>
-public static class KeypointsProtocol
+public static class KeyPointsProtocol
 {
     /// <summary>
     /// Frame type byte for master frames (absolute positions).
@@ -35,7 +35,7 @@ public static class KeypointsProtocol
     /// Write a master frame (absolute keypoint positions).
     /// </summary>
     /// <returns>Number of bytes written.</returns>
-    public static int WriteMasterFrame(Span<byte> buffer, ulong frameId, ReadOnlySpan<Keypoint> keypoints)
+    public static int WriteMasterFrame(Span<byte> buffer, ulong frameId, ReadOnlySpan<KeyPoint> keypoints)
     {
         var writer = new BinaryFrameWriter(buffer);
 
@@ -61,7 +61,7 @@ public static class KeypointsProtocol
     /// </summary>
     /// <returns>Number of bytes written.</returns>
     public static int WriteDeltaFrame(Span<byte> buffer, ulong frameId,
-        ReadOnlySpan<Keypoint> current, ReadOnlySpan<Keypoint> previous)
+        ReadOnlySpan<KeyPoint> current, ReadOnlySpan<KeyPoint> previous)
     {
         var writer = new BinaryFrameWriter(buffer);
 
@@ -85,12 +85,12 @@ public static class KeypointsProtocol
 
     /// <summary>
     /// Write a delta frame with variable keypoint counts.
-    /// Keypoints are matched by ID using the previousLookup dictionary.
+    /// KeyPoints are matched by ID using the previousLookup dictionary.
     /// New keypoints (not in previous) are written as absolute values (zigzag encoded).
     /// </summary>
     /// <returns>Number of bytes written.</returns>
     public static int WriteDeltaFrame(Span<byte> buffer, ulong frameId,
-        ReadOnlySpan<Keypoint> current, IReadOnlyDictionary<int, Keypoint> previousLookup)
+        ReadOnlySpan<KeyPoint> current, IReadOnlyDictionary<int, KeyPoint> previousLookup)
     {
         var writer = new BinaryFrameWriter(buffer);
 
@@ -133,7 +133,7 @@ public static class KeypointsProtocol
     /// Read a keypoints frame (master frame only, no previous state needed).
     /// For delta frames, use ReadWithPreviousState.
     /// </summary>
-    public static DeltaFrame<Keypoint> Read(ReadOnlySpan<byte> data)
+    public static DeltaFrame<KeyPoint> Read(ReadOnlySpan<byte> data)
     {
         var reader = new BinaryFrameReader(data);
 
@@ -148,7 +148,7 @@ public static class KeypointsProtocol
                 "Cannot read delta frame without previous state. Use ReadWithPreviousState instead.");
         }
 
-        var keypoints = new Keypoint[count];
+        var keypoints = new KeyPoint[count];
 
         for (int i = 0; i < count; i++)
         {
@@ -157,10 +157,10 @@ public static class KeypointsProtocol
             int y = reader.ReadInt32LE();
             var confidence = reader.ReadUInt16LE();
 
-            keypoints[i] = new Keypoint(id, x, y, confidence);
+            keypoints[i] = new KeyPoint(id, x, y, confidence);
         }
 
-        return new DeltaFrame<Keypoint>(frameId, isDelta, keypoints);
+        return new DeltaFrame<KeyPoint>(frameId, isDelta, keypoints);
     }
 
     /// <summary>
@@ -169,10 +169,10 @@ public static class KeypointsProtocol
     /// <param name="data">The binary data to read.</param>
     /// <param name="previous">Previous frame keypoints for delta decoding.</param>
     /// <param name="reuseDict">Optional dictionary to reuse for lookups (reduces allocations in streaming scenarios).</param>
-    public static DeltaFrame<Keypoint> ReadWithPreviousState(
+    public static DeltaFrame<KeyPoint> ReadWithPreviousState(
         ReadOnlySpan<byte> data,
-        ReadOnlySpan<Keypoint> previous,
-        Dictionary<int, Keypoint>? reuseDict = null)
+        ReadOnlySpan<KeyPoint> previous,
+        Dictionary<int, KeyPoint>? reuseDict = null)
     {
         var reader = new BinaryFrameReader(data);
 
@@ -181,13 +181,13 @@ public static class KeypointsProtocol
         var frameId = reader.ReadUInt64LE();
         var count = (int)reader.ReadVarint();
 
-        var keypoints = new Keypoint[count];
+        var keypoints = new KeyPoint[count];
 
         // Build lookup for previous keypoints (reuse dictionary if provided)
-        Dictionary<int, Keypoint>? prevDict = null;
+        Dictionary<int, KeyPoint>? prevDict = null;
         if (isDelta)
         {
-            prevDict = reuseDict ?? new Dictionary<int, Keypoint>(previous.Length);
+            prevDict = reuseDict ?? new Dictionary<int, KeyPoint>(previous.Length);
             prevDict.Clear();
             foreach (var p in previous)
                 prevDict[p.Id] = p;
@@ -203,7 +203,7 @@ public static class KeypointsProtocol
                 int y = reader.ReadInt32LE();
                 var confidence = reader.ReadUInt16LE();
 
-                keypoints[i] = new Keypoint(id, x, y, confidence);
+                keypoints[i] = new KeyPoint(id, x, y, confidence);
             }
             else
             {
@@ -214,7 +214,7 @@ public static class KeypointsProtocol
                 if (prevDict!.TryGetValue(id, out var prev))
                 {
                     // Existing keypoint - apply delta
-                    keypoints[i] = new Keypoint(
+                    keypoints[i] = new KeyPoint(
                         id,
                         prev.Position.X + deltaX,
                         prev.Position.Y + deltaY,
@@ -224,7 +224,7 @@ public static class KeypointsProtocol
                 else
                 {
                     // New keypoint - delta values are actually absolute
-                    keypoints[i] = new Keypoint(
+                    keypoints[i] = new KeyPoint(
                         id,
                         deltaX,
                         deltaY,
@@ -234,7 +234,7 @@ public static class KeypointsProtocol
             }
         }
 
-        return new DeltaFrame<Keypoint>(frameId, isDelta, keypoints);
+        return new DeltaFrame<KeyPoint>(frameId, isDelta, keypoints);
     }
 
     /// <summary>
@@ -243,9 +243,9 @@ public static class KeypointsProtocol
     /// </summary>
     /// <param name="data">The binary data to read.</param>
     /// <param name="previousLookup">Previous frame keypoints dictionary for delta decoding. Pass null for master frames.</param>
-    public static DeltaFrame<Keypoint> ReadWithPreviousState(
+    public static DeltaFrame<KeyPoint> ReadWithPreviousState(
         ReadOnlySpan<byte> data,
-        IReadOnlyDictionary<int, Keypoint>? previousLookup)
+        IReadOnlyDictionary<int, KeyPoint>? previousLookup)
     {
         var reader = new BinaryFrameReader(data);
 
@@ -254,7 +254,7 @@ public static class KeypointsProtocol
         var frameId = reader.ReadUInt64LE();
         var count = (int)reader.ReadVarint();
 
-        var keypoints = new Keypoint[count];
+        var keypoints = new KeyPoint[count];
 
         for (int i = 0; i < count; i++)
         {
@@ -266,7 +266,7 @@ public static class KeypointsProtocol
                 int y = reader.ReadInt32LE();
                 var confidence = reader.ReadUInt16LE();
 
-                keypoints[i] = new Keypoint(id, x, y, confidence);
+                keypoints[i] = new KeyPoint(id, x, y, confidence);
             }
             else
             {
@@ -277,7 +277,7 @@ public static class KeypointsProtocol
                 if (previousLookup != null && previousLookup.TryGetValue(id, out var prev))
                 {
                     // Existing keypoint - apply delta
-                    keypoints[i] = new Keypoint(
+                    keypoints[i] = new KeyPoint(
                         id,
                         prev.Position.X + deltaX,
                         prev.Position.Y + deltaY,
@@ -287,7 +287,7 @@ public static class KeypointsProtocol
                 else
                 {
                     // New keypoint - delta values are actually absolute
-                    keypoints[i] = new Keypoint(
+                    keypoints[i] = new KeyPoint(
                         id,
                         deltaX,
                         deltaY,
@@ -297,7 +297,7 @@ public static class KeypointsProtocol
             }
         }
 
-        return new DeltaFrame<Keypoint>(frameId, isDelta, keypoints);
+        return new DeltaFrame<KeyPoint>(frameId, isDelta, keypoints);
     }
 
     /// <summary>

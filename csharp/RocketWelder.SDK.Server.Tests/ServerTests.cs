@@ -46,14 +46,14 @@ public class ServerTests
     }
 
     [Fact]
-    public void Server_TryReadKeypointsFrame_ThrowsIfNotConnected()
+    public void Server_TryReadKeyPointsFrame_ThrowsIfNotConnected()
     {
         // Arrange
         using var server = new Server("test-channel", 640, 480);
 
         // Act & Assert
         var ex = Assert.Throws<InvalidOperationException>(
-            () => server.TryReadKeypointsFrame(TimeSpan.FromSeconds(1)));
+            () => server.TryReadKeyPointsFrame(TimeSpan.FromSeconds(1)));
         Assert.Contains("Not connected to keypoints socket", ex.Message);
     }
 

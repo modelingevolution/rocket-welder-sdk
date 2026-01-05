@@ -3,27 +3,27 @@ using RocketWelder.SDK.Blazor;
 using RocketWelder.SDK.Protocols;
 using Xunit;
 
-using ProtocolKeypoint = RocketWelder.SDK.Protocols.Keypoint;
+using ProtocolKeyPoint = RocketWelder.SDK.Protocols.KeyPoint;
 
 namespace RocketWelder.SDK.Tests.Blazor;
 
 /// <summary>
-/// Integration tests for KeypointsDecoder.
+/// Integration tests for KeyPointsDecoder.
 /// Tests the complete round-trip: Encode → Decode → Render
 /// Uses concrete mock classes since NSubstitute can't handle ReadOnlySpan parameters.
 /// </summary>
-public class KeypointsDecoderIntegrationTests
+public class KeyPointsDecoderIntegrationTests
 {
     [Fact]
-    public void Decode_MasterFrame_DrawsCrossesForAllKeypoints()
+    public void Decode_MasterFrame_DrawsCrossesForAllKeyPoints()
     {
         // Arrange
         var canvas = new MockCanvas();
         var stage = new MockStage(canvas);
-        var decoder = new KeypointsDecoder(stage);
+        var decoder = new KeyPointsDecoder(stage);
         decoder.CrossSize = 6;
 
-        var keypoints = new ProtocolKeypoint[]
+        var keypoints = new ProtocolKeyPoint[]
         {
             new(id: 0, x: 100, y: 200, confidence: 9500),
             new(id: 1, x: 150, y: 250, confidence: 8500),
@@ -31,7 +31,7 @@ public class KeypointsDecoderIntegrationTests
         };
 
         Span<byte> buffer = stackalloc byte[256];
-        int written = KeypointsProtocol.WriteMasterFrame(buffer, frameId: 42, keypoints);
+        int written = KeyPointsProtocol.WriteMasterFrame(buffer, frameId: 42, keypoints);
 
         // Act
         var result = decoder.Decode(buffer[..written]);
@@ -55,29 +55,29 @@ public class KeypointsDecoderIntegrationTests
         // Arrange
         var canvas = new MockCanvas();
         var stage = new MockStage(canvas);
-        var decoder = new KeypointsDecoder(stage);
+        var decoder = new KeyPointsDecoder(stage);
         decoder.CrossSize = 6;
 
         // First send master frame
-        var masterKeypoints = new ProtocolKeypoint[]
+        var masterKeyPoints = new ProtocolKeyPoint[]
         {
             new(id: 0, x: 100, y: 200, confidence: 9500)
         };
 
         Span<byte> masterBuffer = stackalloc byte[128];
-        int masterWritten = KeypointsProtocol.WriteMasterFrame(masterBuffer, frameId: 1, masterKeypoints);
+        int masterWritten = KeyPointsProtocol.WriteMasterFrame(masterBuffer, frameId: 1, masterKeyPoints);
         decoder.Decode(masterBuffer[..masterWritten]);
 
         canvas.Clear();
 
         // Then send delta frame with small movements
-        var deltaKeypoints = new ProtocolKeypoint[]
+        var deltaKeyPoints = new ProtocolKeyPoint[]
         {
             new(id: 0, x: 102, y: 201, confidence: 9500)  // Moved +2, +1
         };
 
         Span<byte> deltaBuffer = stackalloc byte[128];
-        int deltaWritten = KeypointsProtocol.WriteDeltaFrame(deltaBuffer, frameId: 2, deltaKeypoints, masterKeypoints);
+        int deltaWritten = KeyPointsProtocol.WriteDeltaFrame(deltaBuffer, frameId: 2, deltaKeyPoints, masterKeyPoints);
 
         // Act
         var result = decoder.Decode(deltaBuffer[..deltaWritten]);
@@ -98,16 +98,16 @@ public class KeypointsDecoderIntegrationTests
         // Arrange
         var canvas = new MockCanvas();
         var stage = new MockStage(canvas);
-        var decoder = new KeypointsDecoder(stage);
+        var decoder = new KeyPointsDecoder(stage);
         decoder.CrossSize = 10; // Custom size
 
-        var keypoints = new ProtocolKeypoint[]
+        var keypoints = new ProtocolKeyPoint[]
         {
             new(id: 0, x: 100, y: 100, confidence: 10000)
         };
 
         Span<byte> buffer = stackalloc byte[128];
-        int written = KeypointsProtocol.WriteMasterFrame(buffer, frameId: 1, keypoints);
+        int written = KeyPointsProtocol.WriteMasterFrame(buffer, frameId: 1, keypoints);
 
         // Act
         decoder.Decode(buffer[..written]);
@@ -128,16 +128,16 @@ public class KeypointsDecoderIntegrationTests
         // Arrange
         var canvas = new MockCanvas();
         var stage = new MockStage(canvas);
-        var decoder = new KeypointsDecoder(stage);
+        var decoder = new KeyPointsDecoder(stage);
         decoder.CrossSize = 3; // Small cross
 
-        var keypoints = new ProtocolKeypoint[]
+        var keypoints = new ProtocolKeyPoint[]
         {
             new(id: 0, x: 100, y: 100, confidence: 500)
         };
 
         Span<byte> buffer = stackalloc byte[128];
-        int written = KeypointsProtocol.WriteMasterFrame(buffer, frameId: 1, keypoints);
+        int written = KeyPointsProtocol.WriteMasterFrame(buffer, frameId: 1, keypoints);
 
         // Act
         decoder.Decode(buffer[..written]);
@@ -150,31 +150,31 @@ public class KeypointsDecoderIntegrationTests
     }
 
     [Fact]
-    public void Decode_DifferentKeypointIds_UsesDifferentColors()
+    public void Decode_DifferentKeyPointIds_UsesDifferentColors()
     {
         // Arrange
         var canvas = new MockCanvas();
         var stage = new MockStage(canvas);
         var color0 = new RgbColor(255, 100, 100);  // Red
         var color1 = new RgbColor(100, 255, 100);  // Green
-        var decoder = new KeypointsDecoder(stage);
+        var decoder = new KeyPointsDecoder(stage);
         decoder.Brushes.Add(0, color0);
         decoder.Brushes.Add(1, color1);
 
-        var keypoints = new ProtocolKeypoint[]
+        var keypoints = new ProtocolKeyPoint[]
         {
             new(id: 0, x: 100, y: 100, confidence: 9000),
             new(id: 1, x: 200, y: 200, confidence: 9000)
         };
 
         Span<byte> buffer = stackalloc byte[256];
-        int written = KeypointsProtocol.WriteMasterFrame(buffer, frameId: 1, keypoints);
+        int written = KeyPointsProtocol.WriteMasterFrame(buffer, frameId: 1, keypoints);
 
         // Act
         decoder.Decode(buffer[..written]);
 
         // Assert: Different keypoint IDs use different colors from Brushes
-        // KeypointsDecoder draws crosses (2 lines per keypoint), so 4 lines total
+        // KeyPointsDecoder draws crosses (2 lines per keypoint), so 4 lines total
         Assert.Equal(4, canvas.LineCalls.Count);
         // First keypoint (id=0): first 2 lines use color0
         Assert.Equal(color0, canvas.LineCalls[0].Stroke);
@@ -190,10 +190,10 @@ public class KeypointsDecoderIntegrationTests
         // Arrange
         var canvas = new MockCanvas();
         var stage = new MockStage(canvas);
-        var decoder = new KeypointsDecoder(stage);
+        var decoder = new KeyPointsDecoder(stage);
 
         Span<byte> buffer = stackalloc byte[32];
-        int written = KeypointsProtocol.WriteMasterFrame(buffer, frameId: 1, ReadOnlySpan<ProtocolKeypoint>.Empty);
+        int written = KeyPointsProtocol.WriteMasterFrame(buffer, frameId: 1, ReadOnlySpan<ProtocolKeyPoint>.Empty);
 
         // Act
         var result = decoder.Decode(buffer[..written]);
@@ -209,7 +209,7 @@ public class KeypointsDecoderIntegrationTests
         // Arrange
         var canvas = new MockCanvas();
         var stage = new MockStage(canvas);
-        var decoder = new KeypointsDecoder(stage);
+        var decoder = new KeyPointsDecoder(stage);
 
         // Only 5 bytes - less than minimum header
         ReadOnlySpan<byte> shortData = new byte[] { 0x01, 0x02, 0x03, 0x04, 0x05 };
@@ -227,15 +227,15 @@ public class KeypointsDecoderIntegrationTests
         // Arrange
         var canvas = new MockCanvas();
         var stage = new MockStage(canvas);
-        var decoder = new KeypointsDecoder(stage);
+        var decoder = new KeyPointsDecoder(stage);
 
-        var keypoints = new ProtocolKeypoint[]
+        var keypoints = new ProtocolKeyPoint[]
         {
             new(id: 0, x: 100, y: 100, confidence: 9000)
         };
 
         Span<byte> buffer = stackalloc byte[128];
-        int written = KeypointsProtocol.WriteMasterFrame(buffer, frameId: 42, keypoints);
+        int written = KeyPointsProtocol.WriteMasterFrame(buffer, frameId: 42, keypoints);
 
         // Act
         decoder.Decode(buffer[..written]);
@@ -248,22 +248,22 @@ public class KeypointsDecoderIntegrationTests
     }
 
     [Fact]
-    public void Decode_ManyKeypoints_HandlesCorrectly()
+    public void Decode_ManyKeyPoints_HandlesCorrectly()
     {
         // Arrange
         var canvas = new MockCanvas();
         var stage = new MockStage(canvas);
-        var decoder = new KeypointsDecoder(stage);
+        var decoder = new KeyPointsDecoder(stage);
 
         // Create 50 keypoints
-        var keypoints = new ProtocolKeypoint[50];
+        var keypoints = new ProtocolKeyPoint[50];
         for (int i = 0; i < 50; i++)
         {
-            keypoints[i] = new ProtocolKeypoint(id: i, x: i * 10, y: i * 5, confidence: 8000);
+            keypoints[i] = new ProtocolKeyPoint(id: i, x: i * 10, y: i * 5, confidence: 8000);
         }
 
         var buffer = new byte[2048];
-        int written = KeypointsProtocol.WriteMasterFrame(buffer, frameId: 1, keypoints);
+        int written = KeyPointsProtocol.WriteMasterFrame(buffer, frameId: 1, keypoints);
 
         // Act
         var result = decoder.Decode(buffer.AsSpan(0, written));
@@ -274,15 +274,15 @@ public class KeypointsDecoderIntegrationTests
     }
 
     [Fact]
-    public void Decode_VerifiesAllKeypointPositions()
+    public void Decode_VerifiesAllKeyPointPositions()
     {
         // Arrange
         var canvas = new MockCanvas();
         var stage = new MockStage(canvas);
-        var decoder = new KeypointsDecoder(stage);
+        var decoder = new KeyPointsDecoder(stage);
         decoder.CrossSize = 6;
 
-        var keypoints = new ProtocolKeypoint[]
+        var keypoints = new ProtocolKeyPoint[]
         {
             new(id: 0, x: 10, y: 20, confidence: 9000),
             new(id: 1, x: 30, y: 40, confidence: 8000),
@@ -290,7 +290,7 @@ public class KeypointsDecoderIntegrationTests
         };
 
         Span<byte> buffer = stackalloc byte[256];
-        int written = KeypointsProtocol.WriteMasterFrame(buffer, frameId: 1, keypoints);
+        int written = KeyPointsProtocol.WriteMasterFrame(buffer, frameId: 1, keypoints);
 
         // Act
         decoder.Decode(buffer[..written]);

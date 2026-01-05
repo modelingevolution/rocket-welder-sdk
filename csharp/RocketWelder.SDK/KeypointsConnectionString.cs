@@ -6,7 +6,7 @@ using RocketWelder.SDK.Internal;
 namespace RocketWelder.SDK;
 
 /// <summary>
-/// Strongly-typed connection string for Keypoints output.
+/// Strongly-typed connection string for KeyPoints output.
 /// Format: protocol://path?param1=value1&amp;param2=value2
 ///
 /// Supported protocols:
@@ -20,7 +20,7 @@ namespace RocketWelder.SDK;
 /// Supported parameters:
 /// - masterFrameInterval: Interval between master frames (default: 300)
 /// </summary>
-public readonly record struct KeypointsConnectionString : IParsable<KeypointsConnectionString>
+public readonly record struct KeyPointsConnectionString : IParsable<KeyPointsConnectionString>
 {
     /// <summary>
     /// The full original connection string.
@@ -47,7 +47,7 @@ public readonly record struct KeypointsConnectionString : IParsable<KeypointsCon
     /// </summary>
     public IReadOnlyDictionary<string, string> Parameters { get; }
 
-    private KeypointsConnectionString(
+    private KeyPointsConnectionString(
         string value,
         TransportProtocol protocol,
         string address,
@@ -62,27 +62,27 @@ public readonly record struct KeypointsConnectionString : IParsable<KeypointsCon
     }
 
     /// <summary>
-    /// Default connection string for Keypoints.
+    /// Default connection string for KeyPoints.
     /// </summary>
-    public static KeypointsConnectionString Default => Parse("nng+push+ipc://tmp/rocket-welder-keypoints?masterFrameInterval=300", null);
+    public static KeyPointsConnectionString Default => Parse("nng+push+ipc://tmp/rocket-welder-keypoints?masterFrameInterval=300", null);
 
     /// <summary>
     /// Creates a connection string from environment variable or uses default.
     /// </summary>
-    public static KeypointsConnectionString FromEnvironment(string variableName = "KEYPOINTS_CONNECTION_STRING")
+    public static KeyPointsConnectionString FromEnvironment(string variableName = "KEYPOINTS_CONNECTION_STRING")
     {
         var value = Environment.GetEnvironmentVariable(variableName);
         return string.IsNullOrEmpty(value) ? Default : Parse(value, null);
     }
 
-    public static KeypointsConnectionString Parse(string s, IFormatProvider? provider)
+    public static KeyPointsConnectionString Parse(string s, IFormatProvider? provider)
     {
         if (!TryParse(s, provider, out var result))
-            throw new FormatException($"Invalid Keypoints connection string: {s}");
+            throw new FormatException($"Invalid KeyPoints connection string: {s}");
         return result;
     }
 
-    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out KeypointsConnectionString result)
+    public static bool TryParse([NotNullWhen(true)] string? s, IFormatProvider? provider, out KeyPointsConnectionString result)
     {
         result = default;
         if (string.IsNullOrWhiteSpace(s))
@@ -134,11 +134,11 @@ public readonly record struct KeypointsConnectionString : IParsable<KeypointsCon
             masterFrameInterval = mfi;
         }
 
-        result = new KeypointsConnectionString(s, protocol, address, masterFrameInterval, parameters);
+        result = new KeyPointsConnectionString(s, protocol, address, masterFrameInterval, parameters);
         return true;
     }
 
     public override string ToString() => Value;
 
-    public static implicit operator string(KeypointsConnectionString cs) => cs.Value;
+    public static implicit operator string(KeyPointsConnectionString cs) => cs.Value;
 }

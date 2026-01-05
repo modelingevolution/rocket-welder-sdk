@@ -6,23 +6,23 @@ using System.Text.Json;
 namespace RocketWelder.SDK.Internal;
 
 /// <summary>
-/// Implementation of <see cref="IKeypointsSchema"/>.
+/// Implementation of <see cref="IKeyPointsSchema"/>.
 /// </summary>
-internal sealed class KeypointsSchema : IKeypointsSchema
+internal sealed class KeyPointsSchema : IKeyPointsSchema
 {
-    private readonly List<KeypointDefinition> _points = new();
+    private readonly List<KeyPointDefinition> _points = new();
     private int _nextId;
 
-    public KeypointDefinition DefinePoint(string name)
+    public KeyPointDefinition DefinePoint(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
 
-        var point = new KeypointDefinition(_nextId++, name);
+        var point = new KeyPointDefinition(_nextId++, name);
         _points.Add(point);
         return point;
     }
 
-    public IReadOnlyList<KeypointDefinition> DefinedPoints => _points;
+    public IReadOnlyList<KeyPointDefinition> DefinedPoints => _points;
 
     public string GetMetadataJson()
     {

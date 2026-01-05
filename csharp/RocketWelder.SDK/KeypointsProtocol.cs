@@ -9,14 +9,14 @@ using System.Threading.Tasks;
 using RocketWelder.SDK.Transport;
 using RocketWelder.SDK.Protocols;
 
-// Import DeltaFrame<Keypoint> for streaming use - uses Protocols.Keypoint with ushort confidence
+// Import DeltaFrame<KeyPoint> for streaming use - uses Protocols.KeyPoint with ushort confidence
 // Use .NormalizedConfidence() extension to get float 0.0-1.0 value
-using DeltaKeypointsFrame = RocketWelder.SDK.Protocols.DeltaFrame<RocketWelder.SDK.Protocols.Keypoint>;
+using DeltaKeyPointsFrame = RocketWelder.SDK.Protocols.DeltaFrame<RocketWelder.SDK.Protocols.KeyPoint>;
 
 namespace RocketWelder.SDK;
 
 // ============================================================================
-// Keypoints Protocol - Binary format for efficient keypoint storage
+// KeyPoints Protocol - Binary format for efficient keypoint storage
 // Supports master/delta frame compression for temporal sequences
 // ============================================================================
 
@@ -24,20 +24,20 @@ namespace RocketWelder.SDK;
 /// Sink for writing keypoints data.
 /// Transport-agnostic: works with files, TCP, WebSocket, NNG, etc.
 /// </summary>
-public interface IKeypointsSink : IDisposable, IAsyncDisposable
+public interface IKeyPointsSink : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Create a writer for the current frame.
     /// Sink decides whether to write master or delta frame.
     /// </summary>
-    IKeypointsWriter CreateWriter(ulong frameId);
+    IKeyPointsWriter CreateWriter(ulong frameId);
 }
 
 /// <summary>
 /// Writes keypoints data for a single frame.
-/// Lightweight writer - create one per frame via IKeypointsSink.
+/// Lightweight writer - create one per frame via IKeyPointsSink.
 /// </summary>
-public interface IKeypointsWriter : IDisposable, IAsyncDisposable
+public interface IKeyPointsWriter : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Append a keypoint to this frame.
@@ -63,57 +63,57 @@ public interface IKeypointsWriter : IDisposable, IAsyncDisposable
 /// <summary>
 /// Streaming reader for keypoints via IAsyncEnumerable.
 /// Designed for real-time streaming over TCP/WebSocket/NNG.
-/// Returns DeltaFrame&lt;Keypoint&gt; which includes IsDelta for streaming context.
+/// Returns DeltaFrame&lt;KeyPoint&gt; which includes IsDelta for streaming context.
 /// </summary>
-public interface IKeypointsSource : IDisposable, IAsyncDisposable
+public interface IKeyPointsSource : IDisposable, IAsyncDisposable
 {
     /// <summary>
     /// Stream frames as they arrive from the transport.
     /// Supports cancellation and backpressure.
     /// Returns DeltaFrame with IsDelta indicating master vs delta frame.
     /// </summary>
-    IAsyncEnumerable<DeltaKeypointsFrame> ReadFramesAsync(CancellationToken cancellationToken = default);
+    IAsyncEnumerable<DeltaKeyPointsFrame> ReadFramesAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>
 /// A decoded keypoints frame with absolute keypoint values.
 /// Used by Document classes after delta decoding is complete.
-/// For streaming with delta info, use DeltaFrame&lt;Keypoint&gt; instead.
+/// For streaming with delta info, use DeltaFrame&lt;KeyPoint&gt; instead.
 /// </summary>
 /// <remarks>
-/// Uses Protocols.Keypoint with Confidence type (ushort 0-65535).
+/// Uses Protocols.KeyPoint with Confidence type (ushort 0-65535).
 /// Confidence implicitly converts to float (0.0-1.0).
 /// Uses ReadOnlyMemory for zero-allocation access to keypoint data.
 /// </remarks>
-public readonly record struct KeypointsFrame(ulong FrameId, ReadOnlyMemory<Keypoint> Keypoints)
+public readonly record struct KeyPointsFrame(ulong FrameId, ReadOnlyMemory<KeyPoint> KeyPoints)
 {
     /// <summary>
     /// Number of keypoints in this frame.
     /// </summary>
-    public int Count => Keypoints.Length;
+    public int Count => KeyPoints.Length;
 }
 
-// Keypoint type is now consolidated into RocketWelder.SDK.Protocols.Keypoint
+// KeyPoint type is now consolidated into RocketWelder.SDK.Protocols.KeyPoint
 // Confidence implicitly converts to float. Use .Position for Point access.
 
 /// <summary>
 /// Streaming reader for keypoints.
 /// Reads frames from IFrameSource and yields them via IAsyncEnumerable.
-/// Handles master/delta frame decoding automatically using KeypointsProtocol.
-/// Returns DeltaFrame&lt;Keypoint&gt; with decoded absolute values and IsDelta metadata.
+/// Handles master/delta frame decoding automatically using KeyPointsProtocol.
+/// Returns DeltaFrame&lt;KeyPoint&gt; with decoded absolute values and IsDelta metadata.
 /// </summary>
-public class KeypointsSource : IKeypointsSource
+public class KeyPointsSource : IKeyPointsSource
 {
     private readonly IFrameSource _frameSource;
-    private Dictionary<int, Keypoint>? _previousFrame;
+    private Dictionary<int, KeyPoint>? _previousFrame;
     private bool _disposed;
 
-    public KeypointsSource(IFrameSource frameSource)
+    public KeyPointsSource(IFrameSource frameSource)
     {
         _frameSource = frameSource ?? throw new ArgumentNullException(nameof(frameSource));
     }
 
-    public async IAsyncEnumerable<DeltaKeypointsFrame> ReadFramesAsync(
+    public async IAsyncEnumerable<DeltaKeyPointsFrame> ReadFramesAsync(
         [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
         while (!cancellationToken.IsCancellationRequested && !_disposed)
@@ -127,14 +127,14 @@ public class KeypointsSource : IKeypointsSource
         }
     }
 
-    private DeltaKeypointsFrame ParseFrame(ReadOnlySpan<byte> data)
+    private DeltaKeyPointsFrame ParseFrame(ReadOnlySpan<byte> data)
     {
         // Use Protocol for decoding - single source of truth
-        var result = KeypointsProtocol.ReadWithPreviousState(data, _previousFrame);
+        var result = KeyPointsProtocol.ReadWithPreviousState(data, _previousFrame);
 
         // Update previous frame state for next delta decoding
         var items = result.Items.Span;
-        _previousFrame = new Dictionary<int, Keypoint>(items.Length);
+        _previousFrame = new Dictionary<int, KeyPoint>(items.Length);
         foreach (var kp in items)
             _previousFrame[kp.Id] = kp;
 
@@ -159,7 +159,7 @@ public class KeypointsSource : IKeypointsSource
 /// <summary>
 /// In-memory representation of keypoints series for efficient querying.
 /// </summary>
-public class KeypointsSeries
+public class KeyPointsSeries
 {
     private readonly Dictionary<ulong, SortedDictionary<int, (Point point, float confidence)>> _index;
 
@@ -183,7 +183,7 @@ public class KeypointsSeries
     /// </summary>
     public IReadOnlyCollection<ulong> FrameIds => _index.Keys;
 
-    internal KeypointsSeries(
+    internal KeyPointsSeries(
         string version,
         string computeModuleName,
         IReadOnlyDictionary<string, int> points,
@@ -209,7 +209,7 @@ public class KeypointsSeries
     /// Returns enumerable of (frameId, point, confidence) tuples.
     /// Lazily evaluated - efficient for large series.
     /// </summary>
-    public IEnumerable<(ulong frameId, Point point, float confidence)> GetKeypointTrajectory(int keypointId)
+    public IEnumerable<(ulong frameId, Point point, float confidence)> GetKeyPointTrajectory(int keypointId)
     {
         foreach (var (frameId, keypoints) in _index)
         {
@@ -225,14 +225,14 @@ public class KeypointsSeries
     /// Returns enumerable of (frameId, point, confidence) tuples.
     /// Lazily evaluated - efficient for large series.
     /// </summary>
-    public IEnumerable<(ulong frameId, Point point, float confidence)> GetKeypointTrajectory(string keypointName)
+    public IEnumerable<(ulong frameId, Point point, float confidence)> GetKeyPointTrajectory(string keypointName)
     {
         if (!Points.TryGetValue(keypointName, out var keypointId))
         {
             yield break;
         }
 
-        foreach (var item in GetKeypointTrajectory(keypointId))
+        foreach (var item in GetKeyPointTrajectory(keypointId))
         {
             yield return item;
         }
@@ -247,7 +247,7 @@ public class KeypointsSeries
     /// Get keypoint position and confidence at specific frame.
     /// Returns null if frame or keypoint not found.
     /// </summary>
-    public (Point point, float confidence)? GetKeypoint(ulong frameId, int keypointId)
+    public (Point point, float confidence)? GetKeyPoint(ulong frameId, int keypointId)
     {
         if (_index.TryGetValue(frameId, out var keypoints) &&
             keypoints.TryGetValue(keypointId, out var data))
@@ -261,36 +261,36 @@ public class KeypointsSeries
     /// Get keypoint position and confidence at specific frame by name.
     /// Returns null if frame or keypoint not found.
     /// </summary>
-    public (Point point, float confidence)? GetKeypoint(ulong frameId, string keypointName)
+    public (Point point, float confidence)? GetKeyPoint(ulong frameId, string keypointName)
     {
         if (Points.TryGetValue(keypointName, out var keypointId))
         {
-            return GetKeypoint(frameId, keypointId);
+            return GetKeyPoint(frameId, keypointId);
         }
         return null;
     }
 }
 
 // ============================================================================
-// KeypointsWriter - Writes single frame using KeypointsProtocol
+// KeyPointsWriter - Writes single frame using KeyPointsProtocol
 // ============================================================================
 
-internal class KeypointsWriter : IKeypointsWriter
+internal class KeyPointsWriter : IKeyPointsWriter
 {
     private readonly ulong _frameId;
     private readonly IFrameSink _frameSink;
     private readonly bool _isDelta;
-    private readonly IReadOnlyDictionary<int, Keypoint>? _previousFrame;
-    private readonly List<Keypoint> _keypoints = new();
-    private readonly Action<Dictionary<int, Keypoint>>? _onFrameWritten;
+    private readonly IReadOnlyDictionary<int, KeyPoint>? _previousFrame;
+    private readonly List<KeyPoint> _keypoints = new();
+    private readonly Action<Dictionary<int, KeyPoint>>? _onFrameWritten;
     private bool _disposed = false;
 
-    public KeypointsWriter(
+    public KeyPointsWriter(
         ulong frameId,
         IFrameSink frameSink,
         bool isDelta,
-        IReadOnlyDictionary<int, Keypoint>? previousFrame,
-        Action<Dictionary<int, Keypoint>>? onFrameWritten = null)
+        IReadOnlyDictionary<int, KeyPoint>? previousFrame,
+        Action<Dictionary<int, KeyPoint>>? onFrameWritten = null)
     {
         _frameId = frameId;
         _frameSink = frameSink ?? throw new ArgumentNullException(nameof(frameSink));
@@ -301,11 +301,11 @@ internal class KeypointsWriter : IKeypointsWriter
 
     public void Append(int keypointId, int x, int y, float confidence)
     {
-        if (_disposed) throw new ObjectDisposedException(nameof(KeypointsWriter));
+        if (_disposed) throw new ObjectDisposedException(nameof(KeyPointsWriter));
 
         // Convert confidence from float (0.0-1.0) to ushort (0-65535)
         ushort confidenceUshort = (ushort)Math.Clamp(confidence * ushort.MaxValue, 0, ushort.MaxValue);
-        _keypoints.Add(new Keypoint(keypointId, x, y, confidenceUshort));
+        _keypoints.Add(new KeyPoint(keypointId, x, y, confidenceUshort));
     }
 
     public void Append(int keypointId, Point p, float confidence)
@@ -359,7 +359,7 @@ internal class KeypointsWriter : IKeypointsWriter
     {
         if (_onFrameWritten != null)
         {
-            var frameState = new Dictionary<int, Keypoint>();
+            var frameState = new Dictionary<int, KeyPoint>();
             foreach (var kp in _keypoints)
             {
                 frameState[kp.Id] = kp;
@@ -374,19 +374,19 @@ internal class KeypointsWriter : IKeypointsWriter
         var keypointsSpan = CollectionsMarshal.AsSpan(_keypoints);
 
         int maxSize = _isDelta
-            ? KeypointsProtocol.CalculateDeltaFrameSize(_keypoints.Count)
-            : KeypointsProtocol.CalculateMasterFrameSize(_keypoints.Count);
+            ? KeyPointsProtocol.CalculateDeltaFrameSize(_keypoints.Count)
+            : KeyPointsProtocol.CalculateMasterFrameSize(_keypoints.Count);
 
         var buffer = new byte[maxSize];
         int bytesWritten;
 
         if (_isDelta && _previousFrame != null)
         {
-            bytesWritten = KeypointsProtocol.WriteDeltaFrame(buffer, _frameId, keypointsSpan, _previousFrame);
+            bytesWritten = KeyPointsProtocol.WriteDeltaFrame(buffer, _frameId, keypointsSpan, _previousFrame);
         }
         else
         {
-            bytesWritten = KeypointsProtocol.WriteMasterFrame(buffer, _frameId, keypointsSpan);
+            bytesWritten = KeyPointsProtocol.WriteMasterFrame(buffer, _frameId, keypointsSpan);
         }
 
         // Return buffer with actual length - no copy needed
@@ -395,19 +395,19 @@ internal class KeypointsWriter : IKeypointsWriter
 }
 
 // ============================================================================
-// KeypointsSink - Transport-agnostic keypoints sink
+// KeyPointsSink - Transport-agnostic keypoints sink
 // ============================================================================
 
 /// <summary>
-/// Keypoints sink supporting any transport (file, TCP, WebSocket, NNG, etc.).
+/// KeyPoints sink supporting any transport (file, TCP, WebSocket, NNG, etc.).
 /// Uses IFrameSink for transport independence.
 /// </summary>
-public class KeypointsSink : IKeypointsSink
+public class KeyPointsSink : IKeyPointsSink
 {
     private readonly IFrameSink _frameSink;
     private readonly int _masterFrameInterval;
     private readonly bool _ownsSink;
-    private Dictionary<int, Keypoint>? _previousFrame;
+    private Dictionary<int, KeyPoint>? _previousFrame;
     private ulong _frameCount = 0;
     private bool _disposed = false;
 
@@ -418,7 +418,7 @@ public class KeypointsSink : IKeypointsSink
     /// <param name="stream">Stream to write to</param>
     /// <param name="masterFrameInterval">Frames between master frames (default: 300)</param>
     /// <param name="leaveOpen">If true, doesn't dispose stream on disposal</param>
-    public KeypointsSink(Stream stream, int masterFrameInterval = 300, bool leaveOpen = false)
+    public KeyPointsSink(Stream stream, int masterFrameInterval = 300, bool leaveOpen = false)
         : this(new StreamFrameSink(stream, leaveOpen), masterFrameInterval, ownsSink: true)
     {
     }
@@ -429,20 +429,20 @@ public class KeypointsSink : IKeypointsSink
     /// <param name="frameSink">Transport sink (StreamFrameSink, TcpFrameSink, etc.)</param>
     /// <param name="masterFrameInterval">Frames between master frames (default: 300)</param>
     /// <param name="ownsSink">If true, disposes sink on disposal (default: false)</param>
-    public KeypointsSink(IFrameSink frameSink, int masterFrameInterval = 300, bool ownsSink = false)
+    public KeyPointsSink(IFrameSink frameSink, int masterFrameInterval = 300, bool ownsSink = false)
     {
         _frameSink = frameSink ?? throw new ArgumentNullException(nameof(frameSink));
         _masterFrameInterval = masterFrameInterval;
         _ownsSink = ownsSink;
     }
 
-    public IKeypointsWriter CreateWriter(ulong frameId)
+    public IKeyPointsWriter CreateWriter(ulong frameId)
     {
         if (_disposed)
-            throw new ObjectDisposedException(nameof(KeypointsSink));
+            throw new ObjectDisposedException(nameof(KeyPointsSink));
 
         bool isDelta = _frameCount > 0 && (_frameCount % (ulong)_masterFrameInterval) != 0;
-        var writer = new KeypointsWriter(
+        var writer = new KeyPointsWriter(
             frameId,
             _frameSink,
             isDelta,
@@ -476,32 +476,32 @@ public class KeypointsSink : IKeypointsSink
 // ============================================================================
 
 /// <summary>
-/// [DEPRECATED] Use KeypointsSink instead.
+/// [DEPRECATED] Use KeyPointsSink instead.
 /// Legacy alias for backward compatibility.
 /// </summary>
-[Obsolete("Use KeypointsSink instead. This alias will be removed in a future version.")]
-public class FileKeypointsStorage : KeypointsSink
+[Obsolete("Use KeyPointsSink instead. This alias will be removed in a future version.")]
+public class FileKeyPointsStorage : KeyPointsSink
 {
-    public FileKeypointsStorage(Stream stream, int masterFrameInterval = 300)
+    public FileKeyPointsStorage(Stream stream, int masterFrameInterval = 300)
         : base(stream, masterFrameInterval, leaveOpen: false)
     {
     }
 }
 
 /// <summary>
-/// [DEPRECATED] Use IKeypointsSink instead.
+/// [DEPRECATED] Use IKeyPointsSink instead.
 /// Legacy alias for backward compatibility.
 /// </summary>
-[Obsolete("Use IKeypointsSink instead. This alias will be removed in a future version.")]
-public interface IKeypointsStorage : IKeypointsSink
+[Obsolete("Use IKeyPointsSink instead. This alias will be removed in a future version.")]
+public interface IKeyPointsStorage : IKeyPointsSink
 {
 }
 
 // ============================================================================
-// KeypointsDefinition - JSON structure for keypoints definition file
+// KeyPointsDefinition - JSON structure for keypoints definition file
 // ============================================================================
 
-internal class KeypointsDefinition
+internal class KeyPointsDefinition
 {
     [System.Text.Json.Serialization.JsonPropertyName("version")]
     public string Version { get; set; } = "1.0";

@@ -208,7 +208,7 @@ public class BallDetectionService : BackgroundService
         _lifetime.StopApplication();
     }
 
-    private void ProcessFrameWithWriters(Mat input, ISegmentationResultWriter segWriter, IKeypointsWriter kpWriter, IStageWriter stageWriter, Mat output)
+    private void ProcessFrameWithWriters(Mat input, ISegmentationResultWriter segWriter, IKeyPointsWriter kpWriter, IStageWriter stageWriter, Mat output)
     {
         _frameCount++;
 

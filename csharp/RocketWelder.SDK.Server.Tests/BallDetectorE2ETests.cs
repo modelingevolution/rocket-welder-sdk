@@ -81,7 +81,7 @@ public class BallDetectorE2ETests : IDisposable
     }
 
     [Fact]
-    public async Task Given_ThreeFramesWithBalls_When_PythonProcessesThem_Then_KeypointsAndSegmentationAreCorrect()
+    public async Task Given_ThreeFramesWithBalls_When_PythonProcessesThem_Then_KeyPointsAndSegmentationAreCorrect()
     {
         // =========================================
         // GIVEN: Test setup with 3 frames containing balls
@@ -93,7 +93,7 @@ public class BallDetectorE2ETests : IDisposable
 
         _output.WriteLine("=== BDD E2E Test: Ball Detection ===");
         _output.WriteLine($"Channel: {_testChannelName}");
-        _output.WriteLine($"Keypoints socket: {_keypointsSocketPath}");
+        _output.WriteLine($"KeyPoints socket: {_keypointsSocketPath}");
         _output.WriteLine($"Segmentation socket: {_segmentationSocketPath}");
 
         // Verify Python environment exists
@@ -193,11 +193,11 @@ public class BallDetectorE2ETests : IDisposable
         }
 
         if (!File.Exists(_keypointsSocketPath))
-            throw new Exception($"Keypoints socket not created: {_keypointsSocketPath}");
-        _output.WriteLine($"Keypoints socket file exists: {_keypointsSocketPath}");
+            throw new Exception($"KeyPoints socket not created: {_keypointsSocketPath}");
+        _output.WriteLine($"KeyPoints socket file exists: {_keypointsSocketPath}");
 
         // Connect to keypoints socket
-        await server.ConnectToKeypointsSocketAsync(_keypointsSocketPath, TimeSpan.FromSeconds(10), cts.Token);
+        await server.ConnectToKeyPointsSocketAsync(_keypointsSocketPath, TimeSpan.FromSeconds(10), cts.Token);
         _output.WriteLine("Connected to keypoints socket");
 
         // Wait for segmentation socket file
@@ -245,7 +245,7 @@ public class BallDetectorE2ETests : IDisposable
 
         // Send frames and collect results
         var latencies = new List<double>();
-        var receivedKeypoints = new List<DeltaFrame<Keypoint>>();
+        var receivedKeyPoints = new List<DeltaFrame<KeyPoint>>();
         var receivedSegmentations = new List<RocketWelder.SDK.Protocols.SegmentationFrame>();
 
         _output.WriteLine("\n--- Sending Frames ---");
@@ -267,11 +267,11 @@ public class BallDetectorE2ETests : IDisposable
 
             // Read keypoints
             await Task.Delay(100, cts.Token); // Give Python time to write results
-            var kpFrame = server.TryReadKeypointsFrame(TimeSpan.FromSeconds(5));
+            var kpFrame = server.TryReadKeyPointsFrame(TimeSpan.FromSeconds(5));
             if (kpFrame.HasValue)
             {
-                receivedKeypoints.Add(kpFrame.Value);
-                _output.WriteLine($"  Keypoints: FrameId={kpFrame.Value.FrameId}, Count={kpFrame.Value.Items.Length}");
+                receivedKeyPoints.Add(kpFrame.Value);
+                _output.WriteLine($"  KeyPoints: FrameId={kpFrame.Value.FrameId}, Count={kpFrame.Value.Items.Length}");
             }
 
             // Read segmentation
@@ -314,8 +314,8 @@ public class BallDetectorE2ETests : IDisposable
         _output.WriteLine($"[PASS] Sent {frameCount} frames");
 
         // Verify keypoints were detected
-        Assert.NotEmpty(receivedKeypoints);
-        _output.WriteLine($"[PASS] Received {receivedKeypoints.Count} keypoint frames");
+        Assert.NotEmpty(receivedKeyPoints);
+        _output.WriteLine($"[PASS] Received {receivedKeyPoints.Count} keypoint frames");
 
         // Verify segmentation was detected
         Assert.NotEmpty(receivedSegmentations);
@@ -324,9 +324,9 @@ public class BallDetectorE2ETests : IDisposable
         // Verify keypoint positions are approximately correct (within tolerance)
         const int positionTolerance = 30; // pixels
 
-        for (int i = 0; i < Math.Min(receivedKeypoints.Count, frameCount); i++)
+        for (int i = 0; i < Math.Min(receivedKeyPoints.Count, frameCount); i++)
         {
-            var kpFrame = receivedKeypoints[i];
+            var kpFrame = receivedKeyPoints[i];
             var (_, expectedX, expectedY, _) = testFrames[i];
 
             if (kpFrame.Items.Length > 0)
@@ -345,7 +345,7 @@ public class BallDetectorE2ETests : IDisposable
                     $"Y position mismatch: expected ~{expectedY}, got {detectedKp.Position.Y}");
             }
         }
-        _output.WriteLine($"[PASS] Keypoint positions within {positionTolerance}px tolerance");
+        _output.WriteLine($"[PASS] KeyPoint positions within {positionTolerance}px tolerance");
 
         // Report latency stats
         _output.WriteLine("\n--- Latency Stats ---");
@@ -388,13 +388,13 @@ public class BallDetectorE2ETests : IDisposable
             // Write 3 keypoint frames
             for (int frameId = 1; frameId <= 3; frameId++)
             {
-                var keypoints = new Keypoint[]
+                var keypoints = new KeyPoint[]
                 {
                     new(0, 160 + frameId * 10, 120 + frameId * 5, 9500), // 0.95 as ushort (0-10000)
                 };
 
-                var buffer = new byte[KeypointsProtocol.CalculateMasterFrameSize(keypoints.Length)];
-                var bytesWritten = KeypointsProtocol.WriteMasterFrame(buffer, (ulong)frameId, keypoints);
+                var buffer = new byte[KeyPointsProtocol.CalculateMasterFrameSize(keypoints.Length)];
+                var bytesWritten = KeyPointsProtocol.WriteMasterFrame(buffer, (ulong)frameId, keypoints);
                 sink.WriteFrame(buffer.AsSpan(0, bytesWritten).ToArray());
                 sink.Flush();
 
@@ -438,24 +438,24 @@ public class BallDetectorE2ETests : IDisposable
         await Task.Delay(500, cts.Token);
 
         // Connect to sockets
-        await server.ConnectToKeypointsSocketAsync(_keypointsSocketPath, TimeSpan.FromSeconds(5), cts.Token);
+        await server.ConnectToKeyPointsSocketAsync(_keypointsSocketPath, TimeSpan.FromSeconds(5), cts.Token);
         _output.WriteLine("Connected to keypoints socket");
 
         await server.ConnectToSegmentationSocketAsync(_segmentationSocketPath, TimeSpan.FromSeconds(5), cts.Token);
         _output.WriteLine("Connected to segmentation socket");
 
         // Read results
-        var receivedKeypoints = new List<DeltaFrame<Keypoint>>();
+        var receivedKeyPoints = new List<DeltaFrame<KeyPoint>>();
         var receivedSegmentations = new List<RocketWelder.SDK.Protocols.SegmentationFrame>();
 
         for (int i = 0; i < 3; i++)
         {
             await Task.Delay(200, cts.Token);
 
-            var kp = server.TryReadKeypointsFrame(TimeSpan.FromSeconds(2));
+            var kp = server.TryReadKeyPointsFrame(TimeSpan.FromSeconds(2));
             if (kp.HasValue)
             {
-                receivedKeypoints.Add(kp.Value);
+                receivedKeyPoints.Add(kp.Value);
                 _output.WriteLine($"Received keypoints frame {kp.Value.FrameId}");
             }
 
@@ -473,7 +473,7 @@ public class BallDetectorE2ETests : IDisposable
         try { await segmentationWriterTask; } catch { }
 
         // Verify
-        Assert.Equal(3, receivedKeypoints.Count);
+        Assert.Equal(3, receivedKeyPoints.Count);
         Assert.Equal(3, receivedSegmentations.Count);
 
         _output.WriteLine("\n=== TEST PASSED ===");

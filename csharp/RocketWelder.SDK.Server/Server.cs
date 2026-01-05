@@ -238,7 +238,7 @@ namespace RocketWelder.SDK.Server
         /// </summary>
         /// <param name="socketPath">Path to Unix socket file</param>
         /// <param name="timeout">Connection timeout with retry</param>
-        public async Task ConnectToKeypointsSocketAsync(string socketPath, TimeSpan timeout, CancellationToken ct = default)
+        public async Task ConnectToKeyPointsSocketAsync(string socketPath, TimeSpan timeout, CancellationToken ct = default)
         {
             _logger.LogInformation("Connecting to keypoints socket: {SocketPath}", socketPath);
             _keypointsSource = await UnixSocketFrameSource.ConnectAsync(socketPath, timeout, retry: true, ct);
@@ -262,7 +262,7 @@ namespace RocketWelder.SDK.Server
         /// </summary>
         /// <param name="timeout">Read timeout</param>
         /// <returns>DeltaFrame with keypoints if available, null if timeout or end of stream</returns>
-        public DeltaFrame<Keypoint>? TryReadKeypointsFrame(TimeSpan timeout)
+        public DeltaFrame<KeyPoint>? TryReadKeyPointsFrame(TimeSpan timeout)
         {
             if (_keypointsSource == null)
                 throw new InvalidOperationException("Not connected to keypoints socket");
@@ -279,7 +279,7 @@ namespace RocketWelder.SDK.Server
                     return null;
 
                 // Deserialize using protocol reader (uses ReadOnlySpan<byte>)
-                return KeypointsProtocol.Read(frameData.Span);
+                return KeyPointsProtocol.Read(frameData.Span);
             }
             catch (OperationCanceledException)
             {

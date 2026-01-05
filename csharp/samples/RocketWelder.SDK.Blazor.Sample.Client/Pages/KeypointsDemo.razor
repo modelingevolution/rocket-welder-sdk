@@ -5,10 +5,10 @@
 @using RocketWelder.SDK.Blazor
 @inject ILoggerFactory LoggerFactory
 @inject NavigationManager NavigationManager
-@inject ILogger<KeypointsDemo> Logger
+@inject ILogger<KeyPointsDemo> Logger
 @implements IAsyncDisposable
 
-<h2>Keypoints Demo</h2>
+<h2>KeyPoints Demo</h2>
 
 <p>Real-time keypoint streaming from server (30 FPS) with master/delta encoding.
 Uses two-thread architecture: decode thread + render loop.</p>
@@ -50,7 +50,7 @@ Uses two-thread architecture: decode thread + render loop.</p>
         <strong>Server:</strong> Streams 17-point pose keypoints (COCO format) at 30 FPS.
         Master frames every 30 frames (1 second), delta frames in between for efficient compression.<br/>
         <strong>Client:</strong> RenderingStreamV2 manages WebSocket receive loop in background thread.
-        KeypointsDecoder parses binary protocol (maintaining delta state) and draws crosses to IStage layers.
+        KeyPointsDecoder parses binary protocol (maintaining delta state) and draws crosses to IStage layers.
         EnableRenderLoop triggers continuous painting where TryCopyFrame() provides thread-safe frame handoff.
     </p>
 </div>
@@ -60,7 +60,7 @@ Uses two-thread architecture: decode thread + render loop.</p>
     private const int CanvasHeight = 600;
 
     private RenderingStreamV2? _stream;
-    private KeypointsDecoder? _decoder;
+    private KeyPointsDecoder? _decoder;
     private bool _isStreaming;
     private bool _showLabels;
 
@@ -70,10 +70,10 @@ Uses two-thread architecture: decode thread + render loop.</p>
 
     protected override void OnInitialized()
     {
-        // Create RenderingStreamV2 with our KeypointsDecoder
+        // Create RenderingStreamV2 with our KeyPointsDecoder
         var pool = new LayerPool(CanvasWidth, CanvasHeight);
         var stage = new RenderingStage(CanvasWidth, CanvasHeight, pool);
-        _decoder = new KeypointsDecoder(stage, defaultColor: new RgbColor(0, 200, 0), layerId: 0);
+        _decoder = new KeyPointsDecoder(stage, defaultColor: new RgbColor(0, 200, 0), layerId: 0);
         _decoder.ShowLabels = _showLabels;
         _decoder.CrossSize = 8;
         _decoder.Thickness = 2;
