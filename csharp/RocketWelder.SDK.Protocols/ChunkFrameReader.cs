@@ -6,31 +6,32 @@ namespace RocketWelder.SDK.Protocols;
 /// </summary>
 public ref struct ChunkFrameReader
 {
-    private readonly ReadOnlyMemory<byte> _buffer;
+    private readonly byte[] _buffer;
+    private readonly int _end;
     private int _offset;
 
-    public ChunkFrameReader(byte[] data)
+    public ChunkFrameReader(byte[] data, int offset, int length)
     {
         _buffer = data;
-        _offset = 0;
+        _offset = offset;
+        _end = offset + length;
     }
 
     public ReadOnlyMemory<byte> ReadFrame(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        if (_offset >= _buffer.Length)
+        if (_offset >= _end)
             return ReadOnlyMemory<byte>.Empty;
 
-        var span = _buffer.Span;
-        if (!Varint.TryRead(span[_offset..], out var length, out int varintBytes))
+        if (!Varint.TryRead(_buffer.AsSpan(_offset, _end - _offset), out var length, out int varintBytes))
             return ReadOnlyMemory<byte>.Empty;
 
         var dataOffset = _offset + varintBytes;
-        if (dataOffset + (int)length > _buffer.Length)
+        if (dataOffset + (int)length > _end)
             return ReadOnlyMemory<byte>.Empty;
 
-        var frame = _buffer.Slice(dataOffset, (int)length);
+        var frame = _buffer.AsMemory(dataOffset, (int)length);
         _offset = dataOffset + (int)length;
         return frame;
     }

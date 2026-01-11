@@ -15,7 +15,7 @@ public class ChunkFrameReaderTests
         var chunk = WriteFramesToChunk(testData);
 
         // Act
-        var reader = new ChunkFrameReader(chunk);
+        var reader = new ChunkFrameReader(chunk, 0, chunk.Length);
         var frame = reader.ReadFrame();
 
         // Assert
@@ -36,7 +36,7 @@ public class ChunkFrameReaderTests
         var chunk = WriteFramesToChunk(frames);
 
         // Act & Assert
-        var reader = new ChunkFrameReader(chunk);
+        var reader = new ChunkFrameReader(chunk, 0, chunk.Length);
         foreach (var expected in frames)
         {
             var frame = reader.ReadFrame();
@@ -55,7 +55,7 @@ public class ChunkFrameReaderTests
         var chunk = Array.Empty<byte>();
 
         // Act
-        var reader = new ChunkFrameReader(chunk);
+        var reader = new ChunkFrameReader(chunk, 0, 0);
         var frame = reader.ReadFrame();
 
         // Assert
@@ -71,7 +71,7 @@ public class ChunkFrameReaderTests
         var chunk = WriteFramesToChunk(testData);
 
         // Act
-        var reader = new ChunkFrameReader(chunk);
+        var reader = new ChunkFrameReader(chunk, 0, chunk.Length);
         var frame = reader.ReadFrame();
 
         // Assert
