@@ -354,6 +354,7 @@ RocketWelder.SDK.Protocols/
 ├── RocketWelder.SDK.Protocols.csproj
 ├── BinaryFrameReader.cs          (EXISTS)
 ├── BinaryFrameWriter.cs          (NEW)
+├── ChunkFrameReader.cs           (NEW) - reads length-prefixed frames from memory chunk
 ├── VarintExtensions.cs           (EXISTS)
 ├── SegmentationProtocol.cs       (NEW)
 ├── SegmentationFrame.cs          (NEW)
@@ -362,6 +363,93 @@ RocketWelder.SDK.Protocols/
 ├── KeypointsFrame.cs             (NEW)
 └── Keypoint.cs                   (NEW)
 ```
+
+---
+
+## ChunkFrameReader
+
+Reads length-prefixed frames from an in-memory byte array (typically from ArrayPool).
+Symmetric to `StreamFrameSink` which writes `[varint length][frame data]` format.
+
+### Purpose
+
+When overlay data is stored in files or transmitted in chunks, frames are length-prefixed:
+```
+[len1][frame1][len2][frame2][len3][frame3]...
+```
+
+`ChunkFrameReader` parses this format from memory, returning zero-copy slices into the original buffer.
+
+### API
+
+```csharp
+/// <summary>
+/// Reads length-prefixed frames from an in-memory chunk.
+/// Zero-copy: returned ReadOnlyMemory slices point into the original buffer.
+/// </summary>
+public ref struct ChunkFrameReader
+{
+    private readonly ReadOnlyMemory<byte> _buffer;
+    private int _offset;
+
+    public ChunkFrameReader(ReadOnlyMemory<byte> buffer);
+
+    /// <summary>True if more frames available.</summary>
+    public bool HasMore { get; }
+
+    /// <summary>
+    /// Reads next frame, advancing position.
+    /// Returns the frame data WITHOUT the length prefix.
+    /// </summary>
+    public ReadOnlyMemory<byte> ReadFrame();
+
+    /// <summary>
+    /// Tries to read next frame.
+    /// Returns false if no more frames or incomplete data.
+    /// </summary>
+    public bool TryReadFrame(out ReadOnlyMemory<byte> frame);
+}
+```
+
+### Usage Example (Playback Overlay Indexing)
+
+```csharp
+// Overlay block from chunk (e.g., segmentation.bin data)
+var segBlock = chunkData.AsMemory(header.SegmentationBlock.Offset, header.SegmentationBlock.Length);
+
+// Parse length-prefixed frames, index by FrameId
+var overlayIndex = new Dictionary<ulong, ReadOnlyMemory<byte>>();
+var reader = new ChunkFrameReader(segBlock);
+
+while (reader.TryReadFrame(out var frameData))
+{
+    // FrameId is first 8 bytes of each frame (little-endian)
+    var frameId = BinaryPrimitives.ReadUInt64LittleEndian(frameData.Span);
+    overlayIndex[frameId] = frameData;  // zero-copy slice
+}
+
+// Later, decode specific frame
+if (overlayIndex.TryGetValue(targetFrameId, out var data))
+{
+    var decoded = SegmentationProtocol.Read(data.Span);
+    // render...
+}
+```
+
+### Frame Format (from StreamFrameSink)
+
+```
+┌─────────────┬──────────────────────────────────────┐
+│ varint len  │ frame data                           │
+│ (1-5 bytes) │ (len bytes)                          │
+├─────────────┼──────────────────────────────────────┤
+│ varint len  │ frame data                           │
+├─────────────┼──────────────────────────────────────┤
+│ ...         │ ...                                  │
+└─────────────┴──────────────────────────────────────┘
+```
+
+Each frame's data contains embedded FrameId (first 8 bytes) per protocol spec.
 
 ## WASM Compatibility
 
