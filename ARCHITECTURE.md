@@ -2,7 +2,7 @@
 
 ## Overview
 
-The RocketWelder SDK provides high-performance video streaming with support for multiple AI protocols (KeyPoints, Segmentation Results) over various transport mechanisms (File, TCP, Unix Socket, WebSocket).
+The RocketWelder SDK provides high-performance video streaming with support for multiple AI protocols (KeyPoints, Segmentation, Graphics) over various transport mechanisms (File, TCP, Unix Socket, WebSocket).
 
 ## API Layers
 
@@ -17,8 +17,8 @@ The RocketWelder SDK provides high-performance video streaming with support for 
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Protocol Layer (Internal)                                          │
-│  KeyPointsSink, KeyPointsWriter, SegmentationResultSink             │
-│  - Frame encoding, delta compression                                │
+│  KeyPointsSink, SegmentationResultSink, StageSink (Graphics)        │
+│  - Frame encoding, delta compression, vector graphics               │
 └─────────────────────────────────────────────────────────────────────┘
                               │
                               │ uses internally
@@ -187,7 +187,7 @@ Schemas emit metadata as JSON for readers/consumers:
 
 **THIS IS NON-NEGOTIABLE. DO NOT SKIP FRAMING.**
 
-Every protocol (KeyPoints, Segmentation, etc.) MUST use framing for ALL data:
+Every protocol (KeyPoints, Segmentation, Graphics) MUST use framing for ALL data:
 - **Files**: Varint length-prefix (`StreamFrameSink`/`StreamFrameSource`)
 - **TCP/Unix Socket**: 4-byte LE length-prefix (`TcpFrameSink`/`TcpFrameSource`, `UnixSocketFrameSink`/`UnixSocketFrameSource`)
 - **WebSocket**: Native message boundaries (automatic)
@@ -428,6 +428,87 @@ await foreach (var frame in source.ReadFramesAsync(cancellationToken))
         ProcessContour(instance.ClassId, instance.InstanceId, instance.Points.Span);
     }
 }
+```
+
+---
+
+### Graphics Protocol (Vector Overlays)
+
+The Graphics protocol streams vector graphics commands to browser clients for real-time overlay rendering.
+
+#### IStageSink (Writer Factory)
+
+```csharp
+public interface IStageSink : IDisposable, IAsyncDisposable
+{
+    IStageWriter CreateWriter(ulong frameId);
+}
+```
+
+#### IStageWriter (Per-Frame Writer)
+
+```csharp
+public interface IStageWriter : IDisposable, IAsyncDisposable
+{
+    ulong FrameId { get; }
+    ILayerCanvas this[byte layerId] { get; }
+    ILayerCanvas Layer(byte layerId);
+}
+```
+
+#### ILayerCanvas (Drawing API)
+
+```csharp
+public interface ILayerCanvas
+{
+    // Frame types
+    void Master();  // Full redraw
+    void Remain();  // Keep previous content
+    void Clear();   // Clear layer
+
+    // Styling
+    void SetStroke(RgbColor color);
+    void SetFill(RgbColor color);
+    void SetThickness(int width);
+    void SetFontSize(int size);
+    void SetFontColor(RgbColor color);
+
+    // Transforms
+    void Translate(float dx, float dy);
+    void Rotate(float degrees);
+    void Scale(float sx, float sy);
+
+    // Drawing operations
+    void DrawPolygon(ReadOnlySpan<SKPoint> points);
+    void DrawText(string text, int x, int y);
+    void DrawCircle(int centerX, int centerY, int radius);
+    void DrawRectangle(int x, int y, int width, int height);
+    void DrawLine(int x1, int y1, int x2, int y2);
+    void DrawJpeg(ReadOnlySpan<byte> jpegData, int x, int y, int width, int height);
+}
+```
+
+#### Usage - Writing
+
+```csharp
+// Create sink with transport
+using var frameSink = new WebSocketFrameSink(webSocket);
+using var sink = new StageSink(frameSink);
+
+// Write frames with vector graphics
+using var writer = sink.CreateWriter(frameId: 0);
+
+// Draw on layer 0 (background)
+writer[0].SetStroke(RgbColor.Red);
+writer[0].SetThickness(2);
+writer[0].DrawPolygon(contourPoints);
+
+// Draw on layer 1 (labels)
+writer[1].SetFontSize(16);
+writer[1].SetFontColor(RgbColor.White);
+writer[1].DrawText($"Frame: {writer.FrameId}", 10, 20);
+
+// Frame sent atomically on dispose
 ```
 
 ---
@@ -722,7 +803,7 @@ using var sink = new KeyPointsSink(frameSink);
 2. **Easy Testing**: Mock `IFrameSink` for unit tests
 3. **Extensibility**: Add new transports without changing protocol logic
 4. **Atomicity**: Frames written as complete units (important for WebSocket)
-5. **Reusability**: Same transport layer for all protocols (KeyPoints, Segmentation, future protocols)
+5. **Reusability**: Same transport layer for all protocols (KeyPoints, Segmentation, Graphics)
 
 ## Performance Considerations
 

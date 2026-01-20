@@ -41,10 +41,12 @@ Only after C# is fully complete and reviewed, work on Python can begin.
 | **C# Transport Layer** | ✅ 100% | All transports implemented (Stream, TCP, Unix Socket, WebSocket) |
 | **C# KeyPoints Protocol** | ✅ 100% | Sink/Source with IAsyncEnumerable complete |
 | **C# Segmentation Protocol** | ✅ 100% | Sink/Source with IAsyncEnumerable complete |
+| **C# Graphics Protocol** | ✅ 100% | StageSink/StageWriter with layer canvas API |
 | **C# Tests** | ✅ 100% | 125 passed, 12 skipped, 0 failed |
 | **Python Transport Layer** | ⏳ 67% | 4/6 transports working, needs framing update |
 | **Python KeyPoints Protocol** | ⏳ 50% | Sink done, Source not implemented |
 | **Python Segmentation Protocol** | ⏳ 50% | Writer done, Source not implemented, needs framing |
+| **Python Graphics Protocol** | ❌ 0% | Not implemented |
 
 ---
 
@@ -114,6 +116,17 @@ using var frameSource = new UnixSocketFrameSource(socket);
 | `SegmentationInstance` | ✅ | Instance struct with points |
 
 **All C# round-trip tests pass.**
+
+### Graphics Protocol ✅
+
+| Component | Status | Notes |
+|-----------|--------|-------|
+| `IStageSink` | ✅ | Factory interface for stage writers |
+| `StageSink` | ✅ | Uses `IFrameSink`, creates per-frame writers |
+| `IStageWriter` | ✅ | Per-frame writer with layer indexer |
+| `ILayerCanvas` | ✅ | Drawing API (polygons, text, circles, lines, JPEG) |
+
+**Graphics uses BlazorBlaze's VectorGraphicsEncoderV2 for binary encoding.**
 
 ### Test Status ✅
 
