@@ -8,11 +8,14 @@ import numpy as np
 import pytest
 
 from rocket_welder_sdk.segmentation_result import (
+    SegmentationFrame,
     SegmentationInstance,
+    SegmentationProtocol,
     SegmentationResultReader,
+    SegmentationResultSource,
     SegmentationResultWriter,
 )
-from rocket_welder_sdk.transport import StreamFrameSource
+from rocket_welder_sdk.transport import StreamFrameSink, StreamFrameSource
 
 
 def _read_frame_via_transport(stream: io.BytesIO) -> SegmentationResultReader:
@@ -428,3 +431,244 @@ class TestEndianness:
         # Verify it's different from big-endian
         decoded_big = struct.unpack(">Q", frame_id_bytes)[0]
         assert decoded_big != frame_id
+
+
+class TestSegmentationFrame:
+    """Tests for SegmentationFrame dataclass."""
+
+    def test_frame_properties(self) -> None:
+        """Test basic frame properties."""
+        instances = [
+            SegmentationInstance(1, 1, np.array([[10, 20]], dtype=np.int32)),
+            SegmentationInstance(2, 1, np.array([[30, 40], [50, 60]], dtype=np.int32)),
+        ]
+        frame = SegmentationFrame(frame_id=42, width=1920, height=1080, instances=instances)
+
+        assert frame.frame_id == 42
+        assert frame.width == 1920
+        assert frame.height == 1080
+        assert frame.count == 2
+
+    def test_find_by_class(self) -> None:
+        """Test finding instances by class ID."""
+        instances = [
+            SegmentationInstance(1, 1, np.array([[10, 20]], dtype=np.int32)),
+            SegmentationInstance(2, 1, np.array([[30, 40]], dtype=np.int32)),
+            SegmentationInstance(1, 2, np.array([[50, 60]], dtype=np.int32)),
+        ]
+        frame = SegmentationFrame(frame_id=1, width=100, height=100, instances=instances)
+
+        class1_instances = frame.find_by_class(1)
+        assert len(class1_instances) == 2
+        assert class1_instances[0].instance_id == 1
+        assert class1_instances[1].instance_id == 2
+
+        class2_instances = frame.find_by_class(2)
+        assert len(class2_instances) == 1
+
+        class3_instances = frame.find_by_class(3)
+        assert len(class3_instances) == 0
+
+    def test_find_by_instance(self) -> None:
+        """Test finding instances by instance ID."""
+        instances = [
+            SegmentationInstance(1, 1, np.array([[10, 20]], dtype=np.int32)),
+            SegmentationInstance(2, 1, np.array([[30, 40]], dtype=np.int32)),
+            SegmentationInstance(1, 2, np.array([[50, 60]], dtype=np.int32)),
+        ]
+        frame = SegmentationFrame(frame_id=1, width=100, height=100, instances=instances)
+
+        inst1_instances = frame.find_by_instance(1)
+        assert len(inst1_instances) == 2
+
+        inst2_instances = frame.find_by_instance(2)
+        assert len(inst2_instances) == 1
+
+
+class TestSegmentationProtocol:
+    """Tests for SegmentationProtocol static class."""
+
+    def test_write_read_roundtrip(self) -> None:
+        """Test write/read roundtrip through protocol."""
+        instances = [
+            SegmentationInstance(1, 1, np.array([[10, 20], [30, 40]], dtype=np.int32)),
+            SegmentationInstance(2, 1, np.array([[100, 200], [101, 201]], dtype=np.int32)),
+        ]
+        original = SegmentationFrame(frame_id=42, width=1920, height=1080, instances=instances)
+
+        buffer = bytearray(1000)
+        written = SegmentationProtocol.write(buffer, original)
+        assert written > 0
+
+        decoded = SegmentationProtocol.read(bytes(buffer[:written]))
+
+        assert decoded.frame_id == original.frame_id
+        assert decoded.width == original.width
+        assert decoded.height == original.height
+        assert len(decoded.instances) == len(original.instances)
+
+        for i, (orig, dec) in enumerate(zip(original.instances, decoded.instances)):
+            assert dec.class_id == orig.class_id, f"Instance {i} class mismatch"
+            assert dec.instance_id == orig.instance_id, f"Instance {i} id mismatch"
+            np.testing.assert_array_equal(dec.points, orig.points)
+
+    def test_write_header(self) -> None:
+        """Test writing just the header."""
+        buffer = bytearray(100)
+        written = SegmentationProtocol.write_header(buffer, 123, 1920, 1080)
+
+        # Should have frame_id (8) + width varint + height varint
+        assert written >= 10  # Minimum size
+
+        # Verify frame_id
+        frame_id = struct.unpack("<Q", bytes(buffer[:8]))[0]
+        assert frame_id == 123
+
+    def test_write_instance(self) -> None:
+        """Test writing a single instance."""
+        points: List[Tuple[int, int]] = [(10, 20), (30, 40)]
+        buffer = bytearray(100)
+        written = SegmentationProtocol.write_instance(buffer, 5, 3, points)
+
+        # Should have classId(1) + instanceId(1) + pointCount varint + points
+        assert written > 4
+
+    def test_calculate_instance_size(self) -> None:
+        """Test size calculation."""
+        size = SegmentationProtocol.calculate_instance_size(10)
+        # classId(1) + instanceId(1) + pointCount(max 5) + points(max 10 each)
+        assert size == 1 + 1 + 5 + (10 * 10)
+
+    def test_try_read_success(self) -> None:
+        """Test try_read with valid data."""
+        instances = [SegmentationInstance(1, 1, np.array([[10, 20]], dtype=np.int32))]
+        original = SegmentationFrame(frame_id=1, width=100, height=100, instances=instances)
+
+        buffer = bytearray(100)
+        written = SegmentationProtocol.write(buffer, original)
+
+        result = SegmentationProtocol.try_read(bytes(buffer[:written]))
+        assert result is not None
+        assert result.frame_id == 1
+
+    def test_try_read_invalid_data(self) -> None:
+        """Test try_read with invalid data."""
+        result = SegmentationProtocol.try_read(b"\x00\x01\x02")
+        assert result is None
+
+    def test_empty_instances(self) -> None:
+        """Test roundtrip with empty instances list."""
+        original = SegmentationFrame(frame_id=99, width=640, height=480, instances=[])
+
+        buffer = bytearray(100)
+        written = SegmentationProtocol.write(buffer, original)
+
+        decoded = SegmentationProtocol.read(bytes(buffer[:written]))
+        assert decoded.frame_id == 99
+        assert decoded.width == 640
+        assert decoded.height == 480
+        assert len(decoded.instances) == 0
+
+    def test_empty_points(self) -> None:
+        """Test roundtrip with instance having empty points."""
+        instances = [SegmentationInstance(1, 1, np.empty((0, 2), dtype=np.int32))]
+        original = SegmentationFrame(frame_id=1, width=100, height=100, instances=instances)
+
+        buffer = bytearray(100)
+        written = SegmentationProtocol.write(buffer, original)
+
+        decoded = SegmentationProtocol.read(bytes(buffer[:written]))
+        assert len(decoded.instances) == 1
+        assert len(decoded.instances[0].points) == 0
+
+
+class TestSegmentationResultSource:
+    """Tests for SegmentationResultSource streaming class."""
+
+    def test_read_single_frame(self) -> None:
+        """Test reading a single frame from source."""
+        # Write frame using existing writer via transport
+        stream = io.BytesIO()
+        with SegmentationResultWriter(
+            42, 1920, 1080, frame_sink=StreamFrameSink(stream, leave_open=True)
+        ) as writer:
+            writer.append(1, 1, np.array([[10, 20], [30, 40]], dtype=np.int32))
+            writer.append(2, 1, np.array([[100, 200]], dtype=np.int32))
+
+        # Read via source
+        stream.seek(0)
+        frame_source = StreamFrameSource(stream)
+        source = SegmentationResultSource(frame_source)
+
+        frames = list(source.read_frames())
+        assert len(frames) == 1
+
+        frame = frames[0]
+        assert frame.frame_id == 42
+        assert frame.width == 1920
+        assert frame.height == 1080
+        assert frame.count == 2
+        assert frame.instances[0].class_id == 1
+        assert frame.instances[1].class_id == 2
+
+    def test_read_multiple_frames(self) -> None:
+        """Test reading multiple frames from source."""
+        stream = io.BytesIO()
+        sink = StreamFrameSink(stream, leave_open=True)
+
+        # Write frame 1
+        with SegmentationResultWriter(1, 640, 480, frame_sink=sink) as writer:
+            writer.append(1, 1, np.array([[10, 20]], dtype=np.int32))
+
+        # Write frame 2
+        with SegmentationResultWriter(2, 1920, 1080, frame_sink=sink) as writer:
+            writer.append(2, 1, np.array([[100, 200]], dtype=np.int32))
+            writer.append(3, 1, np.array([[300, 400]], dtype=np.int32))
+
+        # Read via source
+        stream.seek(0)
+        frame_source = StreamFrameSource(stream)
+        source = SegmentationResultSource(frame_source)
+
+        frames = list(source.read_frames())
+        assert len(frames) == 2
+
+        assert frames[0].frame_id == 1
+        assert frames[0].count == 1
+
+        assert frames[1].frame_id == 2
+        assert frames[1].count == 2
+
+    def test_context_manager(self) -> None:
+        """Test using source as context manager."""
+        stream = io.BytesIO()
+        with SegmentationResultWriter(
+            1, 100, 100, frame_sink=StreamFrameSink(stream, leave_open=True)
+        ) as writer:
+            writer.append(1, 1, np.array([[10, 20]], dtype=np.int32))
+
+        stream.seek(0)
+        frame_source = StreamFrameSource(stream)
+
+        with SegmentationResultSource(frame_source) as source:
+            frames = list(source.read_frames())
+            assert len(frames) == 1
+
+    def test_close_idempotent(self) -> None:
+        """Test that close can be called multiple times."""
+        stream = io.BytesIO()
+        frame_source = StreamFrameSource(stream)
+        source = SegmentationResultSource(frame_source)
+
+        source.close()
+        source.close()  # Should not raise
+
+    def test_closed_source_raises(self) -> None:
+        """Test that reading from closed source raises."""
+        stream = io.BytesIO()
+        frame_source = StreamFrameSource(stream)
+        source = SegmentationResultSource(frame_source)
+        source.close()
+
+        with pytest.raises(RuntimeError, match="closed"):
+            list(source.read_frames())

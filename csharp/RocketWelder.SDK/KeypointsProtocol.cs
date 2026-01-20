@@ -159,6 +159,11 @@ public class KeyPointsSource : IKeyPointsSource
 /// <summary>
 /// In-memory representation of keypoints series for efficient querying.
 /// </summary>
+/// <remarks>
+/// DEAD CODE: This class was designed but never used. Internal constructor prevents instantiation.
+/// No code in the SDK creates or consumes KeyPointsSeries instances.
+/// </remarks>
+[Obsolete("Dead code - designed but never implemented/used. Will be removed in future version.")]
 public class KeyPointsSeries
 {
     private readonly Dictionary<ulong, SortedDictionary<int, (Point point, float confidence)>> _index;

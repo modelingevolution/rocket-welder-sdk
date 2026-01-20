@@ -24,12 +24,6 @@ from .segmentation_result import (
     ISegmentationResultWriter,
     SegmentationResultSink,
 )
-from .session_id import (
-    get_configured_nng_urls,
-    get_nng_urls_from_env,
-    has_explicit_nng_urls,
-)
-from .transport.nng_transport import NngFrameSink
 
 if TYPE_CHECKING:
     import numpy.typing as npt
@@ -67,9 +61,6 @@ class RocketWelderClient:
         self._controller: Optional[IController] = None
         self._lock = threading.Lock()
 
-        # NNG publishers for streaming results (auto-created if SessionId env var is set)
-        self._nng_publishers: dict[str, NngFrameSink] = {}
-
         # Preview support
         self._preview_enabled = (
             self._connection.parameters.get("preview", "false").lower() == "true"
@@ -88,50 +79,6 @@ class RocketWelderClient:
         """Check if the client is running."""
         with self._lock:
             return self._controller is not None and self._controller.is_running
-
-    @property
-    def nng_publishers(self) -> dict[str, NngFrameSink]:
-        """Get NNG publishers for streaming results.
-
-        Returns:
-            Dictionary with 'segmentation', 'keypoints', 'actions' keys.
-            Empty if SessionId env var was not set at startup.
-
-        Example:
-            client.nng_publishers["segmentation"].write_frame(seg_data)
-        """
-        return self._nng_publishers
-
-    def _create_nng_publishers(self) -> None:
-        """Create NNG publishers for result streaming.
-
-        URLs are read from environment variables (preferred) or derived from SessionId (fallback).
-
-        Priority:
-        1. Explicit URLs: SEGMENTATION_SINK_URL, KEYPOINTS_SINK_URL, ACTIONS_SINK_URL
-        2. Derived from SessionId environment variable (backwards compatibility)
-        """
-        try:
-            urls = get_configured_nng_urls()
-
-            for name, url in urls.items():
-                sink = NngFrameSink.create_publisher(url)
-                self._nng_publishers[name] = sink
-                logger.info("NNG publisher ready: %s at %s", name, url)
-
-            # Log configuration summary
-            logger.info(
-                "NNG publishers configured: seg=%s, kp=%s, actions=%s",
-                urls.get("segmentation", "(not configured)"),
-                urls.get("keypoints", "(not configured)"),
-                urls.get("actions", "(not configured)"),
-            )
-        except ValueError as ex:
-            # No URLs configured - this is expected for containers that don't publish results
-            logger.debug("NNG publishers not configured: %s", ex)
-        except Exception as ex:
-            logger.warning("Failed to create NNG publishers: %s", ex)
-            # Don't fail start() - NNG is optional for backwards compatibility
 
     def get_metadata(self) -> Optional[GstMetadata]:
         """
@@ -179,21 +126,6 @@ class RocketWelderClient:
                 self._controller = OpenCvController(self._connection)
             else:
                 raise ValueError(f"Unsupported protocol: {self._connection.protocol}")
-
-            # Auto-create NNG publishers if URLs are configured
-            # (explicit URLs via SEGMENTATION_SINK_URL etc., or derived from SessionId)
-            if has_explicit_nng_urls():
-                self._create_nng_publishers()
-            else:
-                # Log that NNG is not configured (informational)
-                urls = get_nng_urls_from_env()
-                logger.info(
-                    "NNG sink URLs not configured (this is normal if not publishing AI results). "
-                    "seg=%s, kp=%s, actions=%s",
-                    urls.get("segmentation") or "(not set)",
-                    urls.get("keypoints") or "(not set)",
-                    urls.get("actions") or "(not set)",
-                )
 
             # If preview is enabled, wrap the callback to capture frames
             if self._preview_enabled:
@@ -402,15 +334,6 @@ class RocketWelderClient:
                 # Signal preview to stop if enabled
                 if self._preview_enabled:
                     self._preview_queue.put(None)  # Sentinel value
-
-                # Clean up NNG publishers
-                for name, sink in self._nng_publishers.items():
-                    try:
-                        sink.close()
-                        logger.debug("Closed NNG publisher: %s", name)
-                    except Exception as ex:
-                        logger.warning("Failed to close NNG publisher %s: %s", name, ex)
-                self._nng_publishers.clear()
 
                 logger.info("RocketWelder client stopped")
 

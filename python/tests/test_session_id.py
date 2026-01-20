@@ -8,10 +8,6 @@ import pytest
 
 from rocket_welder_sdk.session_id import (
     SESSION_ID_PREFIX,
-    get_actions_url,
-    get_keypoints_url,
-    get_nng_urls,
-    get_segmentation_url,
     get_session_id_from_env,
     parse_session_id,
 )
@@ -47,61 +43,6 @@ class TestParseSessionId:
         """parse_session_id raises ValueError for empty string."""
         with pytest.raises(ValueError):
             parse_session_id("")
-
-
-class TestGetNngUrls:
-    """Tests for get_nng_urls function."""
-
-    def test_generates_correct_urls(self) -> None:
-        """get_nng_urls generates correct IPC URLs."""
-        guid = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
-        session_id = f"ps-{guid}"
-
-        urls = get_nng_urls(session_id)
-
-        assert urls["segmentation"] == f"ipc:///tmp/rw-{guid}-seg.sock"
-        assert urls["keypoints"] == f"ipc:///tmp/rw-{guid}-kp.sock"
-        assert urls["actions"] == f"ipc:///tmp/rw-{guid}-actions.sock"
-
-    def test_works_with_raw_guid(self) -> None:
-        """get_nng_urls works with raw guid for backwards compat."""
-        guid = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
-        session_id = str(guid)
-
-        urls = get_nng_urls(session_id)
-
-        assert f"{guid}" in urls["segmentation"]
-
-
-class TestGetIndividualUrls:
-    """Tests for individual URL getter functions."""
-
-    def test_get_segmentation_url(self) -> None:
-        """get_segmentation_url returns correct URL."""
-        guid = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
-        session_id = f"ps-{guid}"
-
-        url = get_segmentation_url(session_id)
-
-        assert url == f"ipc:///tmp/rw-{guid}-seg.sock"
-
-    def test_get_keypoints_url(self) -> None:
-        """get_keypoints_url returns correct URL."""
-        guid = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
-        session_id = f"ps-{guid}"
-
-        url = get_keypoints_url(session_id)
-
-        assert url == f"ipc:///tmp/rw-{guid}-kp.sock"
-
-    def test_get_actions_url(self) -> None:
-        """get_actions_url returns correct URL."""
-        guid = uuid.UUID("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
-        session_id = f"ps-{guid}"
-
-        url = get_actions_url(session_id)
-
-        assert url == f"ipc:///tmp/rw-{guid}-actions.sock"
 
 
 class TestGetSessionIdFromEnv:

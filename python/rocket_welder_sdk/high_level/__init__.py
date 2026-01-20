@@ -12,7 +12,12 @@ Example:
         client.start(process_frame)
 """
 
-from .client import RocketWelderClient, RocketWelderClientOptions
+from .client import (
+    IRocketWelderClient,
+    RocketWelderClient,
+    RocketWelderClientFactory,
+    RocketWelderClientOptions,
+)
 from .connection_strings import (
     KeyPointsConnectionString,
     SegmentationConnectionString,
@@ -39,11 +44,13 @@ __all__ = [
     "FrameSinkFactory",
     "IKeyPointsDataContext",
     "IKeyPointsSchema",
+    "IRocketWelderClient",
     "ISegmentationDataContext",
     "ISegmentationSchema",
     "KeyPointDefinition",
     "KeyPointsConnectionString",
     "RocketWelderClient",
+    "RocketWelderClientFactory",
     "RocketWelderClientOptions",
     "SegmentClass",
     "SegmentationConnectionString",

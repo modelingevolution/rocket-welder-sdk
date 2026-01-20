@@ -42,9 +42,6 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-nng = [
-    "pynng>=0.7.2",
-]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
@@ -53,7 +50,6 @@ dev = [
     "mypy>=1.0",
     "ruff>=0.1.0",
     "types-setuptools",
-    "pynng>=0.7.2",
 ]
 
 [project.urls]
@@ -96,8 +92,8 @@ module = [
     "py_micro_plumberd.*",
     "esdbclient",
     "esdbclient.*",
-    "pynng",
-    "pynng.*",
+    "websockets",
+    "websockets.*",
 ]
 ignore_missing_imports = true
 
@@ -147,7 +143,7 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # imported but unused
 "tests/*" = ["S101"]  # use of assert
-"examples/*" = ["N999", "SIM112"]  # Module names and env var casing (matches C# SDK)
+"examples/*" = ["N999", "SIM112", "F401", "SIM108"]  # Module names, env var casing, unused imports, if/else style
 
 [tool.pytest.ini_options]
 minversion = "7.0"

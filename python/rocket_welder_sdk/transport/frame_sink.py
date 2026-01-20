@@ -9,7 +9,7 @@ class IFrameSink(ABC):
 
     Transport-agnostic interface that handles the question: "where do frames go?"
     This abstraction decouples protocol logic (KeyPoints, SegmentationResults) from
-    transport mechanisms (File, TCP, WebSocket, NNG). Each frame is written atomically.
+    transport mechanisms (File, TCP, WebSocket, Unix Socket). Each frame is written atomically.
     """
 
     @abstractmethod
@@ -37,7 +37,7 @@ class IFrameSink(ABC):
         """
         Flush any buffered data to the transport synchronously.
 
-        For message-based transports (NNG, WebSocket), this may be a no-op.
+        For message-based transports (WebSocket), this may be a no-op.
         """
         pass
 
@@ -46,7 +46,7 @@ class IFrameSink(ABC):
         """
         Flush any buffered data to the transport asynchronously.
 
-        For message-based transports (NNG, WebSocket), this may be a no-op.
+        For message-based transports (WebSocket), this may be a no-op.
         """
         pass
 

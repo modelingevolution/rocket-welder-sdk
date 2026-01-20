@@ -2,18 +2,24 @@
 RocketWelderClient - High-level API matching C# RocketWelder.SDK.
 
 Usage:
-    with RocketWelderClient.from_environment() as client:
+    with RocketWelderClientFactory.from_environment() as client:
         # Define schema
         nose = client.keypoints.define_point("nose")
         person = client.segmentation.define_class(1, "person")
 
         # Start processing
         client.start(process_frame)
+
+Alternatively:
+    # Using class methods directly
+    with RocketWelderClient.from_environment() as client:
+        ...
 """
 
 from __future__ import annotations
 
 import logging
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Optional
 
@@ -50,6 +56,73 @@ Mat: TypeAlias = npt.NDArray[np.uint8]
 logger = logging.getLogger(__name__)
 
 
+class IRocketWelderClient(ABC):
+    """
+    Main entry point for RocketWelder SDK high-level API.
+
+    Provides schema definitions and frame processing loop.
+    Matches C# IRocketWelderClient interface.
+    """
+
+    @property
+    @abstractmethod
+    def keypoints(self) -> IKeyPointsSchema:
+        """Schema for defining keypoints."""
+        pass
+
+    @property
+    @abstractmethod
+    def segmentation(self) -> ISegmentationSchema:
+        """Schema for defining segmentation classes."""
+        pass
+
+    @abstractmethod
+    def start(
+        self,
+        process_frame: Callable[[Mat, ISegmentationDataContext, IKeyPointsDataContext, Mat], None],
+    ) -> None:
+        """
+        Start the processing loop with full context (keypoints + segmentation).
+
+        Args:
+            process_frame: Callback for each frame with:
+                - input_frame: Source video frame (Mat)
+                - segmentation: Segmentation data context
+                - keypoints: KeyPoints data context
+                - output_frame: Output frame for visualization (Mat)
+        """
+        pass
+
+    @abstractmethod
+    def start_keypoints(
+        self,
+        process_frame: Callable[[Mat, IKeyPointsDataContext, Mat], None],
+    ) -> None:
+        """Start the processing loop (keypoints only)."""
+        pass
+
+    @abstractmethod
+    def start_segmentation(
+        self,
+        process_frame: Callable[[Mat, ISegmentationDataContext, Mat], None],
+    ) -> None:
+        """Start the processing loop (segmentation only)."""
+        pass
+
+    @abstractmethod
+    def close(self) -> None:
+        """Release resources."""
+        pass
+
+    def __enter__(self) -> IRocketWelderClient:
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Context manager exit."""
+        self.close()
+
+
 @dataclass
 class RocketWelderClientOptions:
     """Configuration options for RocketWelderClient."""
@@ -72,11 +145,12 @@ class RocketWelderClientOptions:
         )
 
 
-class RocketWelderClient:
+class RocketWelderClient(IRocketWelderClient):
     """
     High-level client for RocketWelder SDK.
 
-    Mirrors C# RocketWelder.SDK.IRocketWelderClient interface.
+    Implements IRocketWelderClient interface.
+    Mirrors C# RocketWelder.SDK.RocketWelderClientImpl.
     """
 
     def __init__(self, options: RocketWelderClientOptions) -> None:
@@ -233,3 +307,40 @@ class RocketWelderClient:
 
     def __exit__(self, *args: object) -> None:
         self.close()
+
+
+class RocketWelderClientFactory:
+    """
+    Factory for creating RocketWelderClient instances.
+
+    Matches C# RocketWelderClientFactory static class.
+    """
+
+    @staticmethod
+    def from_environment() -> IRocketWelderClient:
+        """
+        Creates a client configured from environment variables.
+
+        Environment variables:
+        - VIDEO_SOURCE or CONNECTION_STRING: Video input
+        - KEYPOINTS_CONNECTION_STRING: KeyPoints output
+        - SEGMENTATION_CONNECTION_STRING: Segmentation output
+
+        Returns:
+            IRocketWelderClient configured from environment.
+        """
+        options = RocketWelderClientOptions.from_environment()
+        return RocketWelderClient(options)
+
+    @staticmethod
+    def create(options: Optional[RocketWelderClientOptions] = None) -> IRocketWelderClient:
+        """
+        Creates a client with explicit configuration.
+
+        Args:
+            options: Configuration options. If None, uses defaults.
+
+        Returns:
+            IRocketWelderClient with the specified configuration.
+        """
+        return RocketWelderClient(options or RocketWelderClientOptions())

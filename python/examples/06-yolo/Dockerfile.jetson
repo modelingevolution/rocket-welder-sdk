@@ -30,8 +30,7 @@ RUN pip3 install --no-cache-dir --no-deps ultralytics && \
 # Copy and install the SDK
 COPY rocket_welder_sdk/ /app/rocket_welder_sdk/
 COPY setup.py pyproject.toml MANIFEST.in README.md ./
-RUN pip3 install --no-cache-dir --no-deps . && \
-    pip3 install --no-cache-dir pynng
+RUN pip3 install --no-cache-dir --no-deps .
 
 # Forcefully uninstall opencv-python if it got installed, we use L4T's OpenCV
 RUN pip3 uninstall -y opencv-python opencv-python-headless || true

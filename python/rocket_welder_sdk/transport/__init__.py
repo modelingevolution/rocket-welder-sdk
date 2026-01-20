@@ -6,7 +6,6 @@ Provides transport-agnostic frame sink/source abstractions for protocols.
 
 from .frame_sink import IFrameSink, NullFrameSink
 from .frame_source import IFrameSource
-from .nng_transport import NngFrameSink, NngFrameSource
 from .stream_transport import StreamFrameSink, StreamFrameSource
 from .tcp_transport import TcpFrameSink, TcpFrameSource
 from .unix_socket_transport import (
@@ -14,12 +13,16 @@ from .unix_socket_transport import (
     UnixSocketFrameSource,
     UnixSocketServer,
 )
+from .websocket_transport import (
+    WebSocketFrameSink,
+    WebSocketFrameSource,
+    connect_websocket_sink,
+    connect_websocket_source,
+)
 
 __all__ = [
     "IFrameSink",
     "IFrameSource",
-    "NngFrameSink",
-    "NngFrameSource",
     "NullFrameSink",
     "StreamFrameSink",
     "StreamFrameSource",
@@ -28,4 +31,8 @@ __all__ = [
     "UnixSocketFrameSink",
     "UnixSocketFrameSource",
     "UnixSocketServer",
+    "WebSocketFrameSink",
+    "WebSocketFrameSource",
+    "connect_websocket_sink",
+    "connect_websocket_source",
 ]

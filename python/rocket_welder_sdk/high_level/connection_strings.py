@@ -4,10 +4,8 @@ Strongly-typed connection strings with parsing support.
 Connection string format: protocol://path?param1=value1&param2=value2
 
 Examples:
-    nng+push+ipc://tmp/keypoints?masterFrameInterval=300
-    nng+pub+tcp://localhost:5555
     file:///path/to/output.bin
-    socket:///tmp/my.sock
+    socket:///tmp/my.sock?masterFrameInterval=300
 """
 
 from __future__ import annotations
@@ -148,8 +146,6 @@ class KeyPointsConnectionString:
     Supported protocols:
     - file:///path/to/file.bin - File output (absolute path)
     - socket:///tmp/socket.sock - Unix domain socket
-    - nng+push+ipc://tmp/keypoints - NNG Push over IPC
-    - nng+push+tcp://host:port - NNG Push over TCP
 
     Supported parameters:
     - masterFrameInterval: Interval between master frames (default: 300)
@@ -164,7 +160,7 @@ class KeyPointsConnectionString:
     @classmethod
     def default(cls) -> KeyPointsConnectionString:
         """Default connection string for KeyPoints."""
-        return cls.parse("nng+push+ipc://tmp/rocket-welder-keypoints?masterFrameInterval=300")
+        return cls.parse("socket:///tmp/rocket-welder-keypoints.sock?masterFrameInterval=300")
 
     @classmethod
     def from_environment(
@@ -217,9 +213,6 @@ class KeyPointsConnectionString:
         elif protocol.is_socket:
             # socket:///tmp/sock -> /tmp/sock
             address = path_part if path_part.startswith("/") else "/" + path_part
-        elif protocol.is_nng:
-            # NNG protocols need proper address format
-            address = protocol.create_nng_address(path_part)
         else:
             return None
 
@@ -249,8 +242,6 @@ class SegmentationConnectionString:
     Supported protocols:
     - file:///path/to/file.bin - File output (absolute path)
     - socket:///tmp/socket.sock - Unix domain socket
-    - nng+push+ipc://tmp/segmentation - NNG Push over IPC
-    - nng+push+tcp://host:port - NNG Push over TCP
     """
 
     value: str
@@ -261,7 +252,7 @@ class SegmentationConnectionString:
     @classmethod
     def default(cls) -> SegmentationConnectionString:
         """Default connection string for Segmentation."""
-        return cls.parse("nng+push+ipc://tmp/rocket-welder-segmentation")
+        return cls.parse("socket:///tmp/rocket-welder-segmentation.sock")
 
     @classmethod
     def from_environment(
@@ -314,9 +305,6 @@ class SegmentationConnectionString:
         elif protocol.is_socket:
             # socket:///tmp/sock -> /tmp/sock
             address = path_part if path_part.startswith("/") else "/" + path_part
-        elif protocol.is_nng:
-            # NNG protocols need proper address format
-            address = protocol.create_nng_address(path_part)
         else:
             return None
 

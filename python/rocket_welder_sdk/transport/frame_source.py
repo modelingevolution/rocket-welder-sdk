@@ -10,7 +10,7 @@ class IFrameSource(ABC):
 
     Transport-agnostic interface that handles the question: "where do frames come from?"
     This abstraction decouples protocol logic (KeyPoints, SegmentationResults) from
-    transport mechanisms (File, TCP, WebSocket, NNG). Each frame is read atomically.
+    transport mechanisms (File, TCP, WebSocket, Unix Socket). Each frame is read atomically.
     """
 
     @abstractmethod
@@ -40,7 +40,7 @@ class IFrameSource(ABC):
         Check if more frames are available.
 
         For streaming transports (file), this checks for EOF.
-        For message-based transports (NNG), this may always return True until disconnection.
+        For message-based transports, this may always return True until disconnection.
 
         Returns:
             True if more frames are available, False otherwise

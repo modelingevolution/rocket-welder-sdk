@@ -23,13 +23,22 @@ import io
 import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import BinaryIO, Iterator, List, Optional, Tuple, Union
+from typing import (
+    AsyncIterator,
+    BinaryIO,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 import numpy as np
 import numpy.typing as npt
 from typing_extensions import TypeAlias
 
-from .transport import IFrameSink, StreamFrameSink
+from .transport import IFrameSink, IFrameSource, StreamFrameSink
 
 # Type aliases
 Point = Tuple[int, int]
@@ -120,6 +129,40 @@ class SegmentationInstance:
     def to_list(self) -> List[Point]:
         """Convert points to list of tuples."""
         return [(int(x), int(y)) for x, y in self.points]
+
+
+@dataclass(frozen=True)
+class SegmentationFrame:
+    """
+    Represents a decoded segmentation frame containing instance segmentation results.
+
+    Matches C# SegmentationFrame record struct.
+    Used for round-trip testing of segmentation protocol encoding/decoding.
+
+    Attributes:
+        frame_id: Frame identifier for temporal ordering.
+        width: Frame width in pixels.
+        height: Frame height in pixels.
+        instances: Segmentation instances detected in this frame.
+    """
+
+    frame_id: int
+    width: int
+    height: int
+    instances: Sequence[SegmentationInstance]
+
+    @property
+    def count(self) -> int:
+        """Number of instances in the frame."""
+        return len(self.instances)
+
+    def find_by_class(self, class_id: int) -> List[SegmentationInstance]:
+        """Find all instances with the specified class ID."""
+        return [inst for inst in self.instances if inst.class_id == class_id]
+
+    def find_by_instance(self, instance_id: int) -> List[SegmentationInstance]:
+        """Find all instances with the specified instance ID."""
+        return [inst for inst in self.instances if inst.instance_id == instance_id]
 
 
 class SegmentationResultWriter:
@@ -550,3 +593,345 @@ class SegmentationResultSink(ISegmentationResultSink):
         """Close the sink and release resources."""
         if self._owns_sink:
             self._frame_sink.close()
+
+
+class ISegmentationResultSource(ABC):
+    """
+    Interface for streaming segmentation frames from a source.
+
+    Mirrors the pattern from IKeyPointsSource for consistency.
+    """
+
+    @abstractmethod
+    def read_frames(self) -> Iterator[SegmentationFrame]:
+        """
+        Read frames synchronously as an iterator.
+
+        Yields:
+            SegmentationFrame for each frame in the source.
+        """
+        pass
+
+    def read_frames_async(self) -> AsyncIterator[SegmentationFrame]:
+        """
+        Read frames asynchronously as an async iterator.
+
+        Yields:
+            SegmentationFrame for each frame in the source.
+
+        Raises:
+            NotImplementedError: Subclass must implement for async support.
+        """
+        raise NotImplementedError("Subclass must implement read_frames_async")
+
+    def close(self) -> None:  # noqa: B027
+        """Close the source and release resources."""
+        pass
+
+    async def close_async(self) -> None:  # noqa: B027
+        """Close the source and release resources asynchronously."""
+        pass
+
+    def __enter__(self) -> "ISegmentationResultSource":
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Context manager exit."""
+        self.close()
+
+    async def __aenter__(self) -> "ISegmentationResultSource":
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        """Async context manager exit."""
+        await self.close_async()
+
+
+class SegmentationResultSource(ISegmentationResultSource):
+    """
+    High-level segmentation result source that reads from any IFrameSource.
+
+    Wraps IFrameSource to provide iterator-based access to SegmentationFrame objects.
+
+    Thread-safe: No (caller must synchronize)
+    """
+
+    def __init__(self, frame_source: IFrameSource) -> None:
+        """
+        Create a segmentation result source.
+
+        Args:
+            frame_source: Low-level frame source to read from.
+        """
+        self._frame_source = frame_source
+        self._closed = False
+
+    def read_frames(self) -> Iterator[SegmentationFrame]:
+        """
+        Read frames synchronously as an iterator.
+
+        Yields:
+            SegmentationFrame for each frame in the source.
+
+        Raises:
+            RuntimeError: If source is closed.
+        """
+        if self._closed:
+            raise RuntimeError("SegmentationResultSource is closed")
+
+        while True:
+            frame_data = self._frame_source.read_frame()
+            if frame_data is None or len(frame_data) == 0:
+                break
+
+            frame = SegmentationProtocol.read(frame_data)
+            yield frame
+
+    async def read_frames_async(self) -> AsyncIterator[SegmentationFrame]:
+        """
+        Read frames asynchronously as an async iterator.
+
+        Yields:
+            SegmentationFrame for each frame in the source.
+
+        Raises:
+            RuntimeError: If source is closed.
+        """
+        if self._closed:
+            raise RuntimeError("SegmentationResultSource is closed")
+
+        while True:
+            frame_data = await self._frame_source.read_frame_async()
+            if frame_data is None or len(frame_data) == 0:
+                break
+
+            frame = SegmentationProtocol.read(frame_data)
+            yield frame
+
+    def close(self) -> None:
+        """Close the source and release resources."""
+        if self._closed:
+            return
+        self._closed = True
+        self._frame_source.close()
+
+    async def close_async(self) -> None:
+        """Close the source and release resources asynchronously."""
+        if self._closed:
+            return
+        self._closed = True
+        await self._frame_source.close_async()
+
+
+class SegmentationProtocol:
+    """
+    Static helpers for encoding and decoding segmentation protocol data.
+
+    Pure protocol logic with no transport or rendering dependencies.
+    Matches C# SegmentationProtocol static class.
+
+    Frame Format:
+        [FrameId: 8 bytes, little-endian uint64]
+        [Width: varint]
+        [Height: varint]
+        [Instances...]
+
+    Instance Format:
+        [ClassId: 1 byte]
+        [InstanceId: 1 byte]
+        [PointCount: varint]
+        [Point0: X zigzag-varint, Y zigzag-varint]  (absolute)
+        [Point1+: deltaX zigzag-varint, deltaY zigzag-varint]
+    """
+
+    @staticmethod
+    def write(buffer: bytearray, frame: SegmentationFrame) -> int:
+        """
+        Write a complete segmentation frame to a buffer.
+
+        Args:
+            buffer: Pre-allocated buffer to write to.
+            frame: Frame to encode.
+
+        Returns:
+            Number of bytes written.
+        """
+        stream = io.BytesIO()
+
+        # Write header
+        stream.write(struct.pack("<Q", frame.frame_id))
+        _write_varint(stream, frame.width)
+        _write_varint(stream, frame.height)
+
+        # Write instances
+        for instance in frame.instances:
+            SegmentationProtocol._write_instance_core(stream, instance)
+
+        data = stream.getvalue()
+        buffer[: len(data)] = data
+        return len(data)
+
+    @staticmethod
+    def _write_instance_core(stream: BinaryIO, instance: SegmentationInstance) -> None:
+        """Write a single instance to the stream."""
+        stream.write(bytes([instance.class_id, instance.instance_id]))
+        point_count = len(instance.points)
+        _write_varint(stream, point_count)
+
+        if point_count == 0:
+            return
+
+        prev_x, prev_y = 0, 0
+        for i, point in enumerate(instance.points):
+            x, y = int(point[0]), int(point[1])
+            if i == 0:
+                # First point is absolute (but still zigzag encoded)
+                _write_varint(stream, _zigzag_encode(x))
+                _write_varint(stream, _zigzag_encode(y))
+            else:
+                # Subsequent points are deltas
+                _write_varint(stream, _zigzag_encode(x - prev_x))
+                _write_varint(stream, _zigzag_encode(y - prev_y))
+            prev_x, prev_y = x, y
+
+    @staticmethod
+    def write_header(buffer: bytearray, frame_id: int, width: int, height: int) -> int:
+        """
+        Write just the frame header (frameId, width, height).
+
+        Args:
+            buffer: Pre-allocated buffer to write to.
+            frame_id: Frame identifier.
+            width: Frame width.
+            height: Frame height.
+
+        Returns:
+            Number of bytes written.
+        """
+        stream = io.BytesIO()
+        stream.write(struct.pack("<Q", frame_id))
+        _write_varint(stream, width)
+        _write_varint(stream, height)
+        data = stream.getvalue()
+        buffer[: len(data)] = data
+        return len(data)
+
+    @staticmethod
+    def write_instance(
+        buffer: bytearray,
+        class_id: int,
+        instance_id: int,
+        points: Union[List[Point], PointArray],
+    ) -> int:
+        """
+        Write a single segmentation instance.
+
+        Points are delta-encoded for compression.
+
+        Args:
+            buffer: Pre-allocated buffer to write to.
+            class_id: Class identifier (0-255).
+            instance_id: Instance identifier (0-255).
+            points: Polygon points.
+
+        Returns:
+            Number of bytes written.
+        """
+        # Convert to numpy array if needed
+        if not isinstance(points, np.ndarray):
+            points_array = np.array(points, dtype=np.int32)
+        else:
+            points_array = points.astype(np.int32)
+
+        instance = SegmentationInstance(class_id, instance_id, points_array)
+
+        stream = io.BytesIO()
+        SegmentationProtocol._write_instance_core(stream, instance)
+        data = stream.getvalue()
+        buffer[: len(data)] = data
+        return len(data)
+
+    @staticmethod
+    def calculate_instance_size(point_count: int) -> int:
+        """
+        Calculate the maximum buffer size needed for an instance.
+
+        Args:
+            point_count: Number of polygon points.
+
+        Returns:
+            Maximum bytes needed.
+        """
+        # classId(1) + instanceId(1) + pointCount(varint, max 5) + points(max 10 bytes each)
+        return 1 + 1 + 5 + (point_count * 10)
+
+    @staticmethod
+    def read(data: bytes) -> SegmentationFrame:
+        """
+        Read a complete segmentation frame from a buffer.
+
+        Args:
+            data: Raw frame data.
+
+        Returns:
+            Decoded SegmentationFrame.
+        """
+        stream = io.BytesIO(data)
+
+        # Read header
+        frame_id_bytes = stream.read(8)
+        if len(frame_id_bytes) != 8:
+            raise EOFError("Failed to read FrameId")
+        frame_id = struct.unpack("<Q", frame_id_bytes)[0]
+        width = _read_varint(stream)
+        height = _read_varint(stream)
+
+        # Read all instances
+        instances: List[SegmentationInstance] = []
+        while True:
+            header = stream.read(2)
+            if len(header) == 0:
+                break
+            if len(header) != 2:
+                raise EOFError("Unexpected end of stream reading instance header")
+
+            class_id = header[0]
+            instance_id = header[1]
+            point_count = _read_varint(stream)
+
+            if point_count == 0:
+                points = np.empty((0, 2), dtype=np.int32)
+            else:
+                points = np.empty((point_count, 2), dtype=np.int32)
+                prev_x, prev_y = 0, 0
+
+                for i in range(point_count):
+                    x = _zigzag_decode(_read_varint(stream))
+                    y = _zigzag_decode(_read_varint(stream))
+                    if i > 0:
+                        x += prev_x
+                        y += prev_y
+                    points[i] = [x, y]
+                    prev_x, prev_y = x, y
+
+            instances.append(SegmentationInstance(class_id, instance_id, points))
+
+        return SegmentationFrame(frame_id, width, height, instances)
+
+    @staticmethod
+    def try_read(data: bytes) -> Optional[SegmentationFrame]:
+        """
+        Try to read a segmentation frame, returning None if the data is invalid.
+
+        Args:
+            data: Raw frame data.
+
+        Returns:
+            SegmentationFrame if successful, None otherwise.
+        """
+        try:
+            return SegmentationProtocol.read(data)
+        except Exception:
+            return None

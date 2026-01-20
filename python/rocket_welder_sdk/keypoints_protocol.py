@@ -36,23 +36,38 @@ Features:
     - Master/delta frame compression for temporal sequences
     - Varint encoding for efficient integer compression
     - ZigZag encoding for signed deltas
-    - Confidence stored as ushort (0-10000) internally, float (0.0-1.0) in API
+    - Confidence stored as ushort (0-65535) internally, float (0.0-1.0) in API
     - Explicit little-endian for cross-platform compatibility
     - Default master frame interval: every 300 frames
 """
+
+from __future__ import annotations
 
 import io
 import json
 import struct
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import BinaryIO, Callable, Dict, Iterator, List, Optional, Tuple
+from typing import (
+    AsyncIterator,
+    BinaryIO,
+    Callable,
+    Dict,
+    Iterator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 import numpy as np
 import numpy.typing as npt
 from typing_extensions import TypeAlias
 
-from .transport import IFrameSink, StreamFrameSink, StreamFrameSource
+from .confidence import Confidence
+from .delta_frame import DeltaFrame
+from .transport import IFrameSink, IFrameSource, StreamFrameSink, StreamFrameSource
 
 # Type aliases
 Point = Tuple[int, int]
@@ -62,9 +77,8 @@ PointArray: TypeAlias = npt.NDArray[np.int32]  # Shape: (N, 2)
 MASTER_FRAME_TYPE = 0x00
 DELTA_FRAME_TYPE = 0x01
 
-# Confidence encoding constants
-CONFIDENCE_SCALE = 10000.0
-CONFIDENCE_MAX = 10000
+# Confidence encoding constants - matches C# ushort (0-65535)
+CONFIDENCE_MAX = 65535
 
 
 def _write_varint(stream: BinaryIO, value: int) -> None:
@@ -111,29 +125,77 @@ def _zigzag_decode(value: int) -> int:
     return (value >> 1) ^ -(value & 1)
 
 
-def _confidence_to_ushort(confidence: float) -> int:
-    """Convert confidence float (0.0-1.0) to ushort (0-10000)."""
-    return min(max(int(confidence * CONFIDENCE_SCALE), 0), CONFIDENCE_MAX)
+def _confidence_to_ushort(confidence: Union[float, Confidence]) -> int:
+    """Convert confidence float (0.0-1.0) or Confidence to ushort (0-65535)."""
+    if isinstance(confidence, Confidence):
+        return confidence.raw
+    return min(max(int(confidence * CONFIDENCE_MAX), 0), CONFIDENCE_MAX)
 
 
 def _confidence_from_ushort(confidence_ushort: int) -> float:
-    """Convert confidence ushort (0-10000) to float (0.0-1.0)."""
-    return confidence_ushort / CONFIDENCE_SCALE
+    """Convert confidence ushort (0-65535) to float (0.0-1.0)."""
+    return confidence_ushort / CONFIDENCE_MAX
+
+
+def _confidence_to_obj(confidence_ushort: int) -> Confidence:
+    """Convert confidence ushort (0-65535) to Confidence object."""
+    return Confidence(raw=confidence_ushort)
 
 
 @dataclass(frozen=True)
 class KeyPoint:
-    """A single keypoint with position and confidence."""
+    """
+    A single keypoint with position and confidence.
 
-    keypoint_id: int
-    x: int
-    y: int
-    confidence: float  # 0.0 to 1.0
+    Matches C# readonly record struct KeyPoint(int Id, Point Position, Confidence Confidence).
 
-    def __post_init__(self) -> None:
-        """Validate keypoint data."""
-        if not 0.0 <= self.confidence <= 1.0:
-            raise ValueError(f"Confidence must be in [0.0, 1.0], got {self.confidence}")
+    Attributes:
+        id: KeyPoint identifier (e.g., 0=nose, 1=left_eye, etc.)
+        position: Position of the keypoint in pixel coordinates (x, y).
+        confidence: Confidence score (uses full ushort precision 0-65535).
+    """
+
+    id: int
+    position: Point
+    confidence: Confidence
+
+    @property
+    def x(self) -> int:
+        """X coordinate of the keypoint position."""
+        return self.position[0]
+
+    @property
+    def y(self) -> int:
+        """Y coordinate of the keypoint position."""
+        return self.position[1]
+
+    @classmethod
+    def create(cls, id: int, x: int, y: int, confidence: Union[float, int, Confidence]) -> KeyPoint:
+        """
+        Create a keypoint with explicit x, y coordinates.
+
+        Args:
+            id: KeyPoint identifier
+            x: X coordinate
+            y: Y coordinate
+            confidence: Confidence (float 0.0-1.0, raw ushort 0-65535, or Confidence)
+
+        Returns:
+            KeyPoint instance
+        """
+        if isinstance(confidence, Confidence):
+            conf = confidence
+        elif isinstance(confidence, int):
+            conf = Confidence(raw=confidence)
+        else:
+            conf = Confidence.from_float(confidence)
+        return cls(id=id, position=(x, y), confidence=conf)
+
+    # Legacy property for backward compatibility
+    @property
+    def keypoint_id(self) -> int:
+        """Legacy alias for id (backward compatibility)."""
+        return self.id
 
 
 @dataclass(frozen=True)
@@ -143,6 +205,195 @@ class KeyPointsDefinition:
     version: str
     compute_module_name: str
     points: Dict[str, int]  # name -> keypoint_id
+
+
+@dataclass(frozen=True)
+class KeyPointsFrame:
+    """
+    A decoded keypoints frame with absolute keypoint values.
+
+    Matches C# readonly record struct KeyPointsFrame(ulong FrameId, ReadOnlyMemory<KeyPoint> KeyPoints).
+
+    Used by Document classes after delta decoding is complete.
+    For streaming with delta info, use DeltaFrame[KeyPoint] instead.
+
+    Attributes:
+        frame_id: The frame identifier.
+        keypoints: The keypoints in this frame.
+    """
+
+    frame_id: int
+    keypoints: Sequence[KeyPoint]
+
+    @property
+    def count(self) -> int:
+        """Number of keypoints in this frame."""
+        return len(self.keypoints)
+
+    def __len__(self) -> int:
+        """Return the number of keypoints."""
+        return len(self.keypoints)
+
+    def __iter__(self) -> Iterator[KeyPoint]:
+        """Iterate over keypoints."""
+        return iter(self.keypoints)
+
+    def __getitem__(self, index: int) -> KeyPoint:
+        """Get keypoint by index."""
+        return self.keypoints[index]
+
+    def find_by_id(self, keypoint_id: int) -> Optional[KeyPoint]:
+        """Find keypoint by ID, or None if not found."""
+        for kp in self.keypoints:
+            if kp.id == keypoint_id:
+                return kp
+        return None
+
+
+class IKeyPointsSource(ABC):
+    """
+    Interface for streaming keypoints source.
+
+    Matches C# IKeyPointsSource interface.
+    Returns DeltaFrame<KeyPoint> which includes IsDelta for streaming context.
+    """
+
+    @abstractmethod
+    def read_frames(self) -> Iterator[DeltaFrame[KeyPoint]]:
+        """
+        Stream frames synchronously.
+
+        Yields:
+            DeltaFrame[KeyPoint] with decoded absolute values and IsDelta metadata.
+        """
+        pass
+
+    def read_frames_async(self) -> AsyncIterator[DeltaFrame[KeyPoint]]:
+        """
+        Stream frames as they arrive from the transport.
+
+        Supports cancellation and backpressure.
+        Returns DeltaFrame with IsDelta indicating master vs delta frame.
+
+        Yields:
+            DeltaFrame[KeyPoint] with decoded absolute values and IsDelta metadata.
+        """
+        raise NotImplementedError("Subclass must implement read_frames_async")
+
+    def close(self) -> None:  # noqa: B027
+        """Close the source and release resources."""
+        pass
+
+    async def close_async(self) -> None:  # noqa: B027
+        """Close the source asynchronously."""
+        pass
+
+    def __enter__(self) -> IKeyPointsSource:
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        """Context manager exit."""
+        self.close()
+
+    async def __aenter__(self) -> IKeyPointsSource:
+        """Async context manager entry."""
+        return self
+
+    async def __aexit__(self, *args: object) -> None:
+        """Async context manager exit."""
+        await self.close_async()
+
+
+class KeyPointsSource(IKeyPointsSource):
+    """
+    Streaming reader for keypoints.
+
+    Reads frames from IFrameSource and yields them via Iterator/AsyncIterator.
+    Handles master/delta frame decoding automatically using KeyPointsProtocol.
+    Returns DeltaFrame[KeyPoint] with decoded absolute values and IsDelta metadata.
+
+    Matches C# KeyPointsSource class.
+    """
+
+    def __init__(self, frame_source: IFrameSource) -> None:
+        """
+        Create a KeyPointsSource from a frame source.
+
+        Args:
+            frame_source: The underlying frame source (TCP, WebSocket, Stream, etc.)
+        """
+        if frame_source is None:
+            raise ValueError("frame_source cannot be None")
+        self._frame_source = frame_source
+        self._previous_frame: Optional[Dict[int, KeyPoint]] = None
+        self._closed = False
+
+    def read_frames(self) -> Iterator[DeltaFrame[KeyPoint]]:
+        """Stream frames synchronously."""
+        while not self._closed:
+            frame_data = self._frame_source.read_frame()
+            if frame_data is None or len(frame_data) == 0:
+                break
+            frame = self._parse_frame(frame_data)
+            yield frame
+
+    async def read_frames_async(self) -> AsyncIterator[DeltaFrame[KeyPoint]]:
+        """Stream frames as they arrive from the transport asynchronously."""
+        while not self._closed:
+            frame_data = await self._frame_source.read_frame_async()
+            if frame_data is None or len(frame_data) == 0:
+                break
+            frame = self._parse_frame(frame_data)
+            yield frame
+
+    def _parse_frame(self, data: bytes) -> DeltaFrame[KeyPoint]:
+        """Parse a frame from binary data."""
+        result = KeyPointsProtocol.read_with_previous_state(data, self._previous_frame)
+
+        # Update previous frame state for next delta decoding
+        self._previous_frame = {}
+        for kp in result.items:
+            self._previous_frame[kp.id] = kp
+
+        return result
+
+    def close(self) -> None:
+        """Close the source and release resources."""
+        if self._closed:
+            return
+        self._closed = True
+        self._frame_source.close()
+
+    async def close_async(self) -> None:
+        """Close the source asynchronously."""
+        if self._closed:
+            return
+        self._closed = True
+        await self._frame_source.close_async()
+
+
+class IKeyPointsSink(ABC):
+    """
+    Interface for creating keypoints writers.
+
+    Matches C# IKeyPointsSink interface.
+    """
+
+    @abstractmethod
+    def create_writer(self, frame_id: int) -> IKeyPointsWriter:
+        """
+        Create a writer for the current frame.
+
+        Sink decides whether to write master or delta frame.
+
+        Args:
+            frame_id: Unique frame identifier
+
+        Returns:
+            KeyPoints writer for this frame
+        """
+        pass
 
 
 class IKeyPointsWriter(ABC):
@@ -163,7 +414,7 @@ class IKeyPointsWriter(ABC):
         """Flush and close the writer."""
         pass
 
-    def __enter__(self) -> "IKeyPointsWriter":
+    def __enter__(self) -> IKeyPointsWriter:
         """Context manager entry."""
         return self
 
@@ -434,40 +685,6 @@ class KeyPointsSeries:
         yield from self.get_keypoint_trajectory(keypoint_id)
 
 
-class IKeyPointsSink(ABC):
-    """Interface for creating keypoints writers and reading keypoints data."""
-
-    @abstractmethod
-    def create_writer(self, frame_id: int) -> IKeyPointsWriter:
-        """
-        Create a writer for the current frame.
-
-        Sink decides whether to write master or delta frame.
-
-        Args:
-            frame_id: Unique frame identifier
-
-        Returns:
-            KeyPoints writer for this frame
-        """
-        pass
-
-    @staticmethod
-    @abstractmethod
-    def read(json_definition: str, blob_stream: BinaryIO) -> KeyPointsSeries:
-        """
-        Read entire keypoints series into memory for efficient querying.
-
-        Args:
-            json_definition: JSON definition string mapping keypoint names to IDs
-            blob_stream: Binary stream containing keypoints data
-
-        Returns:
-            KeyPointsSeries for in-memory queries
-        """
-        pass
-
-
 class KeyPointsSink(IKeyPointsSink):
     """
     Transport-agnostic keypoints sink with master/delta frame compression.
@@ -640,3 +857,251 @@ class KeyPointsSink(IKeyPointsSink):
             index[frame_id] = frame_keypoints
 
         return KeyPointsSeries(version, compute_module_name, points, index)
+
+
+class KeyPointsProtocol:
+    """
+    Static helpers for encoding and decoding keypoints protocol data.
+
+    Pure protocol logic with no transport or rendering dependencies.
+    Matches C# KeyPointsProtocol static class from RocketWelder.SDK.Protocols.
+
+    Master Frame Format:
+        [FrameType: 1 byte (0x00=Master)]
+        [FrameId: 8 bytes, little-endian uint64]
+        [KeyPointCount: varint]
+        [KeyPoints: Id(varint), X(int32 LE), Y(int32 LE), Confidence(uint16 LE)]
+
+    Delta Frame Format:
+        [FrameType: 1 byte (0x01=Delta)]
+        [FrameId: 8 bytes, little-endian uint64]
+        [KeyPointCount: varint]
+        [KeyPoints: Id(varint), DeltaX(zigzag), DeltaY(zigzag), DeltaConfidence(zigzag)]
+    """
+
+    @staticmethod
+    def write_master_frame(frame_id: int, keypoints: Sequence[KeyPoint]) -> bytes:
+        """
+        Write a master frame (absolute keypoint positions).
+
+        Args:
+            frame_id: Frame identifier
+            keypoints: List of keypoints with absolute positions
+
+        Returns:
+            Encoded frame bytes
+        """
+        buffer = io.BytesIO()
+        buffer.write(bytes([MASTER_FRAME_TYPE]))
+        buffer.write(struct.pack("<Q", frame_id))
+        _write_varint(buffer, len(keypoints))
+
+        for kp in keypoints:
+            _write_varint(buffer, kp.id)
+            buffer.write(struct.pack("<i", kp.x))
+            buffer.write(struct.pack("<i", kp.y))
+            buffer.write(struct.pack("<H", kp.confidence.raw))
+
+        return buffer.getvalue()
+
+    @staticmethod
+    def write_delta_frame(
+        frame_id: int,
+        current: Sequence[KeyPoint],
+        previous_lookup: Dict[int, KeyPoint],
+    ) -> bytes:
+        """
+        Write a delta frame with variable keypoint counts.
+
+        KeyPoints are matched by ID using the previous_lookup dictionary.
+        New keypoints (not in previous) are written as absolute values (zigzag encoded).
+
+        Args:
+            frame_id: Frame identifier
+            current: Current frame keypoints
+            previous_lookup: Previous frame keypoints dictionary for delta calculation
+
+        Returns:
+            Encoded frame bytes
+        """
+        buffer = io.BytesIO()
+        buffer.write(bytes([DELTA_FRAME_TYPE]))
+        buffer.write(struct.pack("<Q", frame_id))
+        _write_varint(buffer, len(current))
+
+        for curr in current:
+            _write_varint(buffer, curr.id)
+
+            if curr.id in previous_lookup:
+                prev = previous_lookup[curr.id]
+                delta_x = curr.x - prev.x
+                delta_y = curr.y - prev.y
+                delta_conf = curr.confidence.raw - prev.confidence.raw
+            else:
+                # New keypoint - write absolute value as zigzag (as if previous was 0)
+                delta_x = curr.x
+                delta_y = curr.y
+                delta_conf = curr.confidence.raw
+
+            _write_varint(buffer, _zigzag_encode(delta_x))
+            _write_varint(buffer, _zigzag_encode(delta_y))
+            _write_varint(buffer, _zigzag_encode(delta_conf))
+
+        return buffer.getvalue()
+
+    @staticmethod
+    def read(data: bytes) -> DeltaFrame[KeyPoint]:
+        """
+        Read a keypoints frame (master frame only, no previous state needed).
+
+        For delta frames, use read_with_previous_state.
+
+        Args:
+            data: Binary frame data
+
+        Returns:
+            DeltaFrame[KeyPoint] with decoded keypoints
+
+        Raises:
+            InvalidOperationError: If called on a delta frame
+        """
+        stream = io.BytesIO(data)
+
+        frame_type = stream.read(1)[0]
+        is_delta = frame_type == DELTA_FRAME_TYPE
+        frame_id = struct.unpack("<Q", stream.read(8))[0]
+        count = _read_varint(stream)
+
+        if is_delta:
+            raise RuntimeError(
+                "Cannot read delta frame without previous state. "
+                "Use read_with_previous_state instead."
+            )
+
+        keypoints: List[KeyPoint] = []
+        for _ in range(count):
+            kp_id = _read_varint(stream)
+            x = struct.unpack("<i", stream.read(4))[0]
+            y = struct.unpack("<i", stream.read(4))[0]
+            conf_raw = struct.unpack("<H", stream.read(2))[0]
+            keypoints.append(
+                KeyPoint(id=kp_id, position=(x, y), confidence=Confidence(raw=conf_raw))
+            )
+
+        return DeltaFrame[KeyPoint](frame_id=frame_id, is_delta=False, items=keypoints)
+
+    @staticmethod
+    def read_with_previous_state(
+        data: bytes,
+        previous_lookup: Optional[Dict[int, KeyPoint]],
+    ) -> DeltaFrame[KeyPoint]:
+        """
+        Read a keypoints frame with previous state for delta decoding.
+
+        More efficient for streaming scenarios where previous frame is already a dictionary.
+
+        Args:
+            data: Binary frame data
+            previous_lookup: Previous frame keypoints dictionary for delta decoding.
+                Pass None for master frames.
+
+        Returns:
+            DeltaFrame[KeyPoint] with decoded absolute values and IsDelta metadata
+        """
+        stream = io.BytesIO(data)
+
+        frame_type = stream.read(1)[0]
+        is_delta = frame_type == DELTA_FRAME_TYPE
+        frame_id = struct.unpack("<Q", stream.read(8))[0]
+        count = _read_varint(stream)
+
+        keypoints: List[KeyPoint] = []
+
+        for _ in range(count):
+            kp_id = _read_varint(stream)
+
+            if not is_delta:
+                x = struct.unpack("<i", stream.read(4))[0]
+                y = struct.unpack("<i", stream.read(4))[0]
+                conf_raw = struct.unpack("<H", stream.read(2))[0]
+                keypoints.append(
+                    KeyPoint(id=kp_id, position=(x, y), confidence=Confidence(raw=conf_raw))
+                )
+            else:
+                delta_x = _zigzag_decode(_read_varint(stream))
+                delta_y = _zigzag_decode(_read_varint(stream))
+                delta_conf = _zigzag_decode(_read_varint(stream))
+
+                if previous_lookup is not None and kp_id in previous_lookup:
+                    prev = previous_lookup[kp_id]
+                    x = prev.x + delta_x
+                    y = prev.y + delta_y
+                    conf_raw = max(0, min(CONFIDENCE_MAX, prev.confidence.raw + delta_conf))
+                else:
+                    # New keypoint - delta values are actually absolute
+                    x = delta_x
+                    y = delta_y
+                    conf_raw = max(0, min(CONFIDENCE_MAX, delta_conf))
+
+                keypoints.append(
+                    KeyPoint(id=kp_id, position=(x, y), confidence=Confidence(raw=conf_raw))
+                )
+
+        return DeltaFrame[KeyPoint](frame_id=frame_id, is_delta=is_delta, items=keypoints)
+
+    @staticmethod
+    def is_master_frame(data: bytes) -> bool:
+        """
+        Try to read the frame header to determine if it's a master or delta frame.
+
+        Args:
+            data: Binary frame data
+
+        Returns:
+            True if master frame, False if delta frame
+        """
+        if len(data) < 1:
+            return False
+        return data[0] == MASTER_FRAME_TYPE
+
+    @staticmethod
+    def should_write_master_frame(frame_id: int, master_interval: int) -> bool:
+        """
+        Determine if a master frame should be written based on frame interval.
+
+        Args:
+            frame_id: Current frame ID
+            master_interval: Interval between master frames
+
+        Returns:
+            True if master frame should be written
+        """
+        return frame_id == 0 or (frame_id % master_interval) == 0
+
+    @staticmethod
+    def calculate_master_frame_size(keypoint_count: int) -> int:
+        """
+        Calculate the maximum buffer size needed for a master frame.
+
+        Args:
+            keypoint_count: Number of keypoints
+
+        Returns:
+            Maximum buffer size in bytes
+        """
+        # type(1) + frameId(8) + count(varint, max 5) + keypoints(max 15 bytes each)
+        return 1 + 8 + 5 + (keypoint_count * 15)
+
+    @staticmethod
+    def calculate_delta_frame_size(keypoint_count: int) -> int:
+        """
+        Calculate the maximum buffer size needed for a delta frame.
+
+        Args:
+            keypoint_count: Number of keypoints
+
+        Returns:
+            Maximum buffer size in bytes
+        """
+        # type(1) + frameId(8) + count(varint, max 5) + keypoints(max 20 bytes each: id + 3 zigzag varints)
+        return 1 + 8 + 5 + (keypoint_count * 20)

@@ -24,6 +24,7 @@ from rocket_welder_sdk.transport import UnixSocketFrameSink
 @dataclass
 class DetectedBall:
     """A detected ball with position and contour."""
+
     center_x: int
     center_y: int
     radius: int
@@ -110,13 +111,15 @@ class BallDetector:
                 # Calculate confidence based on circle detection quality
                 confidence = min(0.95, 0.7 + (radius / 100) * 0.25)
 
-                balls.append(DetectedBall(
-                    center_x=center_x,
-                    center_y=center_y,
-                    radius=radius,
-                    contour=contour,
-                    confidence=confidence,
-                ))
+                balls.append(
+                    DetectedBall(
+                        center_x=center_x,
+                        center_y=center_y,
+                        radius=radius,
+                        contour=contour,
+                        confidence=confidence,
+                    )
+                )
 
         return balls
 
@@ -125,10 +128,12 @@ class BallDetector:
     ) -> npt.NDArray[np.int32]:
         """Create a circular contour as polygon points."""
         angles = np.linspace(0, 2 * np.pi, num_points, endpoint=False)
-        points = np.column_stack([
-            cx + radius * np.cos(angles),
-            cy + radius * np.sin(angles),
-        ]).astype(np.int32)
+        points = np.column_stack(
+            [
+                cx + radius * np.cos(angles),
+                cy + radius * np.sin(angles),
+            ]
+        ).astype(np.int32)
         return points.reshape((-1, 1, 2))
 
     def write_keypoints(self, frame_id: int, balls: List[DetectedBall]) -> None:
@@ -179,9 +184,7 @@ class BallDetector:
 
         writer.flush()
 
-    def process_frame(
-        self, input_frame: npt.NDArray[Any], output_frame: npt.NDArray[Any]
-    ) -> None:
+    def process_frame(self, input_frame: npt.NDArray[Any], output_frame: npt.NDArray[Any]) -> None:
         """Process a frame: detect balls, write results, draw visualization."""
         start_time = time.perf_counter()
         self.frame_count += 1

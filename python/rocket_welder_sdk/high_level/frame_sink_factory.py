@@ -51,7 +51,7 @@ class FrameSinkFactory:
 
         Args:
             protocol: The transport protocol (from ConnectionString.protocol), or None
-            address: The address (file path, socket path, or NNG address)
+            address: The address (file path or socket path)
             logger_instance: Optional logger for diagnostics
 
         Returns:
@@ -64,7 +64,7 @@ class FrameSinkFactory:
             cs = SegmentationConnectionString.parse("socket:///tmp/seg.sock")
             sink = FrameSinkFactory.create(cs.protocol, cs.address)
         """
-        from rocket_welder_sdk.transport import NngFrameSink, NullFrameSink
+        from rocket_welder_sdk.transport import NullFrameSink
         from rocket_welder_sdk.transport.stream_transport import StreamFrameSink
         from rocket_welder_sdk.transport.unix_socket_transport import UnixSocketFrameSink
 
@@ -86,19 +86,6 @@ class FrameSinkFactory:
         if protocol.is_socket:
             log.info("Creating Unix socket frame sink (server/bind) at: %s", address)
             return UnixSocketFrameSink.bind(address)
-
-        if protocol.is_nng:
-            log.info("Creating NNG frame sink (%s) at: %s", protocol.schema, address)
-
-            if protocol.is_pub:
-                return NngFrameSink.create_publisher(address)
-            if protocol.is_push:
-                return NngFrameSink.create_pusher(address)
-
-            raise ValueError(
-                f"NNG protocol '{protocol.schema}' is not supported for sinks "
-                "(only pub and push are supported)"
-            )
 
         raise ValueError(f"Transport protocol '{protocol.schema}' is not supported for frame sinks")
 

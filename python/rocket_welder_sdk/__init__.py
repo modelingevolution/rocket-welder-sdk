@@ -7,9 +7,13 @@ High-performance video streaming using shared memory (ZeroBuffer) for zero-copy 
 import logging
 import os
 
+from .binary_frame_reader import BinaryFrameReader
+from .binary_frame_writer import BinaryFrameWriter
 from .bytes_size import BytesSize
+from .confidence import Confidence
 from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
+from .delta_frame import DeltaFrame
 from .frame_metadata import FRAME_METADATA_SIZE, FrameMetadata, GstVideoFormat
 from .gst_metadata import GstCaps, GstMetadata
 from .keypoints_protocol import (
@@ -23,27 +27,21 @@ from .periodic_timer import PeriodicTimer, PeriodicTimerSync
 from .rocket_welder_client import RocketWelderClient
 from .segmentation_result import (
     ISegmentationResultSink,
+    ISegmentationResultSource,
     ISegmentationResultWriter,
+    SegmentationFrame,
+    SegmentationProtocol,
     SegmentationResultSink,
+    SegmentationResultSource,
     SegmentationResultWriter,
 )
 from .session_id import (
-    # Explicit URL functions (PREFERRED - set by rocket-welder2)
+    # Explicit URL environment variable names (set by rocket-welder2)
     ACTIONS_SINK_URL_ENV,
     KEYPOINTS_SINK_URL_ENV,
     SEGMENTATION_SINK_URL_ENV,
-    # SessionId-derived URL functions (fallback for backwards compatibility)
-    get_actions_url,
-    get_actions_url_from_env,
-    get_configured_nng_urls,
-    get_keypoints_url,
-    get_keypoints_url_from_env,
-    get_nng_urls,
-    get_nng_urls_from_env,
-    get_segmentation_url,
-    get_segmentation_url_from_env,
+    # SessionId parsing
     get_session_id_from_env,
-    has_explicit_nng_urls,
     parse_session_id,
 )
 
@@ -76,10 +74,14 @@ __all__ = [
     "FRAME_METADATA_SIZE",
     "KEYPOINTS_SINK_URL_ENV",
     "SEGMENTATION_SINK_URL_ENV",
+    "BinaryFrameReader",
+    "BinaryFrameWriter",
     "BytesSize",
     "Client",
+    "Confidence",
     "ConnectionMode",
     "ConnectionString",
+    "DeltaFrame",
     "DuplexShmController",
     "FrameMetadata",
     "GstCaps",
@@ -89,6 +91,7 @@ __all__ = [
     "IKeyPointsSink",
     "IKeyPointsWriter",
     "ISegmentationResultSink",
+    "ISegmentationResultSource",
     "ISegmentationResultWriter",
     "KeyPointsSink",
     "KeyPointsWriter",
@@ -98,18 +101,11 @@ __all__ = [
     "PeriodicTimerSync",
     "Protocol",
     "RocketWelderClient",
+    "SegmentationFrame",
+    "SegmentationProtocol",
     "SegmentationResultSink",
+    "SegmentationResultSource",
     "SegmentationResultWriter",
-    "get_actions_url",
-    "get_actions_url_from_env",
-    "get_configured_nng_urls",
-    "get_keypoints_url",
-    "get_keypoints_url_from_env",
-    "get_nng_urls",
-    "get_nng_urls_from_env",
-    "get_segmentation_url",
-    "get_segmentation_url_from_env",
     "get_session_id_from_env",
-    "has_explicit_nng_urls",
     "parse_session_id",
 ]

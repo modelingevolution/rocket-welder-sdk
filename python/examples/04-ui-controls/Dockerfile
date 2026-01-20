@@ -38,7 +38,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy and install the SDK
 COPY rocket_welder_sdk/ /app/rocket_welder_sdk/
 COPY setup.py pyproject.toml MANIFEST.in README.md ./
-RUN pip install --no-cache-dir ".[nng]"
+RUN pip install --no-cache-dir .
 
 # Copy the example application
 COPY examples/04-ui-controls/main.py .
