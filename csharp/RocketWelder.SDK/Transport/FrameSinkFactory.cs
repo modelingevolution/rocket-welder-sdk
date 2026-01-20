@@ -15,7 +15,7 @@ public static class FrameSinkFactory
     /// Returns NullFrameSink if protocol is default (no URL specified).
     /// </summary>
     /// <param name="protocol">The transport protocol</param>
-    /// <param name="address">The address (file path, socket path, or NNG address)</param>
+    /// <param name="address">The address (file path or socket path)</param>
     /// <param name="logger">Optional logger for diagnostics</param>
     /// <returns>An IFrameSink connected to the specified address, or NullFrameSink if protocol is default</returns>
     /// <exception cref="NotSupportedException">If protocol is not supported for sinks</exception>
@@ -39,19 +39,6 @@ public static class FrameSinkFactory
         {
             logger?.LogInformation("Creating Unix socket server at: {Path}", address);
             return UnixSocketFrameSink.Bind(address);
-        }
-
-        if (protocol.IsNng)
-        {
-            logger?.LogInformation("Creating NNG frame sink ({Protocol}) at: {Address}", protocol.Schema, address);
-
-            if (protocol.IsPub)
-                return NngFrameSink.CreatePublisher(address);
-            if (protocol.IsPush)
-                return NngFrameSink.CreatePusher(address);
-
-            throw new NotSupportedException(
-                $"NNG protocol '{protocol.Schema}' is not supported for sinks (only pub and push are supported)");
         }
 
         throw new NotSupportedException(

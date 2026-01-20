@@ -27,13 +27,13 @@ namespace RocketWelder.SDK.Transport
 
         /// <summary>
         /// Flushes any buffered data to the transport synchronously.
-        /// For message-based transports (NNG), this may be a no-op.
+        /// For message-based transports, this may be a no-op.
         /// </summary>
         void Flush();
 
         /// <summary>
         /// Flushes any buffered data to the transport asynchronously.
-        /// For message-based transports (NNG), this may be a no-op.
+        /// For message-based transports, this may be a no-op.
         /// </summary>
         Task FlushAsync();
     }

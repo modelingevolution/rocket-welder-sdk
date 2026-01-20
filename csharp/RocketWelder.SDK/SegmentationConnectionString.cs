@@ -12,10 +12,7 @@ namespace RocketWelder.SDK;
 /// Supported protocols:
 /// - file:///path/to/file.bin - File output (absolute path)
 /// - file://relative/path.bin - File output (relative path)
-/// - socket:///tmp/socket.sock - Unix domain socket
-/// - nng+push+ipc://tmp/segmentation - NNG Push over IPC
-/// - nng+push+tcp://host:port - NNG Push over TCP
-/// - nng+pub+ipc://tmp/segmentation - NNG Pub over IPC
+/// - socket:///tmp/socket.sock - Unix domain socket (recommended for IPC)
 /// </summary>
 public readonly record struct SegmentationConnectionString : IParsable<SegmentationConnectionString>
 {
@@ -30,7 +27,7 @@ public readonly record struct SegmentationConnectionString : IParsable<Segmentat
     public TransportProtocol Protocol { get; }
 
     /// <summary>
-    /// The address (file path, socket path, or NNG address).
+    /// The address (file path or socket path).
     /// </summary>
     public string Address { get; }
 
@@ -54,7 +51,7 @@ public readonly record struct SegmentationConnectionString : IParsable<Segmentat
     /// <summary>
     /// Default connection string for Segmentation.
     /// </summary>
-    public static SegmentationConnectionString Default => Parse("nng+push+ipc://tmp/rocket-welder-segmentation", null);
+    public static SegmentationConnectionString Default => Parse("socket:///tmp/rocket-welder-segmentation.sock", null);
 
     /// <summary>
     /// Creates a connection string from environment variable or uses default.
@@ -105,11 +102,6 @@ public readonly record struct SegmentationConnectionString : IParsable<Segmentat
         {
             // socket:///tmp/sock → /tmp/sock
             address = pathPart.StartsWith("/") ? pathPart : "/" + pathPart;
-        }
-        else if (protocol.IsNng)
-        {
-            // NNG protocols need proper address format
-            address = protocol.CreateNngAddress(pathPart);
         }
         else
         {

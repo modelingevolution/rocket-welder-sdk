@@ -64,7 +64,7 @@ namespace RocketWelder.SDK
 
         /// <summary>
         /// Creates a writer that writes via IFrameSink with proper frame boundaries.
-        /// Use this for transport-agnostic streaming (TCP, WebSocket, NNG, or file with framing).
+        /// Use this for transport-agnostic streaming (TCP, WebSocket, Unix socket, or file with framing).
         /// </summary>
         public SegmentationResultWriter(ulong frameId, uint width, uint height, IFrameSink frameSink)
         {
@@ -281,7 +281,7 @@ namespace RocketWelder.SDK
 
     /// <summary>
     /// Streaming reader for segmentation results via IAsyncEnumerable.
-    /// Designed for real-time streaming over TCP/WebSocket/NNG.
+    /// Designed for real-time streaming over TCP/WebSocket/Unix socket.
     /// </summary>
     public interface ISegmentationResultSource : IDisposable, IAsyncDisposable
     {
@@ -619,18 +619,18 @@ namespace RocketWelder.SDK
     }
 
     /// <summary>
-    /// Configuration keys for NNG Pub/Sub URLs used by RocketWelderClient.
+    /// Configuration keys for sink URLs used by RocketWelderClient.
     /// These URLs are used by rocket-welder2 to connect to the Python AI container's output channels.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>NNG IPC URL Format:</b> <c>ipc:///tmp/{container-name}-{channel}.ipc</c>
+    /// <b>Unix Socket URL Format:</b> <c>socket:///tmp/{container-name}-{channel}.sock</c>
     /// </para>
     /// <para>
     /// <b>Example URLs:</b>
     /// <list type="bullet">
-    ///   <item><description>Segmentation: <c>ipc:///tmp/ai-container-segmentation.ipc</c></description></item>
-    ///   <item><description>KeyPoints: <c>ipc:///tmp/ai-container-keypoints.ipc</c></description></item>
+    ///   <item><description>Segmentation: <c>socket:///tmp/ai-container-segmentation.sock</c></description></item>
+    ///   <item><description>KeyPoints: <c>socket:///tmp/ai-container-keypoints.sock</c></description></item>
     /// </list>
     /// </para>
     /// <para>
@@ -639,8 +639,8 @@ namespace RocketWelder.SDK
     /// {
     ///   "RocketWelder": {
     ///     "ConnectionString": "shm://video-buffer?mode=duplex",
-    ///     "SegmentationSinkUrl": "ipc:///tmp/ai-segmentation.ipc",
-    ///     "KeyPointsSinkUrl": "ipc:///tmp/ai-keypoints.ipc"
+    ///     "SegmentationSinkUrl": "socket:///tmp/ai-segmentation.sock",
+    ///     "KeyPointsSinkUrl": "socket:///tmp/ai-keypoints.sock"
     ///   }
     /// }
     /// </code>
@@ -656,14 +656,14 @@ namespace RocketWelder.SDK
     public static class RocketWelderConfigKeys
     {
         /// <summary>
-        /// Configuration key for the segmentation results NNG Pub URL.
+        /// Configuration key for the segmentation results sink URL.
         /// The Python AI container publishes segmentation results to this URL.
         /// rocket-welder2 subscribes to receive the results.
         /// </summary>
         public const string SegmentationSinkUrl = "RocketWelder:SegmentationSinkUrl";
 
         /// <summary>
-        /// Configuration key for the keypoints NNG Pub URL.
+        /// Configuration key for the keypoints sink URL.
         /// The Python AI container publishes keypoints to this URL.
         /// rocket-welder2 subscribes to receive the results.
         /// </summary>
@@ -698,9 +698,9 @@ namespace RocketWelder.SDK
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <b>NNG Pub/Sub Integration:</b>
+    /// <b>Streaming AI Results:</b>
     /// When using the Start overload with ISegmentationResultWriter and IKeyPointsWriter,
-    /// the client creates NNG Publisher sinks for streaming AI results.
+    /// the client creates sinks for streaming AI results via Unix domain sockets.
     /// </para>
     /// <para>
     /// <b>Configuration:</b> Set sink URLs via IConfiguration or environment variables:
@@ -804,7 +804,7 @@ namespace RocketWelder.SDK
         /// <summary>
         /// Logs the sink URL configuration at startup for debugging.
         /// </summary>
-        private void LogNngConfiguration()
+        private void LogSinkConfiguration()
         {
             var segUrl = GetSegmentationSinkUrl();
             var kpUrl = GetKeyPointsSinkUrl();
@@ -958,7 +958,7 @@ namespace RocketWelder.SDK
         /// <summary>
         /// Creates a client from IConfiguration with logger factory.
         /// Looks for "RocketWelder:ConnectionString" in configuration.
-        /// Also reads NNG sink URLs from configuration for AI output streaming.
+        /// Also reads sink URLs from configuration for AI output streaming.
         /// </summary>
         public static RocketWelderClient From(IConfiguration configuration, ILoggerFactory? loggerFactory)
         {
@@ -1100,12 +1100,12 @@ namespace RocketWelder.SDK
 
         /// <summary>
         /// Starts receiving frames with segmentation and keypoints output support.
-        /// Creates NNG Publishers for streaming AI results to rocket-welder2.
+        /// Creates sinks for streaming AI results to rocket-welder2.
         /// </summary>
         /// <remarks>
         /// <para>
         /// This overload enables AI models to write segmentation results and keypoints
-        /// that are automatically published via NNG Pub/Sub to rocket-welder2 for storage
+        /// that are automatically published via Unix domain sockets to rocket-welder2 for storage
         /// and comparison.
         /// </para>
         /// <para>
@@ -1149,7 +1149,7 @@ namespace RocketWelder.SDK
                 _logger.LogInformation("Starting RocketWelder client with AI output support: {Connection}", Connection);
 
                 // Log NNG sink URL configuration at startup (for debugging)
-                LogNngConfiguration();
+                LogSinkConfiguration();
 
                 // Initialize sinks (will throw if not configured)
                 var segSink = GetOrCreateSegmentationSink();
@@ -1249,7 +1249,7 @@ namespace RocketWelder.SDK
                 _logger.LogInformation("Starting RocketWelder client with AI output and graphics support (duplex): {Connection}", Connection);
 
                 // Log sink URL configuration at startup (for debugging)
-                LogNngConfiguration();
+                LogSinkConfiguration();
                 _logger.LogInformation("Graphics sink URL: {Url}", GetGraphicsSinkUrl() ?? "(not configured)");
 
                 // Initialize sinks (will throw if not configured)
@@ -1341,7 +1341,7 @@ namespace RocketWelder.SDK
                 _logger.LogInformation("Starting RocketWelder client with AI output and graphics support (one-way): {Connection}", Connection);
 
                 // Log sink URL configuration at startup (for debugging)
-                LogNngConfiguration();
+                LogSinkConfiguration();
                 _logger.LogInformation("Graphics sink URL: {Url}", GetGraphicsSinkUrl() ?? "(not configured)");
 
                 // Initialize sinks (will throw if not configured)
@@ -1520,7 +1520,7 @@ namespace RocketWelder.SDK
                 Stop();
             }
 
-            // Dispose NNG sinks
+            // Dispose sinks
             if (_segmentationSink != null)
             {
                 _segmentationSink.Dispose();

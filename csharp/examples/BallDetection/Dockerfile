@@ -13,7 +13,7 @@ COPY examples/BallDetection/ .
 RUN dotnet publish -c Release -o /app/publish
 
 # Runtime stage - Using Ubuntu 24.04 (Noble) for GLIBC 2.38+ compatibility
-FROM mcr.microsoft.com/dotnet/runtime:10.0-noble
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble
 WORKDIR /app
 
 # Copy published app first (to leverage cache for apt-get layer)

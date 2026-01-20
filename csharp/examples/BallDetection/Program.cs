@@ -1,5 +1,6 @@
 using System.Drawing;
 using BlazorBlaze.Server;
+using BlazorBlaze.VectorGraphics;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Emgu.CV.Structure;
@@ -232,6 +233,7 @@ public class BallDetectionService : BackgroundService
         // Draw ball position as text overlay in upper left corner
         var layer = stageWriter[0];
         layer.SetFontSize(24);
+        layer.SetFontColor(new RgbColor(255, 255, 255)); // White text for visibility
         if (center.HasValue)
         {
             layer.DrawText($"Ball: ({center.Value.X}, {center.Value.Y})", 10, 30);

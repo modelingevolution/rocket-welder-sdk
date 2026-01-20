@@ -177,8 +177,6 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
         {
             TransportKind.File => new StreamFrameSink(File.Create(address)),
             TransportKind.Socket => UnixSocketFrameSink.Connect(address),
-            TransportKind.NngPushIpc or TransportKind.NngPushTcp => NngFrameSink.CreatePusher(address),
-            TransportKind.NngPubIpc or TransportKind.NngPubTcp => NngFrameSink.CreatePublisher(address),
             _ => throw new NotSupportedException($"Unsupported transport protocol: {protocol}")
         };
     }

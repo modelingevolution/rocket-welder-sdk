@@ -60,52 +60,6 @@ public class FrameSinkFactoryTests
 
     #endregion
 
-    #region Create tests - NNG protocols
-
-    [Fact]
-    public void Create_NngPubIpc_ReturnsNngFrameSink()
-    {
-        // NNG Pub sockets can bind without a listener
-        var address = "ipc:///tmp/test-pub-sink";
-
-        using var sink = FrameSinkFactory.Create(TransportProtocol.NngPubIpc, address);
-
-        Assert.IsType<NngFrameSink>(sink);
-    }
-
-    [Fact]
-    public void Create_NngPushIpc_ReturnsNngFrameSink()
-    {
-        // NNG Push sockets can bind without a listener
-        var address = "ipc:///tmp/test-push-sink";
-
-        using var sink = FrameSinkFactory.Create(TransportProtocol.NngPushIpc, address);
-
-        Assert.IsType<NngFrameSink>(sink);
-    }
-
-    [Fact]
-    public void Create_NngPubTcp_ReturnsNngFrameSink()
-    {
-        var address = "tcp://127.0.0.1:15555";
-
-        using var sink = FrameSinkFactory.Create(TransportProtocol.NngPubTcp, address);
-
-        Assert.IsType<NngFrameSink>(sink);
-    }
-
-    [Fact]
-    public void Create_NngPushTcp_ReturnsNngFrameSink()
-    {
-        var address = "tcp://127.0.0.1:15556";
-
-        using var sink = FrameSinkFactory.Create(TransportProtocol.NngPushTcp, address);
-
-        Assert.IsType<NngFrameSink>(sink);
-    }
-
-    #endregion
-
     #region Create tests - File protocol
 
     [Fact]
@@ -241,26 +195,6 @@ public class FrameSinkFactoryTests
 
     #endregion
 
-    #region Create tests - error cases
-
-    [Fact]
-    public void Create_NngSubProtocol_ThrowsNotSupportedException()
-    {
-        // Sub is for receiving, not sinking
-        Assert.Throws<NotSupportedException>(() =>
-            FrameSinkFactory.Create(TransportProtocol.NngSubIpc, "ipc:///tmp/test"));
-    }
-
-    [Fact]
-    public void Create_NngPullProtocol_ThrowsNotSupportedException()
-    {
-        // Pull is for receiving, not sinking
-        Assert.Throws<NotSupportedException>(() =>
-            FrameSinkFactory.Create(TransportProtocol.NngPullIpc, "ipc:///tmp/test"));
-    }
-
-    #endregion
-
     #region Integration tests - ConnectionString → FrameSinkFactory
 
     [Fact]
@@ -279,18 +213,6 @@ public class FrameSinkFactoryTests
         Assert.True(ex.SocketErrorCode == SocketError.AddressNotAvailable
                  || ex.SocketErrorCode == SocketError.ConnectionRefused
                  || (int)ex.SocketErrorCode == 2);
-    }
-
-    [Fact]
-    public void Integration_SegmentationConnectionString_ToFrameSink_NngPubIpc()
-    {
-        var cs = SegmentationConnectionString.Parse("nng+pub+ipc://tmp/test-integration", null);
-
-        Assert.Equal(TransportKind.NngPubIpc, cs.Protocol.Kind);
-        Assert.Equal("ipc:///tmp/test-integration", cs.Address);
-
-        using var sink = FrameSinkFactory.Create(cs.Protocol, cs.Address);
-        Assert.IsType<NngFrameSink>(sink);
     }
 
     [Fact]

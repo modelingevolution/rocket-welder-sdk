@@ -13,8 +13,8 @@ COPY examples/SimpleClient/ .
 RUN dotnet publish -c Release -o /app/publish
 
 # Runtime stage - Using Ubuntu 24.04 (Noble) for GLIBC 2.38+ compatibility
-# Using .NET 10.0 Preview runtime
-FROM mcr.microsoft.com/dotnet/runtime:10.0-noble
+# Using .NET 10.0 ASP.NET Core runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble
 WORKDIR /app
 
 # Install OpenCV dependencies and tools for debugging

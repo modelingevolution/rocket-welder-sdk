@@ -42,43 +42,12 @@ public class KeyPointsConnectionStringTests
 
     #endregion
 
-    #region Parse - NNG protocols
-
-    [Fact]
-    public void Parse_NngPushIpc_ParsesCorrectly()
-    {
-        var cs = KeyPointsConnectionString.Parse("nng+push+ipc://tmp/keypoints", null);
-
-        Assert.Equal(TransportKind.NngPushIpc, cs.Protocol.Kind);
-        Assert.Equal("ipc:///tmp/keypoints", cs.Address);
-    }
-
-    [Fact]
-    public void Parse_NngPushTcp_ParsesCorrectly()
-    {
-        var cs = KeyPointsConnectionString.Parse("nng+push+tcp://localhost:5555", null);
-
-        Assert.Equal(TransportKind.NngPushTcp, cs.Protocol.Kind);
-        Assert.Equal("tcp://localhost:5555", cs.Address);
-    }
-
-    [Fact]
-    public void Parse_NngPubIpc_ParsesCorrectly()
-    {
-        var cs = KeyPointsConnectionString.Parse("nng+pub+ipc://tmp/keypoints", null);
-
-        Assert.Equal(TransportKind.NngPubIpc, cs.Protocol.Kind);
-        Assert.Equal("ipc:///tmp/keypoints", cs.Address);
-    }
-
-    #endregion
-
     #region Parse - Query parameters
 
     [Fact]
     public void Parse_WithMasterFrameInterval_ParsesParameter()
     {
-        var cs = KeyPointsConnectionString.Parse("nng+push+ipc://tmp/kp?masterFrameInterval=500", null);
+        var cs = KeyPointsConnectionString.Parse("socket:///tmp/kp.sock?masterFrameInterval=500", null);
 
         Assert.Equal(500, cs.MasterFrameInterval);
     }
@@ -86,7 +55,7 @@ public class KeyPointsConnectionStringTests
     [Fact]
     public void Parse_WithMultipleParameters_ParsesAll()
     {
-        var cs = KeyPointsConnectionString.Parse("nng+push+ipc://tmp/kp?masterFrameInterval=100&custom=value", null);
+        var cs = KeyPointsConnectionString.Parse("socket:///tmp/kp.sock?masterFrameInterval=100&custom=value", null);
 
         Assert.Equal(100, cs.MasterFrameInterval);
         Assert.True(cs.Parameters.ContainsKey("custom"));
@@ -103,7 +72,6 @@ public class KeyPointsConnectionStringTests
     [InlineData("  ")]
     [InlineData("invalid")]
     [InlineData("unknown://path")]
-    [InlineData("nng://path")] // incomplete
     public void Parse_InvalidConnectionString_ThrowsFormatException(string? input)
     {
         Assert.Throws<FormatException>(() => KeyPointsConnectionString.Parse(input!, null));
@@ -118,7 +86,7 @@ public class KeyPointsConnectionStringTests
     {
         var cs = KeyPointsConnectionString.Default;
 
-        Assert.Equal(TransportKind.NngPushIpc, cs.Protocol.Kind);
+        Assert.Equal(TransportKind.Socket, cs.Protocol.Kind);
         Assert.Contains("keypoints", cs.Address);
         Assert.Equal(300, cs.MasterFrameInterval);
     }
@@ -159,7 +127,7 @@ public class KeyPointsConnectionStringTests
     [Fact]
     public void ToString_ReturnsOriginalValue()
     {
-        var input = "nng+push+ipc://tmp/keypoints?masterFrameInterval=300";
+        var input = "socket:///tmp/keypoints.sock?masterFrameInterval=300";
         var cs = KeyPointsConnectionString.Parse(input, null);
 
         Assert.Equal(input, cs.ToString());

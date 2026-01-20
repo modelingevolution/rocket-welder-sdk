@@ -31,7 +31,7 @@ namespace RocketWelder.SDK.Transport
         /// <summary>
         /// Checks if more frames are available.
         /// For streaming transports (file), this checks for EOF.
-        /// For message-based transports (NNG), this may always return true until disconnection.
+        /// For message-based transports, this may always return true until disconnection.
         /// </summary>
         bool HasMoreFrames { get; }
     }
