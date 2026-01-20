@@ -14,9 +14,7 @@ csharp/RocketWelder.SDK/Transport/
 ├── TcpFrameSink.cs ✅                # TCP with 4-byte LE length prefix
 ├── TcpFrameSource.cs ✅              # TCP with length-prefix framing
 ├── WebSocketFrameSink.cs ✅          # WebSocket binary messages
-├── WebSocketFrameSource.cs ✅        # WebSocket binary messages
-├── NngFrameSink.cs ✅                # NNG Pub/Sub (stub)
-└── NngFrameSource.cs ✅              # NNG Pub/Sub (stub)
+└── WebSocketFrameSource.cs ✅        # WebSocket binary messages
 ```
 
 **Status:** All files created, compiling successfully
@@ -129,8 +127,8 @@ Required test files:
 ```
 python/tests/test_transport_stream.py
 python/tests/test_transport_tcp.py
+python/tests/test_transport_unix_socket.py
 python/tests/test_transport_websocket.py
-python/tests/test_transport_nng.py
 ```
 
 Each testing:
@@ -140,22 +138,22 @@ Each testing:
 
 **Estimated Effort:** 3-4 hours
 
-### 9. WebSocket & NNG Python Implementations
+### 9. Unix Socket & WebSocket Python Implementations
 **Status:** ⏳ NOT CREATED
 
 Files needed:
 ```
+python/rocket_welder_sdk/transport/unix_socket_transport.py
 python/rocket_welder_sdk/transport/websocket_transport.py
-python/rocket_welder_sdk/transport/nng_transport.py
 ```
+
+**Unix Socket Requirements:**
+- Use standard `socket` library with `AF_UNIX`
+- Same 4-byte LE framing as TCP
 
 **WebSocket Requirements:**
 - Use `websockets` library (async)
 - Handle binary WebSocket messages
-
-**NNG Requirements:**
-- Use `pynng` library
-- Implement Pub/Sub pattern
 
 **Estimated Effort:** 2 hours
 
@@ -186,13 +184,13 @@ Overall:                      ████████░░░░░░░░�
    - Follow KeyPoints pattern
    - Complete Python protocol modernization
 
-3. **Python WebSocket/NNG Transports** (2 hours)
+3. **Python Unix Socket/WebSocket Transports** (2 hours)
    - Complete Python transport layer parity with C#
-   - Enable all 4 transports in Python
+   - Enable all transports in Python
 
 4. **Cross-Platform Tests** (3-4 hours)
    - Test file transport first (easiest)
-   - Then TCP, WebSocket, NNG
+   - Then TCP, Unix Socket, WebSocket
    - Verify byte-for-byte compatibility
 
 5. **Controller Implementation** (30 minutes)
@@ -286,27 +284,24 @@ with open("data.bin", "wb") as f:
 6. `Transport/TcpFrameSource.cs`
 7. `Transport/WebSocketFrameSink.cs`
 8. `Transport/WebSocketFrameSource.cs`
-9. `Transport/NngFrameSink.cs`
-10. `Transport/NngFrameSource.cs`
 
-### C# Files Modified (2 files):
-11. `KeyPointsProtocol.cs` (refactored)
-12. `RocketWelder.SDK.csproj` (added NNG package ref)
+### C# Files Modified (1 file):
+9. `KeyPointsProtocol.cs` (refactored)
 
 ### Python Files (5 files):
-13. `transport/__init__.py`
-14. `transport/frame_sink.py`
-15. `transport/frame_source.py`
-16. `transport/stream_transport.py`
-17. `transport/tcp_transport.py`
+10. `transport/__init__.py`
+11. `transport/frame_sink.py`
+12. `transport/frame_source.py`
+13. `transport/stream_transport.py`
+14. `transport/tcp_transport.py`
 
 ### Documentation Files (4 files):
-18. `ARCHITECTURE.md`
-19. `REFACTORING_GUIDE.md`
-20. `IMPLEMENTATION_STATUS.md`
-21. `SESSION_SUMMARY.md` (this file)
+15. `ARCHITECTURE.md`
+16. `REFACTORING_GUIDE.md`
+17. `IMPLEMENTATION_STATUS.md`
+18. `SESSION_SUMMARY.md` (this file)
 
-**Total:** 21 files created/modified
+**Total:** 18 files created/modified
 
 ## 🚀 How to Continue
 
@@ -331,8 +326,8 @@ with open("data.bin", "wb") as f:
 
 3. **Add remaining Python transports:**
    ```bash
+   # Create: transport/unix_socket_transport.py
    # Create: transport/websocket_transport.py
-   # Create: transport/nng_transport.py
    ```
 
 4. **Cross-platform tests:**

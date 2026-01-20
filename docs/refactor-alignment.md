@@ -355,8 +355,7 @@ private static Mat CreateTestFrame(int width, int height)
 | Connection strings | ✅ | ✅ | Compatible |
 | Transport: Stream | ✅ | ✅ | - |
 | Transport: TCP | ✅ | ✅ | - |
-| Transport: Unix Socket | ✅ | ✅ | - |
-| Transport: NNG | ✅ | ✅ | (deprecated, moving to sockets) |
+| Transport: Unix Socket | ✅ | ✅ | (recommended for IPC) |
 | Controllers (Duplex/OneWay) | ✅ | ✅ | - |
 | UI Controls | ✅ | ✅ | - |
 | External Controls (EventStore) | ✅ | ✅ | - |
@@ -418,5 +417,4 @@ private static Mat CreateTestFrame(int width, int height)
 
 - WebSocket transport (not needed for container-to-relay communication)
 - Blazor decoders (WASM consumes from relay, not SDK)
-- NNG transport (deprecated, moving to Unix sockets)
 - Source interfaces (SDK is producer-only)

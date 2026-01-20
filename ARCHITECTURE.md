@@ -2,7 +2,7 @@
 
 ## Overview
 
-The RocketWelder SDK provides high-performance video streaming with support for multiple AI protocols (KeyPoints, Segmentation Results) over various transport mechanisms (File, TCP, WebSocket, NNG).
+The RocketWelder SDK provides high-performance video streaming with support for multiple AI protocols (KeyPoints, Segmentation Results) over various transport mechanisms (File, TCP, Unix Socket, WebSocket).
 
 ## API Layers
 
@@ -25,7 +25,7 @@ The RocketWelder SDK provides high-performance video streaming with support for 
                               ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │  Transport Layer (Internal)                                         │
-│  IFrameSink, IFrameSource (Stream, TCP, WebSocket, NNG)             │
+│  IFrameSink, IFrameSource (Stream, TCP, Unix Socket, WebSocket)     │
 │  - Frame boundaries, delivery                                       │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -154,16 +154,15 @@ await client.StartAsync((inputFrame, segmentation, keypoints, outputFrame) =>
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `VIDEO_SOURCE` | Video input | `0`, `file:///video.mp4`, `shm://buffer` |
-| `KEYPOINTS_CONNECTION_STRING` | KeyPoints output | `nng+push://ipc:///tmp/kp?masterFrameInterval=300` |
-| `SEGMENTATION_CONNECTION_STRING` | Segmentation output | `nng+push://ipc:///tmp/seg` |
+| `KEYPOINTS_CONNECTION_STRING` | KeyPoints output | `unix:///tmp/kp.sock?masterFrameInterval=300` |
+| `SEGMENTATION_CONNECTION_STRING` | Segmentation output | `unix:///tmp/seg.sock` |
 
 **Connection String Format:** `protocol://address?param=value`
 
 Supported protocols:
-- `nng+push://` - NNG Push/Pull pattern (reliable)
-- `nng+pub://` - NNG Pub/Sub pattern (broadcast)
+- `unix://` - Unix domain socket (high-performance local IPC, recommended)
+- `tcp://` - TCP with 4-byte LE framing (network streaming)
 - `file://` - File output with varint framing
-- `tcp://` - TCP with 4-byte LE framing (planned)
 
 ### Metadata Format
 
@@ -190,8 +189,8 @@ Schemas emit metadata as JSON for readers/consumers:
 
 Every protocol (KeyPoints, Segmentation, etc.) MUST use framing for ALL data:
 - **Files**: Varint length-prefix (`StreamFrameSink`/`StreamFrameSource`)
-- **TCP**: 4-byte LE length-prefix (`TcpFrameSink`/`TcpFrameSource`)
-- **WebSocket/NNG**: Native message boundaries (automatic)
+- **TCP/Unix Socket**: 4-byte LE length-prefix (`TcpFrameSink`/`TcpFrameSource`, `UnixSocketFrameSink`/`UnixSocketFrameSource`)
+- **WebSocket**: Native message boundaries (automatic)
 
 **Why?**
 1. Frame boundary detection is essential for reading multiple frames
@@ -221,7 +220,7 @@ The SDK separates **protocol logic** from **transport mechanisms** through a two
 ┌─────────────────────────────────────┐
 │   Transport Layer (Where)          │
 │   - IFrameSink / IFrameSource      │
-│   - Stream, TCP, WebSocket, NNG    │
+│   - Stream, TCP, Unix Socket, WS   │
 │   - Frame boundaries & delivery    │
 └─────────────────────────────────────┘
 ```
@@ -255,9 +254,9 @@ public interface IFrameSink : IDisposable, IAsyncDisposable
 | Transport | Class | Framing | Use Case |
 |-----------|-------|---------|----------|
 | **File/Stream** | `StreamFrameSink` | Varint length prefix | Persistent storage, replay |
-| **TCP** | `TcpFrameSink` | 4-byte LE length prefix | Point-to-point streaming |
+| **TCP** | `TcpFrameSink` | 4-byte LE length prefix | Network streaming |
+| **Unix Socket** | `UnixSocketFrameSink` | 4-byte LE length prefix | High-performance local IPC (recommended) |
 | **WebSocket** | `WebSocketFrameSink` | Native message boundaries | Browser/web clients |
-| **NNG** | `NngFrameSink` | Native message boundaries | High-performance IPC, multicast |
 
 ### IFrameSource
 
@@ -282,7 +281,7 @@ The SDK is designed for **real-time streaming**, not just file loading. This mea
 2. **Readers**: Stream frames via `IAsyncEnumerable<T>` as they arrive from `IFrameSource`
 
 This design supports:
-- Live TCP/WebSocket/NNG streaming with backpressure
+- Live TCP/Unix Socket/WebSocket streaming with backpressure
 - File replay with the same API
 - Cancellation support via `CancellationToken`
 - Memory-efficient processing (one frame at a time)
@@ -601,12 +600,13 @@ async for frame in source.read_frames_async():
     process_keypoints(frame.keypoints)
 ```
 
-### NNG Pub/Sub (Multicast)
+### Unix Socket (High-Performance IPC)
 
 ```csharp
-// C# Publisher - Broadcasting to all subscribers
-using var publisher = new NngPublisher("tcp://localhost:5555");
-using var frameSink = new NngFrameSink(publisher);
+// C# Server - Listening on Unix socket
+using var server = new UnixSocketServer("/tmp/segmentation.sock");
+var client = await server.AcceptAsync();
+using var frameSink = new UnixSocketFrameSink(client);
 using var sink = new SegmentationResultSink(frameSink);
 
 while (processingVideo)
@@ -618,13 +618,12 @@ while (processingVideo)
 ```
 
 ```python
-# Python Subscriber - Receiving from publisher (streaming)
-import pynng
-sub = pynng.Sub0()
-sub.dial("tcp://localhost:5555")
-sub.subscribe(b"")  # Subscribe to all topics
+# Python Client - Connecting to Unix socket
+import socket
+sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+sock.connect("/tmp/segmentation.sock")
 
-frame_source = NngFrameSource(sub)
+frame_source = UnixSocketFrameSource(sock)
 source = SegmentationResultSource(frame_source)
 
 async for frame in source.read_frames_async():
@@ -680,16 +679,16 @@ All stream-based transports use **length-prefix framing** for consistent frame b
 - **Length encoding**: 4-byte little-endian uint32
 - **Rationale**: Fixed-size header for network protocols, max frame size 4GB
 
+### Unix Socket - Length-Prefixed
+- **Framing**: `[4-byte LE length][frame data]`
+- **Use case**: High-performance local IPC (recommended for container-to-host communication)
+- **Length encoding**: 4-byte little-endian uint32
+- **Rationale**: Same framing as TCP but lower latency for local communication
+
 ### WebSocket - Native Message Boundaries
 - **Framing**: One frame = one WebSocket binary message
 - **Use case**: Browser/web clients
 - **No additional framing needed**: WebSocket protocol provides message boundaries
-
-### NNG - Native Message Boundaries
-- **Framing**: One frame = one NNG message
-- **Use case**: High-performance IPC, Pub/Sub multicast
-- **No additional framing needed**: NNG is message-oriented
-- **Pub/Sub pattern**: One-to-many distribution with automatic reliability
 
 ## Migration Guide
 
@@ -722,7 +721,7 @@ using var sink = new KeyPointsSink(frameSink);
 1. **Transport Independence**: Same protocol code works over any transport
 2. **Easy Testing**: Mock `IFrameSink` for unit tests
 3. **Extensibility**: Add new transports without changing protocol logic
-4. **Atomicity**: Frames written as complete units (important for NNG, WebSocket)
+4. **Atomicity**: Frames written as complete units (important for WebSocket)
 5. **Reusability**: Same transport layer for all protocols (KeyPoints, Segmentation, future protocols)
 
 ## Performance Considerations
@@ -786,7 +785,7 @@ All protocols use **little-endian** encoding for cross-platform compatibility:
 
 Python transports mirror C# design:
 - `IFrameSink` / `IFrameSource` abstract base classes
-- Implementations for `socket`, `pynng`, `websockets` (async)
+- Implementations for `socket` (TCP/Unix), `websockets` (async)
 - Type hints throughout for IDE support
 
 ## Testing Strategy
@@ -827,7 +826,6 @@ Both implementations follow the same architecture and binary protocols, ensuring
 | Stream (File) | `StreamFrameSink`/`Source` | `StreamFrameSink`/`Source` | Varint length-prefix |
 | TCP | `TcpFrameSink`/`Source` | `TcpFrameSink`/`Source` | 4-byte LE length-prefix |
 | Unix Socket | `UnixSocketFrameSink`/`Source` | `UnixSocketTransport` | 4-byte LE length-prefix |
-| NNG | `NngFrameSink`/`Source` | `NngFrameSink`/`Source` | Native message boundaries |
 | WebSocket | `WebSocketFrameSink`/`Source` | Not implemented | Native message boundaries |
 
 ### API Design Differences
@@ -958,14 +956,13 @@ All combinations are tested:
 - Python writes KeyPoints → C# reads ✓
 - C# writes Segmentation → Python reads ✓
 - Python writes Segmentation → C# reads ✓
-- All transports (NNG Push/Pull, NNG Pub/Sub, TCP, Unix Socket) ✓
+- All transports (TCP, Unix Socket) ✓
 
 ---
 
 ## Future Extensions
 
 ### Additional Transports
-- **Unix Domain Sockets**: High-performance local IPC
 - **MQTT**: IoT scenarios
 - **gRPC**: Streaming RPC with built-in load balancing
 - **QUIC**: UDP-based with TCP-like reliability

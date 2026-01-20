@@ -81,7 +81,7 @@ For each keypoint:
 - Format: `[length prefix][frame data]`
 - No end-of-stream marker needed - EOF or connection close indicates end
 
-**For message-oriented transports** (NNG, WebSocket):
+**For message-oriented transports** (WebSocket):
 - Native message boundaries
 - One frame = one message
 - No length prefix or end marker needed

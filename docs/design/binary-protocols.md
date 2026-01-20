@@ -389,40 +389,33 @@ When overlay data is stored in files or transmitted in chunks, frames are length
 /// </summary>
 public ref struct ChunkFrameReader
 {
-    private readonly ReadOnlyMemory<byte> _buffer;
+    private readonly byte[] _buffer;
+    private readonly int _end;
     private int _offset;
 
-    public ChunkFrameReader(ReadOnlyMemory<byte> buffer);
-
-    /// <summary>True if more frames available.</summary>
-    public bool HasMore { get; }
+    public ChunkFrameReader(byte[] data, int offset, int length);
 
     /// <summary>
     /// Reads next frame, advancing position.
     /// Returns the frame data WITHOUT the length prefix.
+    /// Returns empty if no more frames or incomplete data.
     /// </summary>
-    public ReadOnlyMemory<byte> ReadFrame();
-
-    /// <summary>
-    /// Tries to read next frame.
-    /// Returns false if no more frames or incomplete data.
-    /// </summary>
-    public bool TryReadFrame(out ReadOnlyMemory<byte> frame);
+    public ReadOnlyMemory<byte> ReadFrame(CancellationToken cancellationToken = default);
 }
 ```
 
 ### Usage Example (Playback Overlay Indexing)
 
 ```csharp
-// Overlay block from chunk (e.g., segmentation.bin data)
-var segBlock = chunkData.AsMemory(header.SegmentationBlock.Offset, header.SegmentationBlock.Length);
-
-// Parse length-prefixed frames, index by FrameId
+// Parse length-prefixed frames from overlay block, index by FrameId
 var overlayIndex = new Dictionary<ulong, ReadOnlyMemory<byte>>();
-var reader = new ChunkFrameReader(segBlock);
+var reader = new ChunkFrameReader(chunkData, header.SegmentationBlock.Offset, header.SegmentationBlock.Length);
 
-while (reader.TryReadFrame(out var frameData))
+while (true)
 {
+    var frameData = reader.ReadFrame();
+    if (frameData.IsEmpty) break;
+
     // FrameId is first 8 bytes of each frame (little-endian)
     var frameId = BinaryPrimitives.ReadUInt64LittleEndian(frameData.Span);
     overlayIndex[frameId] = frameData;  // zero-copy slice
@@ -460,7 +453,6 @@ Each frame's data contains embedded FrameId (first 8 bytes) per protocol spec.
 
 **Forbidden:**
 - `System.Net.Sockets`
-- `nng.NETCore`
 - `ASP.NET Core`
 - Any transport dependencies
 

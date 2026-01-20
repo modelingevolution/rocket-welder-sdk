@@ -581,8 +581,6 @@ class KeyPointsSink(IKeyPointsSink):
 6. ✅ `/csharp/RocketWelder.SDK/Transport/TcpFrameSource.cs` - TCP read
 7. ✅ `/csharp/RocketWelder.SDK/Transport/WebSocketFrameSink.cs` - WebSocket write
 8. ✅ `/csharp/RocketWelder.SDK/Transport/WebSocketFrameSource.cs` - WebSocket read
-9. ⏳ `/csharp/RocketWelder.SDK/Transport/NngFrameSink.cs` - NNG write (stub)
-10. ⏳ `/csharp/RocketWelder.SDK/Transport/NngFrameSource.cs` - NNG read (stub)
 
 ### C# Protocol Layer (In Progress)
 11. ⏳ `/csharp/RocketWelder.SDK/KeyPointsProtocol.cs` - REFACTOR
@@ -612,8 +610,8 @@ class KeyPointsSink(IKeyPointsSink):
 18. ✅ `/python/rocket_welder_sdk/transport/frame_source.py` - IFrameSource ABC
 19. ✅ `/python/rocket_welder_sdk/transport/stream_transport.py` - Stream transport
 20. ✅ `/python/rocket_welder_sdk/transport/tcp_transport.py` - TCP transport
-21. ⏳ `/python/rocket_welder_sdk/transport/websocket_transport.py` - WebSocket (not started)
-22. ⏳ `/python/rocket_welder_sdk/transport/nng_transport.py` - NNG (not started)
+21. ⏳ `/python/rocket_welder_sdk/transport/unix_socket_transport.py` - Unix socket (needed)
+22. ⏳ `/python/rocket_welder_sdk/transport/websocket_transport.py` - WebSocket (not started)
 
 ### Python Protocol Layer (Needs Update)
 23. ⏳ `/python/rocket_welder_sdk/keypoints_protocol.py` - REFACTOR

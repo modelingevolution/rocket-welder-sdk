@@ -8,13 +8,13 @@ This document tracks the progress of refactoring from `IKeyPointsStorage`/`ISegm
 
 1. **Sink** = Writer factory (creates per-frame writers, uses `IFrameSink`)
 2. **Source** = Streaming reader (yields frames via `IAsyncEnumerable`, uses `IFrameSource`)
-3. **Transport** = Frame boundary handling (length-prefix for streams, native for WebSocket/NNG)
+3. **Transport** = Frame boundary handling (length-prefix for streams/TCP/Unix Socket, native for WebSocket)
 
 ### ⚠️ CRITICAL RULE: ALL Data Uses Framing
 
 **DO NOT REMOVE FRAMING. EVER.**
 
-- ALL protocols MUST use framing (varint for files, 4-byte LE for TCP, native for WS/NNG)
+- ALL protocols MUST use framing (varint for files, 4-byte LE for TCP/Unix Socket, native for WebSocket)
 - Python MUST use the same framing as C#
 - Files use varint length-prefix framing via `StreamFrameSink`/`StreamFrameSource`
 - This is the ENTIRE PURPOSE of the refactor - consistent framing everywhere
@@ -38,7 +38,7 @@ Only after C# is fully complete and reviewed, work on Python can begin.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| **C# Transport Layer** | ✅ 100% | All transports implemented (Stream, TCP, Unix Socket, WebSocket, NNG) |
+| **C# Transport Layer** | ✅ 100% | All transports implemented (Stream, TCP, Unix Socket, WebSocket) |
 | **C# KeyPoints Protocol** | ✅ 100% | Sink/Source with IAsyncEnumerable complete |
 | **C# Segmentation Protocol** | ✅ 100% | Sink/Source with IAsyncEnumerable complete |
 | **C# Tests** | ✅ 100% | 125 passed, 12 skipped, 0 failed |
@@ -64,32 +64,27 @@ Only after C# is fully complete and reviewed, work on Python can begin.
 | `Transport/UnixSocketFrameSource.cs` | ✅ | Unix domain socket support |
 | `Transport/WebSocketFrameSink.cs` | ✅ | Native message boundaries |
 | `Transport/WebSocketFrameSource.cs` | ✅ | Native message boundaries |
-| `Transport/NngFrameSink.cs` | ✅ | NNG Pub/Sub and Push/Pull patterns |
-| `Transport/NngFrameSource.cs` | ✅ | NNG Pub/Sub and Push/Pull patterns |
 
-#### NNG Transport Details
+#### Unix Socket Transport Details
 
-Uses `ModelingEvolution.Nng` v1.0.2 package (fork of nng.NETCore).
-
-**Supported Patterns:**
-- **Push/Pull** - Reliable point-to-point with load balancing (recommended)
-- **Pub/Sub** - One-to-many broadcast (has slow subscriber limitation)
+Unix domain sockets are the recommended transport for high-performance local IPC (container-to-host communication).
 
 **Features:**
-- Pipe notifications for subscriber connection tracking
-- `WaitForSubscriberAsync()` for pub/sub synchronization
-- Both IPC (`ipc:///tmp/...`) and TCP (`tcp://127.0.0.1:...`) transports
+- Same framing as TCP (4-byte LE length-prefix)
+- Lower latency than TCP for local communication
+- Works on Linux and macOS (not Windows)
 
 **Usage:**
 ```csharp
-// Push/Pull (reliable)
-var pusher = NngFrameSink.CreatePusher("tcp://127.0.0.1:5555");
-var puller = NngFrameSource.CreatePuller("tcp://127.0.0.1:5555", bindMode: false);
+// Server
+using var server = new UnixSocketServer("/tmp/keypoints.sock");
+var client = await server.AcceptAsync();
+using var frameSink = new UnixSocketFrameSink(client);
 
-// Pub/Sub (broadcast)
-var publisher = NngFrameSink.CreatePublisher("ipc:///tmp/topic");
-var subscriber = NngFrameSource.CreateSubscriber("ipc:///tmp/topic");
-await publisher.WaitForSubscriberAsync(TimeSpan.FromSeconds(5));
+// Client
+using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
+socket.Connect(new UnixDomainSocketEndPoint("/tmp/keypoints.sock"));
+using var frameSource = new UnixSocketFrameSource(socket);
 ```
 
 ### KeyPoints Protocol ✅
@@ -125,9 +120,9 @@ await publisher.WaitForSubscriberAsync(TimeSpan.FromSeconds(5));
 **All tests pass: 127 passed, 10 skipped, 0 failed**
 
 Skipped tests:
-- 4 NNG Pub/Sub tests (inherent NNG subscription propagation timing limitation)
 - 3 WebSocket integration tests (require server infrastructure)
 - 3 UiService tests (require EventStore configuration)
+- 4 legacy tests (deprecated)
 
 ---
 
@@ -141,8 +136,8 @@ Skipped tests:
 | `transport/frame_source.py` | ✅ | ABC with context manager |
 | `transport/stream_transport.py` | ✅ | Varint length-prefix framing |
 | `transport/tcp_transport.py` | ✅ | 4-byte LE length-prefix |
+| `transport/unix_socket_transport.py` | ⏳ | Needed for IPC |
 | `transport/websocket_transport.py` | ❌ | Not implemented |
-| `transport/nng_transport.py` | ❌ | Not implemented |
 
 ### KeyPoints Protocol ⏳
 
@@ -254,7 +249,7 @@ Python OVERALL:               ████████░░░░░░░░�
 ```
 Total: 137 tests
 Passed: 125
-Skipped: 12 (NNG pub/sub, WebSocket integration, UiService, cross-platform Python)
+Skipped: 12 (WebSocket integration, UiService, cross-platform Python, legacy)
 Failed: 0
 ```
 
