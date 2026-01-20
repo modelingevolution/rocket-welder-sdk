@@ -14,7 +14,7 @@
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
     <Copyright>Copyright © ModelingEvolution 2024</Copyright>
-    <Description>WASM-compatible binary protocol encoders/decoders for RocketWelder streaming data (segmentation, keypoints, actions). Zero-allocation varint and zigzag encoding.</Description>
+    <Description>WASM-compatible binary protocol encoders/decoders for RocketWelder streaming data (segmentation, keypoints). Zero-allocation varint and zigzag encoding.</Description>
     <PackageTags>protocol;binary;varint;zigzag;streaming;wasm;blazor</PackageTags>
     <PackageProjectUrl>https://github.com/modelingevolution/rocket-welder-sdk</PackageProjectUrl>
     <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>

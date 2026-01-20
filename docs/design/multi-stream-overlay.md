@@ -22,13 +22,13 @@ Each stream keeps its own `RenderingStreamV2` with independent stage/pool. A thi
 │                 CompositeRenderingStream                     │
 ├─────────────────────────────────────────────────────────────┤
 │  List<RenderingStreamV2>                                    │
-│  ┌─────────────────┐ ┌─────────────────┐ ┌────────────────┐ │
-│  │ Stream[0]       │ │ Stream[1]       │ │ Stream[2]      │ │
-│  │ SegDecoder      │ │ KpDecoder       │ │ ActDecoder     │ │
-│  │ Own Stage       │ │ Own Stage       │ │ Own Stage      │ │
-│  │ Own Pool        │ │ Own Pool        │ │ Own Pool       │ │
-│  │ Layers=[0]      │ │ Layers=[0,1]    │ │ Layers=[0]     │ │
-│  └─────────────────┘ └─────────────────┘ └────────────────┘ │
+│  ┌─────────────────┐ ┌─────────────────┐                    │
+│  │ Stream[0]       │ │ Stream[1]       │                    │
+│  │ SegDecoder      │ │ KpDecoder       │                    │
+│  │ Own Stage       │ │ Own Stage       │                    │
+│  │ Own Pool        │ │ Own Pool        │                    │
+│  │ Layers=[0]      │ │ Layers=[0,1]    │                    │
+│  └─────────────────┘ └─────────────────┘                    │
 └─────────────────────────────────────────────────────────────┘
                                │
                                ▼
@@ -45,13 +45,12 @@ DECODE THREADS (independent)              RENDER THREAD
 ┌─────────────────────────┐               ┌────────────────────┐
 │ Thread 1 (Segmentation) │               │ OnPaint()          │
 │ WS → Decode → Stage     │───┐           │                    │
-├─────────────────────────┤   │           │ for stream in list:│
-│ Thread 2 (Keypoints)    │   ├──────────▶│   stream.Render()  │
-│ WS → Decode → Stage     │───┤           │                    │
-├─────────────────────────┤   │           │ (sequential, no    │
-│ Thread 3 (Actions)      │───┘           │  contention)       │
-│ WS → Decode → Stage     │               └────────────────────┘
-└─────────────────────────┘
+├─────────────────────────┤   ├──────────▶│ for stream in list:│
+│ Thread 2 (Keypoints)    │───┘           │   stream.Render()  │
+│ WS → Decode → Stage     │               │                    │
+└─────────────────────────┘               │ (sequential, no    │
+                                          │  contention)       │
+                                          └────────────────────┘
 ```
 
 **No shared mutable state** - each stream has its own stage/pool.
@@ -60,8 +59,7 @@ DECODE THREADS (independent)              RENDER THREAD
 
 Render order = list order:
 1. `segStream.Render(canvas)` → drawn first (back)
-2. `kpStream.Render(canvas)` → drawn second (middle)
-3. `actionsStream.Render(canvas)` → drawn third (front)
+2. `kpStream.Render(canvas)` → drawn second (front)
 
 Within each stream, layers are composited by index (0 before 1 before 2...).
 
@@ -71,10 +69,9 @@ Within each stream, layers are composited by index (0 before 1 before 2...).
 |-----------|-----------|--------|-------|
 | Segmentation stream | 8.3 MB | ~2-3 | ~20 MB |
 | Keypoints stream | 8.3 MB | ~4-6 | ~40 MB |
-| Actions stream | 8.3 MB | ~2-3 | ~20 MB |
-| **Total** | | | **~80 MB** |
+| **Total** | | | **~60 MB** |
 
-Acceptable for desktop/WASM. ~30% more than shared pool, but no synchronization complexity.
+Acceptable for desktop/WASM. Slightly more than shared pool, but no synchronization complexity.
 
 ---
 
