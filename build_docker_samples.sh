@@ -53,7 +53,7 @@ PYTHON_EXAMPLES=(
     "02-advanced:advanced:false"
     "03-integration:integration:false"
     "04-ui-controls:ui-controls:false"
-    "05-all:all:true"
+    "05-ball-detector:ball-detector:false"
     "06-yolo:yolo:true"
     "07-simple-with-data:simple-with-data:false"
 )

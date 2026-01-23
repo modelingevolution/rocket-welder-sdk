@@ -317,3 +317,88 @@ class SegmentationConnectionString:
 
     def __str__(self) -> str:
         return self.value
+
+
+@dataclass(frozen=True)
+class GraphicsConnectionString:
+    """
+    Strongly-typed connection string for Stage (graphics) output.
+
+    Supported protocols:
+    - file:///path/to/file.bin - File output (absolute path)
+    - socket:///tmp/socket.sock - Unix domain socket
+    """
+
+    value: str
+    protocol: TransportProtocol
+    address: str
+    parameters: Dict[str, str] = field(default_factory=dict)
+
+    @classmethod
+    def default(cls) -> GraphicsConnectionString:
+        """Default connection string for Stage."""
+        return cls.parse("socket:///tmp/rocket-welder-stage.sock")
+
+    @classmethod
+    def from_environment(
+        cls, variable_name: str = "STAGE_CONNECTION_STRING"
+    ) -> GraphicsConnectionString:
+        """Create from environment variable or use default."""
+        value = os.environ.get(variable_name)
+        return cls.parse(value) if value else cls.default()
+
+    @classmethod
+    def parse(cls, s: str) -> GraphicsConnectionString:
+        """Parse a connection string."""
+        result = cls.try_parse(s)
+        if result is None:
+            raise ValueError(f"Invalid Graphics connection string: {s}")
+        return result
+
+    @classmethod
+    def try_parse(cls, s: str) -> Optional[GraphicsConnectionString]:
+        """Try to parse a connection string."""
+        if not s or not s.strip():
+            return None
+
+        s = s.strip()
+        parameters: Dict[str, str] = {}
+
+        # Extract query parameters
+        endpoint_part = s
+        if "?" in s:
+            endpoint_part, query = s.split("?", 1)
+            for key, values in parse_qs(query).items():
+                parameters[key.lower()] = values[0] if values else ""
+
+        # Parse protocol and address
+        scheme_end = endpoint_part.find("://")
+        if scheme_end <= 0:
+            return None
+
+        schema_str = endpoint_part[:scheme_end]
+        path_part = endpoint_part[scheme_end + 3 :]  # skip "://"
+
+        protocol = TransportProtocol.try_parse(schema_str)
+        if protocol is None:
+            return None
+
+        # Build address based on protocol type
+        if protocol.is_file:
+            # file:///absolute/path -> /absolute/path
+            address = path_part if path_part.startswith("/") else "/" + path_part
+        elif protocol.is_socket:
+            # socket:///tmp/sock -> /tmp/sock
+            address = path_part if path_part.startswith("/") else "/" + path_part
+        else:
+            return None
+
+        return cls(
+            value=s,
+            protocol=protocol,
+            address=address,
+            parameters=parameters,
+        )
+
+    def __str__(self) -> str:
+        return self.value

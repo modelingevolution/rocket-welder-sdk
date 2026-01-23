@@ -15,6 +15,19 @@ from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
 from .delta_frame import DeltaFrame
 from .frame_metadata import FRAME_METADATA_SIZE, FrameMetadata, GstVideoFormat
+from .graphics import (
+    FrameType,
+    ILayerCanvas,
+    IStageSink,
+    IStageWriter,
+    LayerEncoder,
+    OpType,
+    PropertyId,
+    RgbColor,
+    StageSink,
+    StageWriter,
+    VectorGraphicsEncoder,
+)
 from .gst_metadata import GstCaps, GstMetadata
 from .keypoints_protocol import (
     IKeyPointsSink,
@@ -38,6 +51,7 @@ from .segmentation_result import (
 from .session_id import (
     # Explicit URL environment variable names (set by rocket-welder2)
     ACTIONS_SINK_URL_ENV,
+    GRAPHICS_SINK_URL_ENV,
     KEYPOINTS_SINK_URL_ENV,
     SEGMENTATION_SINK_URL_ENV,
     # SessionId parsing
@@ -72,6 +86,7 @@ if _log_level:
 __all__ = [
     "ACTIONS_SINK_URL_ENV",
     "FRAME_METADATA_SIZE",
+    "GRAPHICS_SINK_URL_ENV",
     "KEYPOINTS_SINK_URL_ENV",
     "SEGMENTATION_SINK_URL_ENV",
     "BinaryFrameReader",
@@ -84,28 +99,39 @@ __all__ = [
     "DeltaFrame",
     "DuplexShmController",
     "FrameMetadata",
+    "FrameType",
     "GstCaps",
     "GstMetadata",
     "GstVideoFormat",
     "IController",
     "IKeyPointsSink",
     "IKeyPointsWriter",
+    "ILayerCanvas",
     "ISegmentationResultSink",
     "ISegmentationResultSource",
     "ISegmentationResultWriter",
+    "IStageSink",
+    "IStageWriter",
     "KeyPointsSink",
     "KeyPointsWriter",
+    "LayerEncoder",
     "OneWayShmController",
+    "OpType",
     "OpenCvController",
     "PeriodicTimer",
     "PeriodicTimerSync",
+    "PropertyId",
     "Protocol",
+    "RgbColor",
     "RocketWelderClient",
     "SegmentationFrame",
     "SegmentationProtocol",
     "SegmentationResultSink",
     "SegmentationResultSource",
     "SegmentationResultWriter",
+    "StageSink",
+    "StageWriter",
+    "VectorGraphicsEncoder",
     "get_session_id_from_env",
     "parse_session_id",
 ]

@@ -15,7 +15,12 @@ import numpy as np
 from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
 from .frame_metadata import FrameMetadata  # noqa: TC001 - used at runtime in callbacks
-from .high_level.connection_strings import KeyPointsConnectionString, SegmentationConnectionString
+from .graphics import ILayerCanvas, IStageSink, IStageWriter, RgbColor, StageSink
+from .high_level.connection_strings import (
+    GraphicsConnectionString,
+    KeyPointsConnectionString,
+    SegmentationConnectionString,
+)
 from .high_level.frame_sink_factory import FrameSinkFactory
 from .keypoints_protocol import IKeyPointsSink, IKeyPointsWriter, KeyPointsSink
 from .opencv_controller import OpenCvController
@@ -188,25 +193,26 @@ class RocketWelderClient:
 
     def start_with_writers(
         self,
-        on_frame: Callable[[Mat, ISegmentationResultWriter, IKeyPointsWriter, Mat], None],  # type: ignore[valid-type]
+        on_frame: Callable[[Mat, ISegmentationResultWriter, IKeyPointsWriter, IStageWriter, Mat], None],  # type: ignore[valid-type]
         cancellation_token: Optional[threading.Event] = None,
     ) -> None:
         """
-        Start receiving frames with segmentation and keypoints output support.
+        Start receiving frames with segmentation, keypoints, and graphics output support.
 
         Creates sinks for streaming AI results to rocket-welder2.
 
         Configuration via environment variables:
         - SEGMENTATION_SINK_URL: URL for segmentation output (e.g., socket:///tmp/seg.sock)
         - KEYPOINTS_SINK_URL: URL for keypoints output (e.g., socket:///tmp/kp.sock)
+        - STAGE_SINK_URL: URL for graphics/stage output (e.g., socket:///tmp/stage.sock)
 
         Args:
-            on_frame: Callback receiving (input_mat, seg_writer, kp_writer, output_mat).
+            on_frame: Callback receiving (input_mat, seg_writer, kp_writer, stage_writer, output_mat).
                      The writers are created per-frame and auto-flush on context exit.
             cancellation_token: Optional cancellation token
 
         Example:
-            def process_frame(input_mat, seg_writer, kp_writer, output_mat):
+            def process_frame(input_mat, seg_writer, kp_writer, stage_writer, output_mat):
                 # Run AI inference
                 result = ai_model.infer(input_mat)
 
@@ -217,6 +223,11 @@ class RocketWelderClient:
                 # Write keypoints
                 for kp in result.keypoints:
                     kp_writer.append(kp.id, kp.x, kp.y, kp.confidence)
+
+                # Draw graphics overlay
+                layer = stage_writer[0]
+                layer.set_font_size(24)
+                layer.draw_text("Detection count: 5", 10, 30)
 
                 # Copy/draw to output
                 output_mat[:] = input_mat
@@ -248,11 +259,13 @@ class RocketWelderClient:
             # Create sinks from environment
             seg_sink = self._get_or_create_segmentation_sink()
             kp_sink = self._get_or_create_keypoints_sink()
+            stage_sink = self._get_or_create_stage_sink()
 
             logger.info(
-                "Starting RocketWelder client with AI output support: seg=%s, kp=%s",
+                "Starting RocketWelder client with AI output support: seg=%s, kp=%s, stage=%s",
                 "configured" if seg_sink else "null",
                 "configured" if kp_sink else "null",
+                "configured" if stage_sink else "null",
             )
 
             # Wrapper callback that creates per-frame writers
@@ -269,17 +282,26 @@ class RocketWelderClient:
                         frame_metadata.frame_number,
                     )
                     # Use no-op writers
-                    on_frame(
-                        input_mat, _NoOpSegmentationWriter(), _NoOpKeyPointsWriter(), output_mat
-                    )
+                    with stage_sink.create_writer(frame_metadata.frame_number) as stage_writer:
+                        on_frame(
+                            input_mat,
+                            _NoOpSegmentationWriter(),
+                            _NoOpKeyPointsWriter(),
+                            stage_writer,
+                            output_mat,
+                        )
                     return
 
-                # Create per-frame writers from sinks
+                # Create per-frame writers from sinks (all auto-flush on context exit)
                 with seg_sink.create_writer(
                     frame_metadata.frame_number, caps.width, caps.height
-                ) as seg_writer, kp_sink.create_writer(frame_metadata.frame_number) as kp_writer:
+                ) as seg_writer, kp_sink.create_writer(
+                    frame_metadata.frame_number
+                ) as kp_writer, stage_sink.create_writer(
+                    frame_metadata.frame_number
+                ) as stage_writer:
                     # Call user callback with writers
-                    on_frame(input_mat, seg_writer, kp_writer, output_mat)
+                    on_frame(input_mat, seg_writer, kp_writer, stage_writer, output_mat)
                     # Writers auto-flush on context exit
 
             # Start the controller with our wrapper
@@ -323,6 +345,23 @@ class RocketWelderClient:
         except Exception as ex:
             logger.warning("Failed to create keypoints sink from %s: %s", url, ex)
             return _NullKeyPointsSink()
+
+    def _get_or_create_stage_sink(self) -> IStageSink:
+        """Get or create graphics stage sink from environment."""
+        import os
+
+        url = os.environ.get("GRAPHICS_SINK_URL")
+        if not url:
+            logger.debug("GRAPHICS_SINK_URL not set, using null sink")
+            return _NullStageSink()
+
+        try:
+            cs = GraphicsConnectionString.parse(url)
+            frame_sink = FrameSinkFactory.create(cs.protocol, cs.address)
+            return StageSink(frame_sink=frame_sink, owns_sink=True)
+        except Exception as ex:
+            logger.warning("Failed to create graphics stage sink from %s: %s", url, ex)
+            return _NullStageSink()
 
     def stop(self) -> None:
         """Stop the client and clean up resources."""
@@ -616,6 +655,165 @@ class _NullSegmentationSink(ISegmentationResultSink):
     def create_writer(self, frame_id: int, width: int, height: int) -> ISegmentationResultWriter:
         """Create a no-op writer."""
         return _NoOpSegmentationWriter()
+
+    def close(self) -> None:
+        """No-op close."""
+        pass
+
+
+class _NoOpLayerCanvas(ILayerCanvas):
+    """No-op layer canvas that discards all drawing operations."""
+
+    @property
+    def layer_id(self) -> int:
+        """The layer ID."""
+        return 0
+
+    # Frame type
+    def master(self) -> None:
+        """No-op."""
+        pass
+
+    def remain(self) -> None:
+        """No-op."""
+        pass
+
+    def clear(self) -> None:
+        """No-op."""
+        pass
+
+    # Context state - Styling
+    def set_stroke(self, color: RgbColor) -> None:
+        """No-op."""
+        pass
+
+    def set_fill(self, color: RgbColor) -> None:
+        """No-op."""
+        pass
+
+    def set_thickness(self, width: int) -> None:
+        """No-op."""
+        pass
+
+    def set_font_size(self, size: int) -> None:
+        """No-op."""
+        pass
+
+    def set_font_color(self, color: RgbColor) -> None:
+        """No-op."""
+        pass
+
+    # Context state - Transforms
+    def translate(self, dx: float, dy: float) -> None:
+        """No-op."""
+        pass
+
+    def rotate(self, degrees: float) -> None:
+        """No-op."""
+        pass
+
+    def scale(self, sx: float, sy: float) -> None:
+        """No-op."""
+        pass
+
+    def skew(self, kx: float, ky: float) -> None:
+        """No-op."""
+        pass
+
+    def set_matrix(
+        self,
+        scale_x: float,
+        skew_x: float,
+        trans_x: float,
+        skew_y: float,
+        scale_y: float,
+        trans_y: float,
+    ) -> None:
+        """No-op."""
+        pass
+
+    # Context stack
+    def save(self) -> None:
+        """No-op."""
+        pass
+
+    def restore(self) -> None:
+        """No-op."""
+        pass
+
+    def reset_context(self) -> None:
+        """No-op."""
+        pass
+
+    # Draw operations
+    def draw_polygon(self, points: Any) -> None:
+        """No-op."""
+        pass
+
+    def draw_text(self, text: str, x: int, y: int) -> None:
+        """No-op."""
+        pass
+
+    def draw_circle(self, center_x: int, center_y: int, radius: int) -> None:
+        """No-op."""
+        pass
+
+    def draw_rectangle(self, x: int, y: int, width: int, height: int) -> None:
+        """No-op."""
+        pass
+
+    def draw_line(self, x1: int, y1: int, x2: int, y2: int) -> None:
+        """No-op."""
+        pass
+
+    def draw_jpeg(self, jpeg_data: bytes, x: int, y: int, width: int, height: int) -> None:
+        """No-op."""
+        pass
+
+
+# Singleton instance
+_NO_OP_LAYER_CANVAS = _NoOpLayerCanvas()
+
+
+class _NoOpStageWriter(IStageWriter):
+    """No-op stage writer that discards all graphics operations."""
+
+    @property
+    def frame_id(self) -> int:
+        """The frame ID."""
+        return 0
+
+    def __getitem__(self, layer_id: int) -> ILayerCanvas:
+        """Returns no-op layer canvas."""
+        return _NO_OP_LAYER_CANVAS
+
+    def layer(self, layer_id: int) -> ILayerCanvas:
+        """Returns no-op layer canvas."""
+        return _NO_OP_LAYER_CANVAS
+
+    def close(self) -> None:
+        """No-op close."""
+        pass
+
+    def __enter__(self) -> _NoOpStageWriter:
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type: object, exc_val: object, exc_tb: object) -> None:
+        """Context manager exit."""
+        pass
+
+
+# Singleton instance
+_NO_OP_STAGE_WRITER = _NoOpStageWriter()
+
+
+class _NullStageSink(IStageSink):
+    """Null stage sink that creates no-op writers."""
+
+    def create_writer(self, frame_id: int) -> IStageWriter:
+        """Create a no-op writer."""
+        return _NO_OP_STAGE_WRITER
 
     def close(self) -> None:
         """No-op close."""
