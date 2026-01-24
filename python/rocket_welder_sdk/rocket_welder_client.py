@@ -308,6 +308,129 @@ class RocketWelderClient:
             self._controller.start(writer_callback, cancellation_token)  # type: ignore[arg-type]
             logger.info("RocketWelder client started with writers: %s", self._connection)
 
+    def start_with_writers_oneway(
+        self,
+        on_frame: Callable[[Mat, ISegmentationResultWriter, IKeyPointsWriter, IStageWriter], None],  # type: ignore[valid-type]
+        cancellation_token: Optional[threading.Event] = None,
+    ) -> None:
+        """
+        Start receiving frames with writers in ONE-WAY mode (no output frame).
+
+        This is for inference-only containers that consume frames but don't produce
+        modified output. Data is streamed via Unix sockets for downstream consumers.
+
+        Configuration via environment variables:
+        - SEGMENTATION_SINK_URL: URL for segmentation output (e.g., socket:///tmp/seg.sock)
+        - KEYPOINTS_SINK_URL: URL for keypoints output (e.g., socket:///tmp/kp.sock)
+        - GRAPHICS_SINK_URL: URL for graphics/stage output (e.g., socket:///tmp/stage.sock)
+
+        Args:
+            on_frame: Callback receiving (input_mat, seg_writer, kp_writer, stage_writer).
+                     Note: NO output_mat parameter - this is one-way/sink mode.
+            cancellation_token: Optional cancellation token
+
+        Example:
+            def process_frame(input_mat, seg_writer, kp_writer, stage_writer):
+                # Run AI inference
+                result = ai_model.infer(input_mat)
+
+                # Write segmentation results
+                for instance in result.instances:
+                    seg_writer.append(instance.class_id, instance.instance_id, instance.points)
+
+                # Write keypoints
+                for kp in result.keypoints:
+                    kp_writer.append(kp.id, kp.x, kp.y, kp.confidence)
+
+                # Draw graphics overlay
+                layer = stage_writer[0]
+                layer.set_font_size(24)
+                layer.draw_text("Detection count: 5", 10, 30)
+
+                # NOTE: No output_mat - we don't modify frames in sink mode
+
+            client.start_with_writers_oneway(process_frame)
+
+        Raises:
+            RuntimeError: If already running
+            ValueError: If connection type is not supported
+        """
+        with self._lock:
+            if self._controller and self._controller.is_running:
+                raise RuntimeError("Client is already running")
+
+            # Create controller - OneWay mode uses OneWayShmController
+            if self._connection.protocol == Protocol.SHM:
+                if self._connection.connection_mode == ConnectionMode.DUPLEX:
+                    # For duplex mode, use the other method
+                    raise ValueError(
+                        "start_with_writers_oneway() is for OneWay mode. "
+                        "Use start_with_writers() for Duplex mode."
+                    )
+                self._controller = OneWayShmController(self._connection)
+            elif self._connection.protocol == Protocol.FILE or bool(
+                self._connection.protocol & Protocol.MJPEG  # type: ignore[operator]
+            ):
+                self._controller = OpenCvController(self._connection)
+            else:
+                raise ValueError(f"Unsupported protocol: {self._connection.protocol}")
+
+            # Create sinks from environment
+            seg_sink = self._get_or_create_segmentation_sink()
+            kp_sink = self._get_or_create_keypoints_sink()
+            stage_sink = self._get_or_create_stage_sink()
+
+            logger.info(
+                "Starting RocketWelder client with AI output support (one-way): seg=%s, kp=%s, stage=%s",
+                "configured" if seg_sink else "null",
+                "configured" if kp_sink else "null",
+                "configured" if stage_sink else "null",
+            )
+
+            # Track frame number manually for one-way mode (no FrameMetadata from controller)
+            frame_number_holder = [0]  # Use list to allow mutation in nested function
+
+            # Wrapper callback that creates per-frame writers
+            # OneWay controller provides only input Mat, no output Mat
+            def writer_callback_oneway(input_mat: Mat) -> None:  # type: ignore[valid-type]
+                frame_number_holder[0] += 1
+                frame_number = frame_number_holder[0]
+
+                # Get caps from controller metadata (width/height for segmentation)
+                metadata = self._controller.get_metadata() if self._controller else None
+                caps = metadata.caps if metadata else None
+
+                if caps is None:
+                    logger.warning(
+                        "GstCaps not available for frame %d, using no-op writers",
+                        frame_number,
+                    )
+                    # Use no-op writers
+                    with stage_sink.create_writer(frame_number) as stage_writer:
+                        on_frame(
+                            input_mat,
+                            _NoOpSegmentationWriter(),
+                            _NoOpKeyPointsWriter(),
+                            stage_writer,
+                        )
+                    return
+
+                # Create per-frame writers from sinks (all auto-flush on context exit)
+                with seg_sink.create_writer(
+                    frame_number, caps.width, caps.height
+                ) as seg_writer, kp_sink.create_writer(
+                    frame_number
+                ) as kp_writer, stage_sink.create_writer(
+                    frame_number
+                ) as stage_writer:
+                    # Call user callback with writers (no output_mat for one-way)
+                    on_frame(input_mat, seg_writer, kp_writer, stage_writer)
+                    # Writers auto-flush on context exit
+
+            # Start the controller with our wrapper (single-Mat callback for OneWay)
+            self._controller.start(writer_callback_oneway, cancellation_token)
+            logger.info("RocketWelder client started with writers (one-way): %s", self._connection)
+
     def _get_or_create_segmentation_sink(self) -> ISegmentationResultSink:
         """Get or create segmentation result sink from environment."""
         import os

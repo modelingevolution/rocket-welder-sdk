@@ -114,10 +114,15 @@ class BallDetectionService:
         self._logger.info("Keypoints sink: %s", kp_url or "(NullSink)")
         self._logger.info("Graphics sink: %s", gfx_url or "(NullSink)")
 
-        # Use the start_with_writers that provides writers
-        self._logger.info("Running in DUPLEX mode (sink-only, no frame modification)")
+        # Check connection mode and use appropriate method
+        from rocket_welder_sdk.connection_string import ConnectionMode
 
-        self._client.start_with_writers(self._process_frame_with_writers, cancellation_token)
+        if self._client.connection.connection_mode == ConnectionMode.DUPLEX:
+            self._logger.info("Running in DUPLEX mode (with output frame)")
+            self._client.start_with_writers(self._process_frame_duplex, cancellation_token)
+        else:
+            self._logger.info("Running in ONE-WAY mode (sink-only, no output frame)")
+            self._client.start_with_writers_oneway(self._process_frame_oneway, cancellation_token)
 
         if self._exit_after > 0:
             self._logger.info("Will exit after %d frames", self._exit_after)
@@ -129,7 +134,17 @@ class BallDetectionService:
         self._logger.info("Stopping client... Total frames: %d", self._frame_count)
         self._client.stop()
 
-    def _process_frame_with_writers(
+    def _process_frame_oneway(
+        self,
+        input_frame: npt.NDArray[Any],
+        seg_writer: rw.ISegmentationResultWriter,
+        kp_writer: rw.IKeyPointsWriter,
+        stage_writer: rw.IStageWriter,
+    ) -> None:
+        """Process frame in ONE-WAY mode (no output frame)."""
+        self._process_frame_common(input_frame, seg_writer, kp_writer, stage_writer)
+
+    def _process_frame_duplex(
         self,
         input_frame: npt.NDArray[Any],
         seg_writer: rw.ISegmentationResultWriter,
@@ -137,7 +152,19 @@ class BallDetectionService:
         stage_writer: rw.IStageWriter,
         output_frame: npt.NDArray[Any],
     ) -> None:
-        """Process frame with writers - matches C# ProcessFrameWithWriters exactly."""
+        """Process frame in DUPLEX mode (with output frame)."""
+        self._process_frame_common(input_frame, seg_writer, kp_writer, stage_writer)
+        # NOTE: We do NOT modify output - this is a sink-only example
+        # But we could copy input to output if needed: output_frame[:] = input_frame
+
+    def _process_frame_common(
+        self,
+        input_frame: npt.NDArray[Any],
+        seg_writer: rw.ISegmentationResultWriter,
+        kp_writer: rw.IKeyPointsWriter,
+        stage_writer: rw.IStageWriter,
+    ) -> None:
+        """Common frame processing logic for both modes."""
         self._frame_count += 1
 
         # Detect ball
@@ -184,8 +211,6 @@ class BallDetectionService:
                 )
             else:
                 self._logger.info("Frame %d: No ball detected", self._frame_count)
-
-        # NOTE: We do NOT modify output - this is a sink-only example
 
         self._check_exit()
 
