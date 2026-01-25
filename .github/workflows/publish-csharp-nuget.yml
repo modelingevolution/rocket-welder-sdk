@@ -42,37 +42,28 @@ jobs:
         echo "VERSION=$VERSION" >> $GITHUB_ENV
         echo "version=$VERSION" >> $GITHUB_OUTPUT
     
-    - name: Update version in csproj
-      run: |
-        VERSION="${{ steps.version.outputs.version }}"
-        # Update SDK.Types version (must be first - no dependencies)
-        cd csharp/RocketWelder.SDK.Types
-        sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.SDK.Types.csproj
-        sed -i "s/<PackageVersion>.*<\/PackageVersion>/<PackageVersion>$VERSION<\/PackageVersion>/" RocketWelder.SDK.Types.csproj
-        cd ..
-        # Update SDK.Protocols version
-        cd RocketWelder.SDK.Protocols
-        sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.SDK.Protocols.csproj
-        sed -i "s/<PackageVersion>.*<\/PackageVersion>/<PackageVersion>$VERSION<\/PackageVersion>/" RocketWelder.SDK.Protocols.csproj
-        cd ..
-        # Update SDK version
-        cd RocketWelder.SDK
-        sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.SDK.csproj
-        sed -i "s/<PackageVersion>.*<\/PackageVersion>/<PackageVersion>$VERSION<\/PackageVersion>/" RocketWelder.SDK.csproj
-        cd ..
-        # Update SDK.Blazor version
-        cd RocketWelder.SDK.Blazor
-        sed -i "s/<Version>.*<\/Version>/<Version>$VERSION<\/Version>/" RocketWelder.SDK.Blazor.csproj
-        sed -i "s/<PackageVersion>.*<\/PackageVersion>/<PackageVersion>$VERSION<\/PackageVersion>/" RocketWelder.SDK.Blazor.csproj
-    
     - name: Restore dependencies
       working-directory: ./csharp
       run: dotnet restore
     
     - name: Build
       working-directory: ./csharp
-      run: dotnet build --configuration Release --no-restore
+      run: dotnet build --configuration Release --no-restore /p:Version=${{ steps.version.outputs.version }}
     
+    - name: Pack SDK.Automation
+      working-directory: ./csharp
+      run: dotnet pack RocketWelder.SDK.Automation/RocketWelder.SDK.Automation.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
+
+    - name: Push SDK.Automation to NuGet
+      working-directory: ./csharp
+      run: |
+        dotnet nuget push ./nupkg/RocketWelder.SDK.Automation.*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
     - name: Pack SDK.Types
       working-directory: ./csharp
       run: dotnet pack RocketWelder.SDK.Types/RocketWelder.SDK.Types.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
@@ -143,6 +134,12 @@ jobs:
         echo "## C# Packages Published to NuGet" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### RocketWelder.SDK.Automation" >> $GITHUB_STEP_SUMMARY
+        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Automation" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo 'dotnet add package RocketWelder.SDK.Automation --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### RocketWelder.SDK.Types" >> $GITHUB_STEP_SUMMARY
         echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Types" >> $GITHUB_STEP_SUMMARY
