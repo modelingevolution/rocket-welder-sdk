@@ -28,6 +28,25 @@ internal sealed class RocketWelderClientImpl : IRocketWelderClient
     public IKeyPointsSchema KeyPoints => _keyPointsSchema;
     public ISegmentationSchema Segmentation => _segmentationSchema;
 
+    /// <summary>
+    /// Path to the ML model file mounted in the container.
+    /// Reads from ML_MODEL_PATH environment variable.
+    /// </summary>
+    public string? MlModelPath => Environment.GetEnvironmentVariable("ML_MODEL_PATH");
+
+    /// <summary>
+    /// Version of the ML model.
+    /// Reads from ML_MODEL_VERSION environment variable.
+    /// </summary>
+    public long? MlModelVersion
+    {
+        get
+        {
+            var value = Environment.GetEnvironmentVariable("ML_MODEL_VERSION");
+            return long.TryParse(value, out var version) ? version : null;
+        }
+    }
+
     public Task StartAsync(
         Action<Mat, ISegmentationDataContext, IKeyPointsDataContext, Mat> processFrame,
         CancellationToken cancellationToken = default)

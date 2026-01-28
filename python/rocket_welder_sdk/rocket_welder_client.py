@@ -85,6 +85,42 @@ class RocketWelderClient:
         with self._lock:
             return self._controller is not None and self._controller.is_running
 
+    @property
+    def ml_model_path(self) -> Optional[str]:
+        """
+        Path to the ML model file mounted in the container.
+
+        Reads from ML_MODEL_PATH environment variable set by RocketWelder
+        when a model is mapped to this container's pipeline element.
+
+        Returns:
+            The path to the model file (e.g., /var/models/model.hef),
+            or None if no model is configured.
+        """
+        import os
+
+        return os.environ.get("ML_MODEL_PATH")
+
+    @property
+    def ml_model_version(self) -> Optional[int]:
+        """
+        Version of the ML model.
+
+        Reads from ML_MODEL_VERSION environment variable set by RocketWelder.
+
+        Returns:
+            The model version as integer, or None if not set or not a valid number.
+        """
+        import os
+
+        value = os.environ.get("ML_MODEL_VERSION")
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            return None
+
     def get_metadata(self) -> Optional[GstMetadata]:
         """
         Get the current GStreamer metadata.
@@ -576,6 +612,47 @@ class RocketWelderClient:
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         """Context manager exit."""
         self.stop()
+
+    @staticmethod
+    def get_ml_model_path() -> Optional[str]:
+        """
+        Get the ML model path from environment (static method).
+
+        Convenience method to get the model path without creating a client instance.
+        Useful during initialization before the client is created.
+
+        Returns:
+            The path to the model file (e.g., /var/models/model.hef),
+            or None if no model is configured.
+
+        Example:
+            model_path = RocketWelderClient.get_ml_model_path()
+            if model_path:
+                model = load_model(model_path)
+            else:
+                raise RuntimeError("No ML model configured")
+        """
+        import os
+
+        return os.environ.get("ML_MODEL_PATH")
+
+    @staticmethod
+    def get_ml_model_version() -> Optional[int]:
+        """
+        Get the ML model version from environment (static method).
+
+        Returns:
+            The model version as integer, or None if not set or not a valid number.
+        """
+        import os
+
+        value = os.environ.get("ML_MODEL_VERSION")
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except ValueError:
+            return None
 
     @classmethod
     def from_connection_string(cls, connection_string: str) -> RocketWelderClient:

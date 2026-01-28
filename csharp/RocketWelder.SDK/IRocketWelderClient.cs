@@ -22,6 +22,20 @@ public interface IRocketWelderClient : IDisposable, IAsyncDisposable
     ISegmentationSchema Segmentation { get; }
 
     /// <summary>
+    /// Path to the ML model file mounted in the container.
+    /// Reads from ML_MODEL_PATH environment variable.
+    /// Returns null if no model is configured.
+    /// </summary>
+    string? MlModelPath { get; }
+
+    /// <summary>
+    /// Version of the ML model.
+    /// Reads from ML_MODEL_VERSION environment variable.
+    /// Returns null if no model is configured.
+    /// </summary>
+    long? MlModelVersion { get; }
+
+    /// <summary>
     /// Starts the processing loop with full context (keypoints + segmentation).
     /// </summary>
     /// <param name="processFrame">
