@@ -43,6 +43,7 @@ def read_file(file_path: str) -> None:
                         {
                             "class_id": inst.class_id,
                             "instance_id": inst.instance_id,
+                            "confidence": inst.confidence,
                             "points": inst.to_list(),
                         }
                         for inst in instances
@@ -80,8 +81,9 @@ def write_file(file_path: str, frame_id: int, width: int, height: int, instances
                 for inst in instances_data:
                     class_id = inst["class_id"]
                     instance_id = inst["instance_id"]
+                    confidence = inst.get("confidence", 0.95)  # Default to 0.95 if not specified
                     points = np.array(inst["points"], dtype=np.int32)
-                    writer.append(class_id, instance_id, points)
+                    writer.append(class_id, instance_id, confidence, points)
             sink.close()
 
         print(f"Successfully wrote {len(instances_data)} instances to {file_path}")

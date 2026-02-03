@@ -38,11 +38,13 @@ TEST_SEGMENTATION_INSTANCES = [
     {
         "class_id": 1,
         "instance_id": 1,
+        "confidence": 0.95,
         "points": [(100, 100), (200, 100), (200, 200), (100, 200)],  # Rectangle
     },
     {
         "class_id": 2,
         "instance_id": 1,
+        "confidence": 0.88,
         "points": [(300, 300), (350, 250), (400, 300)],  # Triangle
     },
 ]
@@ -144,6 +146,9 @@ def write_segmentation_frames(
                     points = inst["points"]
                     # ClassId (1 byte), InstanceId (1 byte)
                     buffer.write(bytes([inst["class_id"], inst["instance_id"]]))
+                    # Confidence (2 bytes, little-endian uint16, 0-65535)
+                    confidence_raw = int(max(0.0, min(1.0, inst["confidence"])) * 65535)
+                    buffer.write(struct.pack("<H", confidence_raw))
                     # Point count (varint)
                     _write_varint(buffer, len(points))
 
