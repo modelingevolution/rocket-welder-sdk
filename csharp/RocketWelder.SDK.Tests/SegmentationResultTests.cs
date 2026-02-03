@@ -59,7 +59,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         // Act - Write
         using (var writer = new SegmentationResultWriter(frameId, width, height, stream, leaveOpen: true))
         {
-            writer.Append(classId, instanceId, points);
+            writer.Append(classId, instanceId, 0.95f, points);
         }
 
         // Act - Read
@@ -103,7 +103,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         {
             foreach (var (classId, instanceId, points) in instances)
             {
-                writer.Append(classId, instanceId, points);
+                writer.Append(classId, instanceId, 0.95f, points);
             }
         }
 
@@ -145,7 +145,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         // Act - Write
         using (var writer = new SegmentationResultWriter(frameId, width, height, stream, leaveOpen: true))
         {
-            writer.Append(classId, instanceId, points);
+            writer.Append(classId, instanceId, 0.95f, points);
         }
 
         // Act - Read
@@ -183,7 +183,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         // Act - Write
         using (var writer = new SegmentationResultWriter(frameId, width, height, stream, leaveOpen: true))
         {
-            writer.Append(classId, instanceId, points);
+            writer.Append(classId, instanceId, 0.95f, points);
         }
 
         output.WriteLine($"Wrote {points.Count} points in {stream.Position}B");
@@ -225,7 +225,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         // Act - Write
         using (var writer = new SegmentationResultWriter(1, 200, 200, stream, leaveOpen: true))
         {
-            writer.Append(1, 1, points);
+            writer.Append(1, 1, 0.95f, points);
         }
 
         // Act - Read
@@ -257,7 +257,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         using var stream = new MemoryStream();
         using (var writer = new SegmentationResultWriter(1, width, height, stream, leaveOpen: true))
         {
-            writer.Append(1, 1, points);
+            writer.Append(1, 1, 0.95f, points);
         }
 
         var frame = await ReadSingleFrameAsync(stream);
@@ -291,7 +291,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         // Act
         using (var writer = new SegmentationResultWriter(1, 100, 100, stream, leaveOpen: true))
         {
-            writer.Append(1, 1, points.AsSpan());
+            writer.Append(1, 1, 0.95f, points.AsSpan());
         }
 
         // Assert
@@ -319,7 +319,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         // Act
         using (var writer = new SegmentationResultWriter(1, 100, 100, stream, leaveOpen: true))
         {
-            writer.Append(1, 1, points);
+            writer.Append(1, 1, 0.95f, points);
         }
 
         // Assert
@@ -350,7 +350,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         {
             foreach (var inst in frame1Data.Instances)
             {
-                writer1.Append(inst.ClassId, inst.InstanceId, inst.Points);
+                writer1.Append(inst.ClassId, inst.InstanceId, 0.95f, inst.Points);
             }
         }
 
@@ -358,7 +358,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         {
             foreach (var inst in frame2Data.Instances)
             {
-                writer2.Append(inst.ClassId, inst.InstanceId, inst.Points);
+                writer2.Append(inst.ClassId, inst.InstanceId, 0.95f, inst.Points);
             }
         }
 
@@ -403,7 +403,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         using var writer = new SegmentationResultWriter(1, 100, 100, stream, leaveOpen: true);
 
         // Act
-        writer.Append(1, 1, points);
+        writer.Append(1, 1, 0.95f, points);
         writer.Flush();
 
         // Assert - Data should be written (including length prefix)
@@ -422,12 +422,12 @@ public class SegmentationResultTests(ITestOutputHelper output)
         // Act - Write multiple frames via sink
         using (var writer1 = sink.CreateWriter(1, 640, 480))
         {
-            writer1.Append(1, 1, new[] { new Point(10, 20) });
+            writer1.Append(1, 1, 0.95f, new[] { new Point(10, 20) });
         }
 
         using (var writer2 = sink.CreateWriter(2, 1920, 1080))
         {
-            writer2.Append(2, 1, new[] { new Point(100, 200) });
+            writer2.Append(2, 1, 0.95f, new[] { new Point(100, 200) });
         }
 
         // Assert - Read back
@@ -456,7 +456,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         for (int i = 0; i < 3; i++)
         {
             using var writer = new SegmentationResultWriter((ulong)i, 640, 480, stream, leaveOpen: true);
-            writer.Append(1, 1, new[] { new Point(i * 10, i * 20) });
+            writer.Append(1, 1, 0.95f, new[] { new Point(i * 10, i * 20) });
         }
 
         // Act - Stream frames
@@ -502,7 +502,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
             {
                 foreach (var (classId, instanceId, points) in testData)
                 {
-                    writer.Append(classId, instanceId, points);
+                    writer.Append(classId, instanceId, 0.95f, points);
                 }
             }
 
@@ -628,7 +628,7 @@ public class SegmentationResultTests(ITestOutputHelper output)
         {
             foreach (var (classId, instanceId, points) in testData)
             {
-                writer.Append(classId, instanceId, points);
+                writer.Append(classId, instanceId, 0.95f, points);
             }
         }
 
@@ -778,13 +778,13 @@ public class SegmentationResultTests(ITestOutputHelper output)
             using (var writer1 = new SegmentationResultWriter(frame1Data.FrameId, frame1Data.Width, frame1Data.Height, stream, leaveOpen: true))
             {
                 foreach (var (classId, instanceId, points) in frame1Data.Instances)
-                    writer1.Append(classId, instanceId, points);
+                    writer1.Append(classId, instanceId, 0.95f, points);
             }
 
             using (var writer2 = new SegmentationResultWriter(frame2Data.FrameId, frame2Data.Width, frame2Data.Height, stream, leaveOpen: true))
             {
                 foreach (var (classId, instanceId, points) in frame2Data.Instances)
-                    writer2.Append(classId, instanceId, points);
+                    writer2.Append(classId, instanceId, 0.95f, points);
             }
         }
 

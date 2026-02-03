@@ -90,7 +90,7 @@ namespace RocketWelder.SDK
             _headerWritten = true;
         }
 
-        public void Append(byte classId, byte instanceId, in ReadOnlySpan<Point> points)
+        public void Append(byte classId, byte instanceId, float confidence, in ReadOnlySpan<Point> points)
         {
             EnsureHeaderWritten();
 
@@ -99,6 +99,12 @@ namespace RocketWelder.SDK
             header[0] = classId;
             header[1] = instanceId;
             _buffer.Write(header);
+
+            // Write confidence as 2 bytes little-endian (ushort 0-65535)
+            ushort confidenceRaw = (ushort)Math.Clamp(confidence * ushort.MaxValue, 0, ushort.MaxValue);
+            Span<byte> confidenceBytes = stackalloc byte[2];
+            BinaryPrimitives.WriteUInt16LittleEndian(confidenceBytes, confidenceRaw);
+            _buffer.Write(confidenceBytes);
 
             // Write point count
             _buffer.WriteVarint((uint)points.Length);
@@ -120,40 +126,40 @@ namespace RocketWelder.SDK
             }
         }
 
-        public void Append(byte classId, byte instanceId, Point[] points)
+        public void Append(byte classId, byte instanceId, float confidence, Point[] points)
         {
-            Append(classId, instanceId, points.AsSpan());
+            Append(classId, instanceId, confidence, points.AsSpan());
         }
 
-        public void Append(byte classId, byte instanceId, IEnumerable<Point> points)
+        public void Append(byte classId, byte instanceId, float confidence, IEnumerable<Point> points)
         {
             // Try to avoid allocation by using span directly for known collection types
             if (points is Point[] array)
             {
-                Append(classId, instanceId, array.AsSpan());
+                Append(classId, instanceId, confidence, array.AsSpan());
             }
             else if (points is List<Point> list)
             {
                 // Zero-allocation access to List<T> internal array
-                Append(classId, instanceId, CollectionsMarshal.AsSpan(list));
+                Append(classId, instanceId, confidence, CollectionsMarshal.AsSpan(list));
             }
             else
             {
                 // Unavoidable allocation for arbitrary IEnumerable
                 var tempArray = points.ToArray();
-                Append(classId, instanceId, tempArray.AsSpan());
+                Append(classId, instanceId, confidence, tempArray.AsSpan());
             }
         }
 
-        public Task AppendAsync(byte classId, byte instanceId, Point[] points)
+        public Task AppendAsync(byte classId, byte instanceId, float confidence, Point[] points)
         {
-            Append(classId, instanceId, points);
+            Append(classId, instanceId, confidence, points);
             return Task.CompletedTask;
         }
 
-        public Task AppendAsync(byte classId, byte instanceId, IEnumerable<Point> points)
+        public Task AppendAsync(byte classId, byte instanceId, float confidence, IEnumerable<Point> points)
         {
-            Append(classId, instanceId, points);
+            Append(classId, instanceId, confidence, points);
             return Task.CompletedTask;
         }
 
@@ -221,27 +227,31 @@ namespace RocketWelder.SDK
         /// <summary>
         /// Append an instance with contour points (zero-copy, preferred).
         /// </summary>
-        void Append(byte classId, byte instanceId, in ReadOnlySpan<Point> points);
+        /// <param name="classId">Class identifier (0-255).</param>
+        /// <param name="instanceId">Instance identifier within class (0-255).</param>
+        /// <param name="confidence">Detection confidence score (0.0-1.0).</param>
+        /// <param name="points">Polygon contour points.</param>
+        void Append(byte classId, byte instanceId, float confidence, in ReadOnlySpan<Point> points);
 
         /// <summary>
         /// Append an instance with contour points (array overload).
         /// </summary>
-        void Append(byte classId, byte instanceId, Point[] points);
+        void Append(byte classId, byte instanceId, float confidence, Point[] points);
 
         /// <summary>
         /// Append an instance with contour points (enumerable overload for flexibility).
         /// </summary>
-        void Append(byte classId, byte instanceId, IEnumerable<Point> points);
+        void Append(byte classId, byte instanceId, float confidence, IEnumerable<Point> points);
 
         /// <summary>
         /// Append an instance with contour points asynchronously (array overload).
         /// </summary>
-        Task AppendAsync(byte classId, byte instanceId, Point[] points);
+        Task AppendAsync(byte classId, byte instanceId, float confidence, Point[] points);
 
         /// <summary>
         /// Append an instance with contour points asynchronously (enumerable overload).
         /// </summary>
-        Task AppendAsync(byte classId, byte instanceId, IEnumerable<Point> points);
+        Task AppendAsync(byte classId, byte instanceId, float confidence, IEnumerable<Point> points);
 
         /// <summary>
         /// Flush buffered data to underlying stream without disposing.
@@ -254,19 +264,6 @@ namespace RocketWelder.SDK
         Task FlushAsync();
     }
 
-
-    /// <summary>
-    /// [DEPRECATED] Use ISegmentationResultSink instead.
-    /// Legacy factory interface for backward compatibility.
-    /// </summary>
-    [Obsolete("Use ISegmentationResultSink instead. This interface will be removed in a future version.")]
-    public interface ISegmentationResultStorage
-    {
-        /// <summary>
-        /// Create a writer for the current frame.
-        /// </summary>
-        ISegmentationResultWriter CreateWriter(ulong frameId, uint width, uint height);
-    }
 
     /// <summary>
     /// Factory for creating segmentation result writers per frame (transport-agnostic).
@@ -361,6 +358,13 @@ namespace RocketWelder.SDK
                 byte classId = (byte)classIdByte;
                 byte instanceId = (byte)instanceIdByte;
 
+                // Read confidence: [confidence: 2B LE]
+                Span<byte> confidenceBytes = stackalloc byte[2];
+                if (stream.Read(confidenceBytes) != 2)
+                    throw new EndOfStreamException("Unexpected end of stream reading confidence");
+                ushort confidenceRaw = BinaryPrimitives.ReadUInt16LittleEndian(confidenceBytes);
+                Confidence confidence = (Confidence)confidenceRaw;
+
                 // Read point count
                 uint pointCount = stream.ReadVarint();
                 if (pointCount > MaxPointsPerInstance)
@@ -386,7 +390,7 @@ namespace RocketWelder.SDK
                     }
                 }
 
-                instances.Add(new SegmentationInstance(classId, instanceId, points));
+                instances.Add(new SegmentationInstance(classId, instanceId, confidence, points));
             }
 
             return new SegmentationFrame(frameId, width, height, instances);
@@ -467,11 +471,11 @@ namespace RocketWelder.SDK
         public static readonly NoOpSegmentationWriter Instance = new();
         private NoOpSegmentationWriter() { }
 
-        public void Append(byte classId, byte instanceId, in ReadOnlySpan<Point> points) { }
-        public void Append(byte classId, byte instanceId, Point[] points) { }
-        public void Append(byte classId, byte instanceId, IEnumerable<Point> points) { }
-        public Task AppendAsync(byte classId, byte instanceId, Point[] points) => Task.CompletedTask;
-        public Task AppendAsync(byte classId, byte instanceId, IEnumerable<Point> points) => Task.CompletedTask;
+        public void Append(byte classId, byte instanceId, float confidence, in ReadOnlySpan<Point> points) { }
+        public void Append(byte classId, byte instanceId, float confidence, Point[] points) { }
+        public void Append(byte classId, byte instanceId, float confidence, IEnumerable<Point> points) { }
+        public Task AppendAsync(byte classId, byte instanceId, float confidence, Point[] points) => Task.CompletedTask;
+        public Task AppendAsync(byte classId, byte instanceId, float confidence, IEnumerable<Point> points) => Task.CompletedTask;
         public void Flush() { }
         public Task FlushAsync() => Task.CompletedTask;
         public void Dispose() { }

@@ -85,6 +85,7 @@ class ISegmentationDataContext(ABC):
         self,
         segment_class: SegmentClass,
         instance_id: int,
+        confidence: float,
         points: Union[Sequence[Point], npt.NDArray[np.int32]],
     ) -> None:
         """
@@ -93,6 +94,7 @@ class ISegmentationDataContext(ABC):
         Args:
             segment_class: SegmentClass from schema definition
             instance_id: Instance ID (for multiple instances of same class, 0-255)
+            confidence: Detection confidence score (0.0-1.0)
             points: Contour points defining the instance boundary
         """
         pass
@@ -150,6 +152,7 @@ class SegmentationDataContext(ISegmentationDataContext):
         self,
         segment_class: SegmentClass,
         instance_id: int,
+        confidence: float,
         points: Union[Sequence[Point], npt.NDArray[np.int32]],
     ) -> None:
         """Add a segmentation instance for this frame."""
@@ -162,7 +165,7 @@ class SegmentationDataContext(ISegmentationDataContext):
         else:
             points_array = np.array(points, dtype=np.int32)
 
-        self._writer.append(segment_class.class_id, instance_id, points_array)
+        self._writer.append(segment_class.class_id, instance_id, confidence, points_array)
 
     def commit(self) -> None:
         """Commit the context (called automatically when delegate returns)."""

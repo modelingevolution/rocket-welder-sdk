@@ -214,6 +214,10 @@ public sealed class SegmentationDocument : IDisposable
             if (instanceIdByte == -1)
                 throw new EndOfStreamException("Unexpected end of stream reading instanceId");
 
+            // Skip confidence (2 bytes)
+            if (stream.Read(stackalloc byte[2]) != 2)
+                throw new EndOfStreamException("Unexpected end of stream reading confidence");
+
             uint pointCount = stream.ReadVarint();
             if (pointCount > MaxPointsPerInstance)
                 throw new InvalidDataException($"Point count {pointCount} exceeds maximum");
@@ -255,6 +259,13 @@ public sealed class SegmentationDocument : IDisposable
 
                 byte classId = (byte)classIdByte;
                 byte instanceId = (byte)stream.ReadByte();
+
+                // Read confidence (2 bytes LE)
+                Span<byte> confidenceBytes = stackalloc byte[2];
+                stream.Read(confidenceBytes);
+                ushort confidenceRaw = BinaryPrimitives.ReadUInt16LittleEndian(confidenceBytes);
+                var confidence = (Protocols.Confidence)confidenceRaw;
+
                 uint pointCount = stream.ReadVarint();
 
                 int instancePointStart = pointOffset;
@@ -279,6 +290,7 @@ public sealed class SegmentationDocument : IDisposable
                 instancesBuffer[instanceIndex++] = new SegmentationInstance(
                     classId,
                     instanceId,
+                    confidence,
                     pointsBuffer.AsMemory(instancePointStart, (int)pointCount));
             }
 

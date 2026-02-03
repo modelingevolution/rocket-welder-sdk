@@ -10,7 +10,7 @@ namespace RocketWelder.SDK.Blazor;
 /// <summary>
 /// WASM-side decoder for segmentation polygon data.
 /// Protocol: [FrameId:8B][Width:varint][Height:varint][Instances...]
-/// Instance: [ClassId:1B][InstanceId:1B][PointCount:varint][Points:zigzag+delta]
+/// Instance: [ClassId:1B][InstanceId:1B][Confidence:2B LE][PointCount:varint][Points:zigzag+delta]
 /// </summary>
 public class SegmentationDecoder : IFrameDecoder
 {
@@ -75,6 +75,7 @@ public class SegmentationDecoder : IFrameDecoder
             {
                 var classId = reader.ReadByte();
                 var instanceId = reader.ReadByte();
+                var confidence = reader.ReadUInt16LE();  // confidence (0-65535), not used for rendering
                 var pointCount = (int)reader.ReadVarint();
 
                 if (pointCount == 0)

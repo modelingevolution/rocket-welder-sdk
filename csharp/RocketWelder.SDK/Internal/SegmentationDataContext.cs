@@ -20,9 +20,9 @@ internal sealed class SegmentationDataContext : ISegmentationDataContext
 
     public ulong FrameId { get; }
 
-    public void Add(SegmentClass segmentClass, byte instanceId, ReadOnlySpan<Point> points)
+    public void Add(SegmentClass segmentClass, byte instanceId, float confidence, ReadOnlySpan<Point> points)
     {
-        _writer.Append(segmentClass.ClassId, instanceId, points);
+        _writer.Append(segmentClass.ClassId, instanceId, confidence, points);
     }
 
     public void Dispose()

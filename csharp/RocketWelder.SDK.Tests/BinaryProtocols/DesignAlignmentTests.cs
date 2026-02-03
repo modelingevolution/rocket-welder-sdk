@@ -78,11 +78,13 @@ public class DesignAlignmentTests
                 new ProtocolSegmentationInstance(
                     ClassId: 0,
                     InstanceId: 1,
+                    Confidence: (Protocols.Confidence)0.95f,
                     Points: new Point[] { new(100, 100), new(200, 100), new(150, 200) }
                 ),
                 new ProtocolSegmentationInstance(
                     ClassId: 1,
                     InstanceId: 0,
+                    Confidence: (Protocols.Confidence)0.88f,
                     Points: new Point[] { new(300, 300), new(400, 350) }
                 )
             }
@@ -120,12 +122,13 @@ public class DesignAlignmentTests
         Span<byte> buffer = stackalloc byte[64];
         var points = new Point[] { new(100, 100), new(200, 150), new(150, 200) };
 
-        int written = SegmentationProtocol.WriteInstance(buffer, classId: 0, instanceId: 1, points);
+        int written = SegmentationProtocol.WriteInstance(buffer, classId: 0, instanceId: 1, (Protocols.Confidence)0.95f, points);
 
         // Verify structure manually
         var reader = new BinaryFrameReader(buffer[..written]);
         Assert.Equal(0, reader.ReadByte());   // classId
         Assert.Equal(1, reader.ReadByte());   // instanceId
+        Assert.Equal(62258, reader.ReadUInt16LE()); // confidence (0.95 * 65535)
         Assert.Equal(3U, reader.ReadVarint()); // pointCount
 
         // First point is absolute (zigzag)
@@ -231,6 +234,7 @@ public class DesignAlignmentTests
 
         writer.WriteByte(classId);
         writer.WriteByte(instanceId);
+        writer.WriteUInt16LE(62258);  // confidence (0.95 * 65535)
         writer.WriteVarint((uint)points.Length);
 
         // Delta encoding (same as SDK)

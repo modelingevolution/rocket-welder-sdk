@@ -19,6 +19,7 @@ public interface ISegmentationDataContext : IDisposable
     /// </summary>
     /// <param name="segmentClass">SegmentClass from schema definition</param>
     /// <param name="instanceId">Instance ID (for multiple instances of same class)</param>
+    /// <param name="confidence">Detection confidence score (0.0-1.0)</param>
     /// <param name="points">Contour points defining the instance boundary</param>
-    void Add(SegmentClass segmentClass, byte instanceId, ReadOnlySpan<Point> points);
+    void Add(SegmentClass segmentClass, byte instanceId, float confidence, ReadOnlySpan<Point> points);
 }

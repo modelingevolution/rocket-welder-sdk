@@ -16,7 +16,7 @@ public interface IProgramContext
     /// <summary>
     /// Access to segmentation results from ML pipeline.
     /// </summary>
-    ISegmentationSource Segmentation { get; }
+    ISegmentationResultSource Segmentation { get; }
 
     /// <summary>
     /// Access to graphics overlays from ML pipeline.

@@ -16,6 +16,7 @@ namespace RocketWelder.SDK.Protocols;
 /// Instance Format:
 /// [ClassId: 1 byte]
 /// [InstanceId: 1 byte]
+/// [Confidence: 2 bytes, little-endian uint16]
 /// [PointCount: varint]
 /// [Point0: X zigzag-varint, Y zigzag-varint]  (absolute)
 /// [Point1+: deltaX zigzag-varint, deltaY zigzag-varint]
@@ -38,7 +39,7 @@ public static class SegmentationProtocol
         // Write instances
         foreach (var instance in frame.Instances)
         {
-            WriteInstanceCore(ref writer, instance.ClassId, instance.InstanceId, instance.Points.Span);
+            WriteInstanceCore(ref writer, instance.ClassId, instance.InstanceId, instance.Confidence, instance.Points.Span);
         }
 
         return writer.Position;
@@ -62,17 +63,18 @@ public static class SegmentationProtocol
     /// Points are delta-encoded for compression.
     /// </summary>
     /// <returns>Number of bytes written.</returns>
-    public static int WriteInstance(Span<byte> buffer, byte classId, byte instanceId, ReadOnlySpan<Point> points)
+    public static int WriteInstance(Span<byte> buffer, byte classId, byte instanceId, Confidence confidence, ReadOnlySpan<Point> points)
     {
         var writer = new BinaryFrameWriter(buffer);
-        WriteInstanceCore(ref writer, classId, instanceId, points);
+        WriteInstanceCore(ref writer, classId, instanceId, confidence, points);
         return writer.Position;
     }
 
-    private static void WriteInstanceCore(ref BinaryFrameWriter writer, byte classId, byte instanceId, ReadOnlySpan<Point> points)
+    private static void WriteInstanceCore(ref BinaryFrameWriter writer, byte classId, byte instanceId, Confidence confidence, ReadOnlySpan<Point> points)
     {
         writer.WriteByte(classId);
         writer.WriteByte(instanceId);
+        writer.WriteUInt16LE((ushort)confidence);
         writer.WriteVarint((uint)points.Length);
 
         int prevX = 0, prevY = 0;
@@ -104,8 +106,8 @@ public static class SegmentationProtocol
     /// </summary>
     public static int CalculateInstanceSize(int pointCount)
     {
-        // classId(1) + instanceId(1) + pointCount(varint, max 5) + points(max 10 bytes each: 2 zigzag varints)
-        return 1 + 1 + 5 + (pointCount * 10);
+        // classId(1) + instanceId(1) + confidence(2) + pointCount(varint, max 5) + points(max 10 bytes each: 2 zigzag varints)
+        return 1 + 1 + 2 + 5 + (pointCount * 10);
     }
 
     /// <summary>
@@ -126,6 +128,7 @@ public static class SegmentationProtocol
         {
             reader.ReadByte(); // classId
             reader.ReadByte(); // instanceId
+            reader.ReadUInt16LE(); // confidence
             var pointCount = (int)reader.ReadVarint();
             for (int i = 0; i < pointCount; i++)
             {
@@ -144,6 +147,8 @@ public static class SegmentationProtocol
         {
             var classId = reader.ReadByte();
             var instanceId = reader.ReadByte();
+            var confidenceRaw = reader.ReadUInt16LE();
+            var confidence = (Confidence)confidenceRaw;
             var pointCount = (int)reader.ReadVarint();
 
             var points = new Point[pointCount];
@@ -166,7 +171,7 @@ public static class SegmentationProtocol
                 prevY = y;
             }
 
-            instances[instanceIndex++] = new SegmentationInstance(classId, instanceId, points);
+            instances[instanceIndex++] = new SegmentationInstance(classId, instanceId, confidence, points);
         }
 
         return new SegmentationFrame(frameId, width, height, instances);

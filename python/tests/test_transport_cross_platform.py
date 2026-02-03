@@ -167,7 +167,7 @@ class TestUnixSocketTransportRoundTrip:
                 frame_id=42, width=1920, height=1080, stream=buffer
             ) as writer:
                 points = np.array([[100, 200], [101, 201], [102, 199]], dtype=np.int32)
-                writer.append(class_id=1, instance_id=1, points=points)
+                writer.append(class_id=1, instance_id=1, confidence=0.95, points=points)
 
             # Get frame data (with varint prefix)
             buffer.seek(0)

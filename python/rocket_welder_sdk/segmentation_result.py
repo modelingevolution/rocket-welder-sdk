@@ -6,8 +6,8 @@ Compatible with C# implementation for cross-platform interoperability.
 
 Protocol (per frame):
     [FrameId: 8B little-endian][Width: varint][Height: varint]
-    [classId: 1B][instanceId: 1B][pointCount: varint][points: delta+varint...]
-    [classId: 1B][instanceId: 1B][pointCount: varint][points: delta+varint...]
+    [classId: 1B][instanceId: 1B][confidence: 2B LE][pointCount: varint][points: delta+varint...]
+    [classId: 1B][instanceId: 1B][confidence: 2B LE][pointCount: varint][points: delta+varint...]
     ...
 
 Features:
@@ -104,6 +104,7 @@ class SegmentationInstance:
 
     class_id: int
     instance_id: int
+    confidence: float  # Detection confidence score (0.0-1.0)
     points: PointArray  # NumPy array of shape (N, 2) with dtype int32
 
     def to_normalized(self, width: int, height: int) -> npt.NDArray[np.float32]:
@@ -237,6 +238,7 @@ class SegmentationResultWriter:
         self,
         class_id: int,
         instance_id: int,
+        confidence: float,
         points: Union[List[Point], PointArray],
     ) -> None:
         """
@@ -245,6 +247,7 @@ class SegmentationResultWriter:
         Args:
             class_id: Object class ID (0-255)
             instance_id: Instance ID within class (0-255)
+            confidence: Detection confidence score (0.0-1.0)
             points: List of (x, y) tuples or NumPy array of shape (N, 2)
         """
         if class_id < 0 or class_id > 255:
@@ -265,6 +268,11 @@ class SegmentationResultWriter:
 
         # Write class_id and instance_id
         self._buffer.write(bytes([class_id, instance_id]))
+
+        # Write confidence as 2 bytes little-endian (ushort 0-65535)
+        confidence_clamped = max(0.0, min(1.0, confidence))
+        confidence_raw = int(confidence_clamped * 65535)
+        self._buffer.write(struct.pack("<H", confidence_raw))
 
         # Write point count
         point_count = len(points_array)
@@ -402,6 +410,13 @@ class SegmentationResultReader:
         class_id = header[0]
         instance_id = header[1]
 
+        # Read confidence (2 bytes little-endian)
+        confidence_bytes = self._stream.read(2)
+        if len(confidence_bytes) != 2:
+            raise EOFError("Unexpected end of stream reading confidence")
+        confidence_raw = struct.unpack("<H", confidence_bytes)[0]
+        confidence = confidence_raw / 65535.0
+
         # Read point count with validation
         point_count = _read_varint(self._stream)
         if point_count > self._max_points_per_instance:
@@ -412,7 +427,7 @@ class SegmentationResultReader:
         if point_count == 0:
             # Empty points array
             points = np.empty((0, 2), dtype=np.int32)
-            return SegmentationInstance(class_id, instance_id, points)
+            return SegmentationInstance(class_id, instance_id, confidence, points)
 
         # Allocate NumPy array for points
         points = np.empty((point_count, 2), dtype=np.int32)
@@ -430,7 +445,7 @@ class SegmentationResultReader:
             y += delta_y
             points[i] = [x, y]
 
-        return SegmentationInstance(class_id, instance_id, points)
+        return SegmentationInstance(class_id, instance_id, confidence, points)
 
     def read_all(self) -> List[SegmentationInstance]:
         """
@@ -472,6 +487,7 @@ class ISegmentationResultWriter(ABC):
         self,
         class_id: int,
         instance_id: int,
+        confidence: float,
         points: Union[List[Point], PointArray],
     ) -> None:
         """
@@ -480,6 +496,7 @@ class ISegmentationResultWriter(ABC):
         Args:
             class_id: Object class ID (0-255)
             instance_id: Instance ID within class (0-255)
+            confidence: Detection confidence score (0.0-1.0)
             points: List of (x, y) tuples or NumPy array of shape (N, 2)
         """
         pass
@@ -741,6 +758,7 @@ class SegmentationProtocol:
     Instance Format:
         [ClassId: 1 byte]
         [InstanceId: 1 byte]
+        [Confidence: 2 bytes, little-endian uint16]
         [PointCount: varint]
         [Point0: X zigzag-varint, Y zigzag-varint]  (absolute)
         [Point1+: deltaX zigzag-varint, deltaY zigzag-varint]
@@ -777,6 +795,12 @@ class SegmentationProtocol:
     def _write_instance_core(stream: BinaryIO, instance: SegmentationInstance) -> None:
         """Write a single instance to the stream."""
         stream.write(bytes([instance.class_id, instance.instance_id]))
+
+        # Write confidence as 2 bytes little-endian (ushort 0-65535)
+        confidence_clamped = max(0.0, min(1.0, instance.confidence))
+        confidence_raw = int(confidence_clamped * 65535)
+        stream.write(struct.pack("<H", confidence_raw))
+
         point_count = len(instance.points)
         _write_varint(stream, point_count)
 
@@ -823,6 +847,7 @@ class SegmentationProtocol:
         buffer: bytearray,
         class_id: int,
         instance_id: int,
+        confidence: float,
         points: Union[List[Point], PointArray],
     ) -> int:
         """
@@ -834,6 +859,7 @@ class SegmentationProtocol:
             buffer: Pre-allocated buffer to write to.
             class_id: Class identifier (0-255).
             instance_id: Instance identifier (0-255).
+            confidence: Detection confidence score (0.0-1.0).
             points: Polygon points.
 
         Returns:
@@ -845,7 +871,7 @@ class SegmentationProtocol:
         else:
             points_array = points.astype(np.int32)
 
-        instance = SegmentationInstance(class_id, instance_id, points_array)
+        instance = SegmentationInstance(class_id, instance_id, confidence, points_array)
 
         stream = io.BytesIO()
         SegmentationProtocol._write_instance_core(stream, instance)
@@ -864,8 +890,8 @@ class SegmentationProtocol:
         Returns:
             Maximum bytes needed.
         """
-        # classId(1) + instanceId(1) + pointCount(varint, max 5) + points(max 10 bytes each)
-        return 1 + 1 + 5 + (point_count * 10)
+        # classId(1) + instanceId(1) + confidence(2) + pointCount(varint, max 5) + points(max 10 bytes each)
+        return 1 + 1 + 2 + 5 + (point_count * 10)
 
     @staticmethod
     def read(data: bytes) -> SegmentationFrame:
@@ -899,6 +925,14 @@ class SegmentationProtocol:
 
             class_id = header[0]
             instance_id = header[1]
+
+            # Read confidence (2 bytes little-endian)
+            confidence_bytes = stream.read(2)
+            if len(confidence_bytes) != 2:
+                raise EOFError("Unexpected end of stream reading confidence")
+            confidence_raw = struct.unpack("<H", confidence_bytes)[0]
+            confidence = confidence_raw / 65535.0
+
             point_count = _read_varint(stream)
 
             if point_count == 0:
@@ -916,7 +950,7 @@ class SegmentationProtocol:
                     points[i] = [x, y]
                     prev_x, prev_y = x, y
 
-            instances.append(SegmentationInstance(class_id, instance_id, points))
+            instances.append(SegmentationInstance(class_id, instance_id, confidence, points))
 
         return SegmentationFrame(frame_id, width, height, instances)
 

@@ -11,11 +11,8 @@ namespace RocketWelder.SDK.Transport;
 /// Internal implementation used by <see cref="UnixSocketFrameSink.Bind"/>.
 /// </summary>
 /// <remarks>
-/// DEAD CODE: Only used by UnixSocketFrameSink.Bind() which is not used by the high-level API.
-/// RocketWelderClientImpl uses Connect() (client mode), not Bind() (server mode).
-/// Only test code and StageSink (graphics) use Bind().
+/// Used by StageSink (graphics output) when binding as server mode.
 /// </remarks>
-[Obsolete("Dead code - server-side socket not used by high-level API. Will be removed in future version.")]
 internal sealed class UnixSocketServer : IDisposable
 {
     private readonly string _socketPath;

@@ -36,6 +36,7 @@ public class SegmentationDecoderIntegrationTests
                 new ProtocolSegmentationInstance(
                     ClassId: 0,
                     InstanceId: 1,
+                    Confidence: (Confidence)0.95f,
                     Points: new Point[] { new(100, 100), new(200, 100), new(150, 200) }
                 )
             });
@@ -74,9 +75,9 @@ public class SegmentationDecoderIntegrationTests
             Height: 1080,
             Instances: new[]
             {
-                new ProtocolSegmentationInstance(0, 0, new Point[] { new(10, 10), new(20, 10), new(15, 20) }),
-                new ProtocolSegmentationInstance(1, 0, new Point[] { new(100, 100), new(200, 100) }),
-                new ProtocolSegmentationInstance(2, 0, new Point[] { new(50, 50), new(60, 50), new(60, 60), new(50, 60) })
+                new ProtocolSegmentationInstance(0, 0, (Confidence)0.95f, new Point[] { new(10, 10), new(20, 10), new(15, 20) }),
+                new ProtocolSegmentationInstance(1, 0, (Confidence)0.95f, new Point[] { new(100, 100), new(200, 100) }),
+                new ProtocolSegmentationInstance(2, 0, (Confidence)0.95f, new Point[] { new(50, 50), new(60, 50), new(60, 60), new(50, 60) })
             });
 
         Span<byte> buffer = stackalloc byte[512];
@@ -108,8 +109,8 @@ public class SegmentationDecoderIntegrationTests
             Height: 1080,
             Instances: new[]
             {
-                new ProtocolSegmentationInstance(0, 0, new Point[] { new(10, 10), new(20, 10), new(15, 20) }),
-                new ProtocolSegmentationInstance(1, 0, new Point[] { new(100, 100), new(200, 100), new(150, 200) })
+                new ProtocolSegmentationInstance(0, 0, (Confidence)0.95f, new Point[] { new(10, 10), new(20, 10), new(15, 20) }),
+                new ProtocolSegmentationInstance(1, 0, (Confidence)0.95f, new Point[] { new(100, 100), new(200, 100), new(150, 200) })
             });
 
         Span<byte> buffer = stackalloc byte[256];
@@ -188,7 +189,7 @@ public class SegmentationDecoderIntegrationTests
             Height: 1080,
             Instances: new[]
             {
-                new ProtocolSegmentationInstance(0, 0, points)
+                new ProtocolSegmentationInstance(0, 0, (Confidence)0.95f, points)
             });
 
         var buffer = new byte[2048];
@@ -217,7 +218,7 @@ public class SegmentationDecoderIntegrationTests
             Height: 1080,
             Instances: new[]
             {
-                new ProtocolSegmentationInstance(0, 0, new Point[] { new(10, 10), new(20, 10) })
+                new ProtocolSegmentationInstance(0, 0, (Confidence)0.95f, new Point[] { new(10, 10), new(20, 10) })
             });
 
         Span<byte> buffer = stackalloc byte[128];
@@ -248,7 +249,7 @@ public class SegmentationDecoderIntegrationTests
             Height: 1080,
             Instances: new[]
             {
-                new ProtocolSegmentationInstance(0, 0, new Point[]
+                new ProtocolSegmentationInstance(0, 0, (Confidence)0.95f, new Point[]
                 {
                     new(100, 100),  // absolute
                     new(150, 120),  // delta: +50, +20

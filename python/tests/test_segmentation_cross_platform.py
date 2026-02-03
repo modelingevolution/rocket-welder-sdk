@@ -96,7 +96,7 @@ class TestCrossPlatform:
             frame_id, width, height, f
         ) as writer:
             for class_id, instance_id, points in instances:
-                writer.append(class_id, instance_id, points)
+                writer.append(class_id, instance_id, 0.95, points)
 
         # Verify file exists and has data
         assert test_file.exists()
@@ -129,7 +129,7 @@ class TestCrossPlatform:
             frame_id, width, height, f
         ) as writer:
             for class_id, instance_id, points in instances:
-                writer.append(class_id, instance_id, points)
+                writer.append(class_id, instance_id, 0.95, points)
 
         # Act - Read (via transport layer for framing)
         with open(test_file, "rb") as f:

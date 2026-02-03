@@ -32,7 +32,7 @@ public class SegmentationDocumentTests
         uint width = 1920;
         uint height = 1080;
         var points = new Point[] { new(100, 100), new(200, 150), new(150, 200) };
-        var instances = new[] { new ProtocolSegmentationInstance(1, 0, points) };
+        var instances = new[] { new ProtocolSegmentationInstance(1, 0, (Protocols.Confidence)0.95f, points) };
         var frame = new ProtocolSegmentationFrame(frameId, width, height, instances);
 
         // Encode to binary
@@ -96,7 +96,7 @@ public class SegmentationDocumentTests
         // Arrange: Create a simple frame
         ulong frameId = 1;
         var points = new Point[] { new(10, 20) };
-        var instances = new[] { new ProtocolSegmentationInstance(0, 0, points) };
+        var instances = new[] { new ProtocolSegmentationInstance(0, 0, (Protocols.Confidence)0.95f, points) };
         var frame = new ProtocolSegmentationFrame(frameId, 100, 100, instances);
 
         var buffer = new byte[1024];
@@ -128,7 +128,7 @@ public class SegmentationDocumentTests
         {
             ulong frameId = 42;
             var points = new Point[] { new(50, 50) };
-            var instances = new[] { new ProtocolSegmentationInstance(2, 1, points) };
+            var instances = new[] { new ProtocolSegmentationInstance(2, 1, (Protocols.Confidence)0.95f, points) };
             var frame = new ProtocolSegmentationFrame(frameId, 640, 480, instances);
 
             var buffer = new byte[1024];

@@ -45,7 +45,7 @@ class TestRoundTrip:
 
         # Act - Write
         with SegmentationResultWriter(frame_id, width, height, stream) as writer:
-            writer.append(class_id, instance_id, points)
+            writer.append(class_id, instance_id, 0.95, points)
 
         # Act - Read via transport layer
         with _read_frame_via_transport(stream) as reader:
@@ -82,7 +82,7 @@ class TestRoundTrip:
         # Act - Write
         with SegmentationResultWriter(frame_id, width, height, stream) as writer:
             for class_id, instance_id, points in instances:
-                writer.append(class_id, instance_id, points)
+                writer.append(class_id, instance_id, 0.95, points)
 
         # Act - Read via transport layer
         # Via transport layer
@@ -104,7 +104,7 @@ class TestRoundTrip:
         stream = io.BytesIO()
 
         with SegmentationResultWriter(1, 100, 100, stream) as writer:
-            writer.append(1, 1, np.empty((0, 2), dtype=np.int32))
+            writer.append(1, 1, 0.95, np.empty((0, 2), dtype=np.int32))
 
         # Via transport layer
         with _read_frame_via_transport(stream) as reader:
@@ -128,7 +128,7 @@ class TestRoundTrip:
         stream = io.BytesIO()
 
         with SegmentationResultWriter(999, 3840, 2160, stream) as writer:
-            writer.append(10, 5, points)
+            writer.append(10, 5, 0.95, points)
 
         # Via transport layer
         with _read_frame_via_transport(stream) as reader:
@@ -153,7 +153,7 @@ class TestRoundTrip:
         stream = io.BytesIO()
 
         with SegmentationResultWriter(1, 200, 200, stream) as writer:
-            writer.append(1, 1, points)
+            writer.append(1, 1, 0.95, points)
 
         # Via transport layer
         with _read_frame_via_transport(stream) as reader:
@@ -174,7 +174,7 @@ class TestRoundTrip:
             1, 640, 480, frame_sink=StreamFrameSink(stream, leave_open=True)
         ) as writer:
             for class_id, instance_id, points in frame1_points:
-                writer.append(class_id, instance_id, points)
+                writer.append(class_id, instance_id, 0.95, points)
 
         # Frame 2
         frame2_points = [
@@ -186,7 +186,7 @@ class TestRoundTrip:
             2, 1920, 1080, frame_sink=StreamFrameSink(stream, leave_open=True)
         ) as writer:
             for class_id, instance_id, points in frame2_points:
-                writer.append(class_id, instance_id, points)
+                writer.append(class_id, instance_id, 0.95, points)
 
         # Read both frames via transport layer
         stream.seek(0)
@@ -235,7 +235,7 @@ class TestNormalization:
     def test_to_normalized_converts_to_float_range(self) -> None:
         """Test normalization to [0-1] range."""
         points = np.array([[0, 0], [1920, 1080], [960, 540]], dtype=np.int32)
-        instance = SegmentationInstance(1, 1, points)
+        instance = SegmentationInstance(1, 1, 0.95, points)
 
         normalized = instance.to_normalized(1920, 1080)
 
@@ -247,7 +247,7 @@ class TestNormalization:
     def test_to_normalized_raises_on_zero_dimensions(self) -> None:
         """Test that normalization raises on zero width/height."""
         points = np.array([[10, 20]], dtype=np.int32)
-        instance = SegmentationInstance(1, 1, points)
+        instance = SegmentationInstance(1, 1, 0.95, points)
 
         with pytest.raises(ValueError, match="must be positive"):
             instance.to_normalized(0, 1080)
@@ -271,7 +271,7 @@ class TestIterator:
 
         with SegmentationResultWriter(1, 100, 100, stream) as writer:
             for class_id, instance_id, points in instances_data:
-                writer.append(class_id, instance_id, points)
+                writer.append(class_id, instance_id, 0.95, points)
 
         # Via transport layer
         with _read_frame_via_transport(stream) as reader:
@@ -287,8 +287,8 @@ class TestIterator:
         stream = io.BytesIO()
 
         with SegmentationResultWriter(1, 100, 100, stream) as writer:
-            writer.append(1, 1, np.array([[10, 20]], dtype=np.int32))
-            writer.append(2, 1, np.array([[30, 40]], dtype=np.int32))
+            writer.append(1, 1, 0.95, np.array([[10, 20]], dtype=np.int32))
+            writer.append(2, 1, 0.95, np.array([[30, 40]], dtype=np.int32))
 
         # Via transport layer
         with _read_frame_via_transport(stream) as reader:
@@ -306,14 +306,14 @@ class TestFlush:
         stream = io.BytesIO()
         writer = SegmentationResultWriter(1, 100, 100, stream)
 
-        writer.append(1, 1, np.array([[10, 20]], dtype=np.int32))
+        writer.append(1, 1, 0.95, np.array([[10, 20]], dtype=np.int32))
         writer.flush()
 
         # Should have data
         assert stream.tell() > 0
 
         # Can still write more
-        writer.append(2, 1, np.array([[30, 40]], dtype=np.int32))
+        writer.append(2, 1, 0.95, np.array([[30, 40]], dtype=np.int32))
         writer.close()
 
 
@@ -328,9 +328,9 @@ class TestValidation:
         points = np.array([[10, 20]], dtype=np.int32)
 
         # 255 is now valid (no end-marker)
-        writer.append(255, 1, points)
-        writer.append(1, 255, points)
-        writer.append(255, 255, points)
+        writer.append(255, 1, 0.95, points)
+        writer.append(1, 255, 0.95, points)
+        writer.append(255, 255, 0.95, points)
         writer.close()
 
         # Read back and verify via transport layer
@@ -361,6 +361,7 @@ class TestValidation:
 
         # Write instance with huge point count
         stream.write(bytes([1, 1]))  # class_id, instance_id
+        stream.write(struct.pack("<H", 32767))  # confidence = 0.5 (2 bytes LE)
         # Write varint for > 10M points (will fail validation)
         # 20M = 0x1312D00
         stream.write(b"\x80\xba\xc8\x89\x01")  # varint encoding of 20000000
@@ -379,7 +380,7 @@ class TestListConversion:
     def test_to_list_converts_numpy_to_tuples(self) -> None:
         """Test conversion from NumPy array to list of tuples."""
         points = np.array([[10, 20], [30, 40]], dtype=np.int32)
-        instance = SegmentationInstance(1, 1, points)
+        instance = SegmentationInstance(1, 1, 0.95, points)
 
         points_list = instance.to_list()
 
@@ -396,7 +397,7 @@ class TestListInput:
         points_list: List[Tuple[int, int]] = [(10, 20), (30, 40), (50, 60)]
 
         with SegmentationResultWriter(1, 100, 100, stream) as writer:
-            writer.append(1, 1, points_list)
+            writer.append(1, 1, 0.95, points_list)
 
         # Via transport layer
         with _read_frame_via_transport(stream) as reader:
@@ -439,8 +440,8 @@ class TestSegmentationFrame:
     def test_frame_properties(self) -> None:
         """Test basic frame properties."""
         instances = [
-            SegmentationInstance(1, 1, np.array([[10, 20]], dtype=np.int32)),
-            SegmentationInstance(2, 1, np.array([[30, 40], [50, 60]], dtype=np.int32)),
+            SegmentationInstance(1, 1, 0.95, np.array([[10, 20]], dtype=np.int32)),
+            SegmentationInstance(2, 1, 0.95, np.array([[30, 40], [50, 60]], dtype=np.int32)),
         ]
         frame = SegmentationFrame(frame_id=42, width=1920, height=1080, instances=instances)
 
@@ -452,9 +453,9 @@ class TestSegmentationFrame:
     def test_find_by_class(self) -> None:
         """Test finding instances by class ID."""
         instances = [
-            SegmentationInstance(1, 1, np.array([[10, 20]], dtype=np.int32)),
-            SegmentationInstance(2, 1, np.array([[30, 40]], dtype=np.int32)),
-            SegmentationInstance(1, 2, np.array([[50, 60]], dtype=np.int32)),
+            SegmentationInstance(1, 1, 0.95, np.array([[10, 20]], dtype=np.int32)),
+            SegmentationInstance(2, 1, 0.95, np.array([[30, 40]], dtype=np.int32)),
+            SegmentationInstance(1, 2, 0.95, np.array([[50, 60]], dtype=np.int32)),
         ]
         frame = SegmentationFrame(frame_id=1, width=100, height=100, instances=instances)
 
@@ -472,9 +473,9 @@ class TestSegmentationFrame:
     def test_find_by_instance(self) -> None:
         """Test finding instances by instance ID."""
         instances = [
-            SegmentationInstance(1, 1, np.array([[10, 20]], dtype=np.int32)),
-            SegmentationInstance(2, 1, np.array([[30, 40]], dtype=np.int32)),
-            SegmentationInstance(1, 2, np.array([[50, 60]], dtype=np.int32)),
+            SegmentationInstance(1, 1, 0.95, np.array([[10, 20]], dtype=np.int32)),
+            SegmentationInstance(2, 1, 0.95, np.array([[30, 40]], dtype=np.int32)),
+            SegmentationInstance(1, 2, 0.95, np.array([[50, 60]], dtype=np.int32)),
         ]
         frame = SegmentationFrame(frame_id=1, width=100, height=100, instances=instances)
 
@@ -491,8 +492,8 @@ class TestSegmentationProtocol:
     def test_write_read_roundtrip(self) -> None:
         """Test write/read roundtrip through protocol."""
         instances = [
-            SegmentationInstance(1, 1, np.array([[10, 20], [30, 40]], dtype=np.int32)),
-            SegmentationInstance(2, 1, np.array([[100, 200], [101, 201]], dtype=np.int32)),
+            SegmentationInstance(1, 1, 0.95, np.array([[10, 20], [30, 40]], dtype=np.int32)),
+            SegmentationInstance(2, 1, 0.95, np.array([[100, 200], [101, 201]], dtype=np.int32)),
         ]
         original = SegmentationFrame(frame_id=42, width=1920, height=1080, instances=instances)
 
@@ -528,20 +529,20 @@ class TestSegmentationProtocol:
         """Test writing a single instance."""
         points: List[Tuple[int, int]] = [(10, 20), (30, 40)]
         buffer = bytearray(100)
-        written = SegmentationProtocol.write_instance(buffer, 5, 3, points)
+        written = SegmentationProtocol.write_instance(buffer, 5, 3, 0.95, points)
 
-        # Should have classId(1) + instanceId(1) + pointCount varint + points
-        assert written > 4
+        # Should have classId(1) + instanceId(1) + confidence(2) + pointCount varint + points
+        assert written > 6
 
     def test_calculate_instance_size(self) -> None:
         """Test size calculation."""
         size = SegmentationProtocol.calculate_instance_size(10)
-        # classId(1) + instanceId(1) + pointCount(max 5) + points(max 10 each)
-        assert size == 1 + 1 + 5 + (10 * 10)
+        # classId(1) + instanceId(1) + confidence(2) + pointCount(max 5) + points(max 10 each)
+        assert size == 1 + 1 + 2 + 5 + (10 * 10)
 
     def test_try_read_success(self) -> None:
         """Test try_read with valid data."""
-        instances = [SegmentationInstance(1, 1, np.array([[10, 20]], dtype=np.int32))]
+        instances = [SegmentationInstance(1, 1, 0.95, np.array([[10, 20]], dtype=np.int32))]
         original = SegmentationFrame(frame_id=1, width=100, height=100, instances=instances)
 
         buffer = bytearray(100)
@@ -571,7 +572,7 @@ class TestSegmentationProtocol:
 
     def test_empty_points(self) -> None:
         """Test roundtrip with instance having empty points."""
-        instances = [SegmentationInstance(1, 1, np.empty((0, 2), dtype=np.int32))]
+        instances = [SegmentationInstance(1, 1, 0.95, np.empty((0, 2), dtype=np.int32))]
         original = SegmentationFrame(frame_id=1, width=100, height=100, instances=instances)
 
         buffer = bytearray(100)
@@ -592,8 +593,8 @@ class TestSegmentationResultSource:
         with SegmentationResultWriter(
             42, 1920, 1080, frame_sink=StreamFrameSink(stream, leave_open=True)
         ) as writer:
-            writer.append(1, 1, np.array([[10, 20], [30, 40]], dtype=np.int32))
-            writer.append(2, 1, np.array([[100, 200]], dtype=np.int32))
+            writer.append(1, 1, 0.95, np.array([[10, 20], [30, 40]], dtype=np.int32))
+            writer.append(2, 1, 0.95, np.array([[100, 200]], dtype=np.int32))
 
         # Read via source
         stream.seek(0)
@@ -618,12 +619,12 @@ class TestSegmentationResultSource:
 
         # Write frame 1
         with SegmentationResultWriter(1, 640, 480, frame_sink=sink) as writer:
-            writer.append(1, 1, np.array([[10, 20]], dtype=np.int32))
+            writer.append(1, 1, 0.95, np.array([[10, 20]], dtype=np.int32))
 
         # Write frame 2
         with SegmentationResultWriter(2, 1920, 1080, frame_sink=sink) as writer:
-            writer.append(2, 1, np.array([[100, 200]], dtype=np.int32))
-            writer.append(3, 1, np.array([[300, 400]], dtype=np.int32))
+            writer.append(2, 1, 0.95, np.array([[100, 200]], dtype=np.int32))
+            writer.append(3, 1, 0.95, np.array([[300, 400]], dtype=np.int32))
 
         # Read via source
         stream.seek(0)
@@ -645,7 +646,7 @@ class TestSegmentationResultSource:
         with SegmentationResultWriter(
             1, 100, 100, frame_sink=StreamFrameSink(stream, leave_open=True)
         ) as writer:
-            writer.append(1, 1, np.array([[10, 20]], dtype=np.int32))
+            writer.append(1, 1, 0.95, np.array([[10, 20]], dtype=np.int32))
 
         stream.seek(0)
         frame_source = StreamFrameSource(stream)

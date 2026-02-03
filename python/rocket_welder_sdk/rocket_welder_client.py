@@ -827,7 +827,13 @@ class _NoOpKeyPointsWriter(IKeyPointsWriter):
 class _NoOpSegmentationWriter(ISegmentationResultWriter):
     """No-op segmentation writer that discards all data."""
 
-    def append(self, class_id: int, instance_id: int, points: Any) -> None:
+    def append(
+        self,
+        class_id: int,
+        instance_id: int,
+        confidence: float,
+        points: Any,
+    ) -> None:
         """Discard segmentation data."""
         pass
 
