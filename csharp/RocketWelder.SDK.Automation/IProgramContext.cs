@@ -4,24 +4,23 @@ namespace RocketWelder.SDK.Automation;
 
 /// <summary>
 /// Context provided to programs during execution.
-/// Provides access to ML data sources and registered devices.
+/// Provides access to ML data providers and registered devices.
 /// </summary>
 public interface IProgramContext
 {
     /// <summary>
     /// Access to keypoint detection results from ML pipeline.
+    /// Use <see cref="IDataProvider{T}.HasData"/> to check availability
+    /// before calling <see cref="IDataProvider{T}.GetLatest"/>.
     /// </summary>
-    IKeyPointsSource Keypoints { get; }
+    IKeyPointsProvider Keypoints { get; }
 
     /// <summary>
     /// Access to segmentation results from ML pipeline.
+    /// Use <see cref="IDataProvider{T}.HasData"/> to check availability
+    /// before calling <see cref="IDataProvider{T}.GetLatest"/>.
     /// </summary>
-    ISegmentationResultSource Segmentation { get; }
-
-    /// <summary>
-    /// Access to graphics overlays from ML pipeline.
-    /// </summary>
-    IGraphicsSource Graphics { get; }
+    ISegmentationProvider Segmentation { get; }
 
     /// <summary>
     /// Logger for program output.
