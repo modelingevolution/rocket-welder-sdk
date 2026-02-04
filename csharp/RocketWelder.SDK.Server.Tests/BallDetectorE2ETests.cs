@@ -416,7 +416,7 @@ public class BallDetectorE2ETests : IDisposable
             {
                 var instances = new RocketWelder.SDK.Protocols.SegmentationInstance[]
                 {
-                    new(classId: 1, instanceId: 0, new Point[]
+                    new(classId: 1, instanceId: 0, Confidence.Full, new Point[]
                     {
                         new(150, 110), new(170, 110), new(170, 130), new(150, 130)
                     }),

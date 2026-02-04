@@ -267,8 +267,8 @@ public class ServerIntegrationTests : IDisposable
             // Write a segmentation frame
             var instances = new RocketWelder.SDK.Protocols.SegmentationInstance[]
             {
-                new(ClassId: 1, InstanceId: 0, new Point[] { new(10, 20), new(30, 40), new(50, 60) }),
-                new(ClassId: 2, InstanceId: 1, new Point[] { new(100, 110), new(120, 130) })
+                new(ClassId: 1, InstanceId: 0, Confidence.Full, new Point[] { new(10, 20), new(30, 40), new(50, 60) }),
+                new(ClassId: 2, InstanceId: 1, Confidence.Full, new Point[] { new(100, 110), new(120, 130) })
             };
 
             var frame = new RocketWelder.SDK.Protocols.SegmentationFrame(FrameId: 123, Width: 640, Height: 480, instances);

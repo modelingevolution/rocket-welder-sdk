@@ -121,7 +121,7 @@ static async Task StreamSegmentationAsync(WebSocket ws, CancellationToken ct)
                 );
             }
 
-            instances[p] = new SegmentationInstance(classId, (byte)p, points);
+            instances[p] = new SegmentationInstance(classId, (byte)p, Confidence.Full, points);
         }
 
         var frame = new SegmentationFrame(frameId, (uint)Width, (uint)Height, instances);
