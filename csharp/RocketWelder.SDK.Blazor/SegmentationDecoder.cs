@@ -38,6 +38,32 @@ public class SegmentationDecoder : IFrameDecoder
     /// </summary>
     public int Thickness { get; set; } = 2;
 
+    /// <summary>
+    /// When true, displays the class ID (or name from <see cref="ClassNames"/>) next to each polygon.
+    /// </summary>
+    public bool ShowClassId { get; set; }
+
+    /// <summary>
+    /// When true, displays the instance ID next to each polygon.
+    /// </summary>
+    public bool ShowInstanceId { get; set; }
+
+    /// <summary>
+    /// When true, displays the confidence percentage next to each polygon.
+    /// </summary>
+    public bool ShowConfidence { get; set; }
+
+    /// <summary>
+    /// Font size for labels. Default: 12.
+    /// </summary>
+    public int LabelFontSize { get; set; } = 12;
+
+    /// <summary>
+    /// Optional class ID to human-readable name mapping.
+    /// When a class ID is found in this dictionary, the name is displayed instead of the numeric ID.
+    /// </summary>
+    public IDictionary<byte, string> ClassNames { get; set; } = new Dictionary<byte, string>();
+
     public SegmentationDecoder(
         IStage stage,
         RgbColor? defaultColor = null,
@@ -49,6 +75,45 @@ public class SegmentationDecoder : IFrameDecoder
 
         // Pre-allocate buffer for polygon points
         _pointBuffer = new SKPoint[InitialBufferSize];
+    }
+
+    private string BuildLabel(byte classId, byte instanceId, ushort confidence)
+    {
+        Span<char> buf = stackalloc char[64];
+        int pos = 0;
+
+        if (ShowClassId)
+        {
+            if (ClassNames.TryGetValue(classId, out var name))
+            {
+                name.AsSpan().CopyTo(buf[pos..]);
+                pos += name.Length;
+            }
+            else
+            {
+                classId.TryFormat(buf[pos..], out var written);
+                pos += written;
+            }
+        }
+
+        if (ShowInstanceId)
+        {
+            if (pos > 0) buf[pos++] = ' ';
+            buf[pos++] = '#';
+            instanceId.TryFormat(buf[pos..], out var written);
+            pos += written;
+        }
+
+        if (ShowConfidence)
+        {
+            if (pos > 0) buf[pos++] = ' ';
+            var pct = confidence / 65535f * 100f;
+            pct.TryFormat(buf[pos..], out var written, "0.0");
+            pos += written;
+            buf[pos++] = '%';
+        }
+
+        return buf[..pos].ToString();
     }
 
     public DecodeResultV2 Decode(ReadOnlySpan<byte> data)
@@ -108,6 +173,22 @@ public class SegmentationDecoder : IFrameDecoder
 
                 // Draw polygon using pre-allocated buffer slice (no ToArray allocation)
                 canvas.DrawPolygon(_pointBuffer.AsSpan(0, pointCount), color, Thickness);
+
+                // Draw labels at polygon centroid if any label flags are enabled
+                if (ShowClassId || ShowInstanceId || ShowConfidence)
+                {
+                    float cx = 0, cy = 0;
+                    for (int i = 0; i < pointCount; i++)
+                    {
+                        cx += _pointBuffer[i].X;
+                        cy += _pointBuffer[i].Y;
+                    }
+                    cx /= pointCount;
+                    cy /= pointCount;
+
+                    var label = BuildLabel(classId, instanceId, confidence);
+                    canvas.DrawText(label, (int)cx, (int)cy, color, LabelFontSize);
+                }
             }
 
             _stage.OnFrameEnd();
