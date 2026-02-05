@@ -364,6 +364,44 @@ public sealed class SegmentationFrameHandle : IDisposable
     }
 
     /// <summary>
+    /// Creates a handle from an immutable <see cref="SegmentationFrame"/>.
+    /// Copies all data into ArrayPool-backed buffers (copy-on-read).
+    /// The caller owns the returned handle and must dispose it.
+    /// </summary>
+    public static SegmentationFrameHandle FromFrame(in SegmentationFrame frame)
+    {
+        var instances = frame.Instances;
+
+        int totalPoints = 0;
+        for (int i = 0; i < instances.Count; i++)
+            totalPoints += instances[i].Points.Length;
+
+        var pointsBuffer = ArrayPool<Point>.Shared.Rent(Math.Max(totalPoints, 1));
+        var instancesBuffer = ArrayPool<SegmentationInstance>.Shared.Rent(Math.Max(instances.Count, 1));
+
+        int pointOffset = 0;
+        for (int i = 0; i < instances.Count; i++)
+        {
+            var src = instances[i];
+            var pts = src.Points;
+            pts.Span.CopyTo(pointsBuffer.AsSpan(pointOffset, pts.Length));
+
+            instancesBuffer[i] = new SegmentationInstance(
+                src.ClassId,
+                src.InstanceId,
+                src.Confidence,
+                pointsBuffer.AsMemory(pointOffset, pts.Length));
+
+            pointOffset += pts.Length;
+        }
+
+        return new SegmentationFrameHandle(
+            frame.FrameId, frame.Width, frame.Height,
+            pointsBuffer, totalPoints,
+            instancesBuffer, instances.Count);
+    }
+
+    /// <summary>
     /// Returns pooled buffers. MUST be called when done with the frame.
     /// Safe to call multiple times.
     /// </summary>

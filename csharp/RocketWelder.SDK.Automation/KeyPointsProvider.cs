@@ -22,18 +22,23 @@ public sealed class KeyPointsProvider : IKeyPointsProvider, IAsyncDisposable
         _source = source ?? throw new ArgumentNullException(nameof(source));
     }
 
-    public bool HasData
+    public bool HasData(byte cameraNo = 0)
     {
-        get { lock (_lock) return _latest != null; }
+        // Single-camera provider — only camera 0 is supported
+        if (cameraNo != 0) return false;
+        lock (_lock) return _latest != null;
     }
 
-    public KeyPointsFrameHandle GetLatest()
+    public KeyPointsFrameHandle GetLatest(byte cameraNo = 0)
     {
+        if (cameraNo != 0)
+            throw new InvalidOperationException($"KeyPointsProvider only supports camera 0, got {cameraNo}.");
+
         DeltaFrame<KeyPoint> frame;
         lock (_lock)
         {
             if (_latest == null)
-                throw new InvalidOperationException("No keypoints data available yet. Check HasData before calling GetLatest().");
+                throw new InvalidOperationException("No keypoints data available yet. Check HasData() before calling GetLatest().");
             frame = _latest.Value;
         }
 

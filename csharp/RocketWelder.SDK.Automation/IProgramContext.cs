@@ -10,14 +10,14 @@ public interface IProgramContext
 {
     /// <summary>
     /// Access to keypoint detection results from ML pipeline.
-    /// Use <see cref="IDataProvider{T}.HasData"/> to check availability
+    /// Use <see cref="IDataProvider{T}.HasData(byte)"/> to check availability
     /// before calling <see cref="IDataProvider{T}.GetLatest"/>.
     /// </summary>
     IKeyPointsProvider Keypoints { get; }
 
     /// <summary>
     /// Access to segmentation results from ML pipeline.
-    /// Use <see cref="IDataProvider{T}.HasData"/> to check availability
+    /// Use <see cref="IDataProvider{T}.HasData(byte)"/> to check availability
     /// before calling <see cref="IDataProvider{T}.GetLatest"/>.
     /// </summary>
     ISegmentationProvider Segmentation { get; }
