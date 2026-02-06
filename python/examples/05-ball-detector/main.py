@@ -174,7 +174,7 @@ class BallDetectionService:
         if detection.contour is not None and len(detection.contour) >= 3:
             # Convert contour to list of tuples for the writer
             points = [(int(p[0][0]), int(p[0][1])) for p in detection.contour]
-            seg_writer.append(BALL_CLASS_ID, 0, points)
+            seg_writer.append(BALL_CLASS_ID, 0, detection.confidence, points)
             self._seg_written += 1
 
         # Write keypoint data (center) if found

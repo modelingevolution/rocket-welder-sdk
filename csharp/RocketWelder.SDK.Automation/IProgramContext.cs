@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging;
+using RocketWelder.SDK.Graphics;
 
 namespace RocketWelder.SDK.Automation;
 
@@ -26,6 +27,13 @@ public interface IProgramContext
     /// Logger for program output.
     /// </summary>
     ILogger Logger { get; }
+
+    /// <summary>
+    /// Access to the UI rendering sink for drawing overlays.
+    /// Creates per-frame writers that auto-flush on dispose.
+    /// The frame ID is automatically sourced from the segmentation stream.
+    /// </summary>
+    IUiSink Ui { get; }
 
     /// <summary>
     /// True when running in test/dry-run mode.

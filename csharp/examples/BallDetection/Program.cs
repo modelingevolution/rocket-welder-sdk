@@ -219,7 +219,7 @@ public class BallDetectionService : BackgroundService
         // Write segmentation data (contour) if ball found
         if (contour != null && contour.Length >= 3)
         {
-            segWriter.Append(BallDetector.BallClassId, 0, contour);
+            segWriter.Append(BallDetector.BallClassId, 0, confidence, contour);
             _segWritten+=1;
         }
 
