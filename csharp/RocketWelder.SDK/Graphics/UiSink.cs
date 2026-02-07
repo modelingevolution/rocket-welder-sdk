@@ -189,6 +189,44 @@ internal sealed class UiLayer : IUiLayer
         _inner.DrawCircle((int)point.X, (int)point.Y, DefaultPointMarkerRadius);
     }
 
+    public void DrawKeyPoint(string label, in Point<float> point,
+        PointSymbol symbol = PointSymbol.Cross,
+        RgbColor color = default,
+        int size = 10,
+        int fontSize = 12)
+    {
+        if (color == default) color = RgbColor.Green;
+
+        var x = (int)point.X;
+        var y = (int)point.Y;
+        var half = size / 2;
+
+        _inner.Save();
+
+        _inner.SetStroke(color);
+        _inner.SetThickness(2);
+
+        switch (symbol)
+        {
+            case PointSymbol.Cross:
+                _inner.DrawLine(x - half, y - half, x + half, y + half);
+                _inner.DrawLine(x - half, y + half, x + half, y - half);
+                break;
+            case PointSymbol.Circle:
+                _inner.DrawCircle(x, y, half);
+                break;
+            case PointSymbol.Square:
+                _inner.DrawRectangle(x - half, y - half, size, size);
+                break;
+        }
+
+        _inner.SetFontSize(fontSize);
+        _inner.SetFontColor(color);
+        _inner.DrawText(label, x + half + 4, y - half);
+
+        _inner.Restore();
+    }
+
     #endregion
 
     #region ILayerCanvas Passthrough

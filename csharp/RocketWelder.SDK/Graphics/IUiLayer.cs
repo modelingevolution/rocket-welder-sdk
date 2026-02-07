@@ -1,7 +1,15 @@
 using BlazorBlaze.Server;
+using BlazorBlaze.VectorGraphics;
 using ModelingEvolution.Drawing;
 
 namespace RocketWelder.SDK.Graphics;
+
+public enum PointSymbol
+{
+    Cross,
+    Circle,
+    Square
+}
 
 /// <summary>
 /// Layer canvas adapter that accepts Drawing library primitives
@@ -33,4 +41,14 @@ public interface IUiLayer : ILayerCanvas
 
     /// <summary>Draws a point as a small circle marker.</summary>
     void Draw(in Point<float> point);
+
+    /// <summary>
+    /// Draws a labeled keypoint with a symbol marker.
+    /// Saves/restores context so caller state is not affected.
+    /// </summary>
+    void DrawKeyPoint(string label, in Point<float> point,
+        PointSymbol symbol = PointSymbol.Cross,
+        RgbColor color = default,
+        int size = 10,
+        int fontSize = 12);
 }
