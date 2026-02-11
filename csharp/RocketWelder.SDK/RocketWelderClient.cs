@@ -909,6 +909,18 @@ namespace RocketWelder.SDK
             return _stageSink;
         }
         
+        /// <summary>
+        /// Ensures all output sinks are created if their URLs are configured.
+        /// Called by all Start() overloads so the server can connect to the sockets
+        /// even when the user callback doesn't use writers.
+        /// </summary>
+        private void EnsureOutputSinksCreated()
+        {
+            GetOrCreateSegmentationSink();
+            GetOrCreateKeyPointsSink();
+            GetOrCreateStageSink();
+        }
+
         private void OnControllerError(IController controller, Exception exception)
         {
             // All exceptions are terminal for streaming
@@ -1034,6 +1046,11 @@ namespace RocketWelder.SDK
             {
                 _logger.LogInformation("Starting RocketWelder client with connection: {Connection}", Connection);
 
+                // Always initialize output sockets if configured via environment variables.
+                // The server (rocket-welder2) connects to these sockets before waiting for the SHM buffer.
+                // If we don't bind them, the server blocks for 30s on connect timeout.
+                EnsureOutputSinksCreated();
+
                 // If preview is enabled, wrap the callback to capture frames
                 if (_previewEnabled)
                 {
@@ -1073,6 +1090,11 @@ namespace RocketWelder.SDK
             try
             {
                 _logger.LogInformation("Starting RocketWelder client with connection: {Connection}", Connection);
+
+                // Always initialize output sockets if configured via environment variables.
+                // The server (rocket-welder2) connects to these sockets before waiting for the SHM buffer.
+                // If we don't bind them, the server blocks for 30s on connect timeout.
+                EnsureOutputSinksCreated();
 
                 // If preview is enabled, wrap the callback to capture frames
                 if (_previewEnabled)

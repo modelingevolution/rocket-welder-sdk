@@ -66,6 +66,11 @@ class RocketWelderClient:
         self._controller: Optional[IController] = None
         self._lock = threading.Lock()
 
+        # Output sink caches (created once, reused across calls)
+        self._segmentation_sink: Optional[ISegmentationResultSink] = None
+        self._keypoints_sink: Optional[IKeyPointsSink] = None
+        self._stage_sink: Optional[IStageSink] = None
+
         # Preview support
         self._preview_enabled = (
             self._connection.parameters.get("preview", "false").lower() == "true"
@@ -222,6 +227,11 @@ class RocketWelderClient:
                     actual_callback = metadata_adapter
                 else:
                     actual_callback = on_frame  # type: ignore[assignment]
+
+            # Always initialize output sockets if configured via environment variables.
+            # The server (rocket-welder2) connects to these sockets before waiting for the SHM buffer.
+            # If we don't bind them, the server blocks for 30s on connect timeout.
+            self._ensure_output_sinks_created()
 
             # Start the controller
             self._controller.start(actual_callback, cancellation_token)  # type: ignore[arg-type]
@@ -467,60 +477,88 @@ class RocketWelderClient:
             self._controller.start(writer_callback_oneway, cancellation_token)
             logger.info("RocketWelder client started with writers (one-way): %s", self._connection)
 
+    def _ensure_output_sinks_created(self) -> None:
+        """Ensure all output sinks are created if their URLs are configured.
+
+        Called by all start() variants so the server can connect to the sockets
+        even when the user callback doesn't use writers.
+        """
+        self._get_or_create_segmentation_sink()
+        self._get_or_create_keypoints_sink()
+        self._get_or_create_stage_sink()
+
     def _get_or_create_segmentation_sink(self) -> ISegmentationResultSink:
         """Get or create segmentation result sink from environment."""
+        if self._segmentation_sink is not None:
+            return self._segmentation_sink
+
         import os
 
         url = os.environ.get("SEGMENTATION_SINK_URL")
         if not url:
             logger.debug("SEGMENTATION_SINK_URL not set, using null sink")
-            return _NullSegmentationSink()
+            self._segmentation_sink = _NullSegmentationSink()
+            return self._segmentation_sink
 
         try:
             cs = SegmentationConnectionString.parse(url)
             frame_sink = FrameSinkFactory.create(cs.protocol, cs.address)
-            return SegmentationResultSink(frame_sink=frame_sink, owns_sink=True)
+            self._segmentation_sink = SegmentationResultSink(frame_sink=frame_sink, owns_sink=True)
+            return self._segmentation_sink
         except Exception as ex:
             logger.warning("Failed to create segmentation sink from %s: %s", url, ex)
-            return _NullSegmentationSink()
+            self._segmentation_sink = _NullSegmentationSink()
+            return self._segmentation_sink
 
     def _get_or_create_keypoints_sink(self) -> IKeyPointsSink:
         """Get or create keypoints sink from environment."""
+        if self._keypoints_sink is not None:
+            return self._keypoints_sink
+
         import os
 
         url = os.environ.get("KEYPOINTS_SINK_URL")
         if not url:
             logger.debug("KEYPOINTS_SINK_URL not set, using null sink")
-            return _NullKeyPointsSink()
+            self._keypoints_sink = _NullKeyPointsSink()
+            return self._keypoints_sink
 
         try:
             cs = KeyPointsConnectionString.parse(url)
             frame_sink = FrameSinkFactory.create(cs.protocol, cs.address)
-            return KeyPointsSink(
+            self._keypoints_sink = KeyPointsSink(
                 frame_sink=frame_sink,
                 master_frame_interval=cs.master_frame_interval,
                 owns_sink=True,
             )
+            return self._keypoints_sink
         except Exception as ex:
             logger.warning("Failed to create keypoints sink from %s: %s", url, ex)
-            return _NullKeyPointsSink()
+            self._keypoints_sink = _NullKeyPointsSink()
+            return self._keypoints_sink
 
     def _get_or_create_stage_sink(self) -> IStageSink:
         """Get or create graphics stage sink from environment."""
+        if self._stage_sink is not None:
+            return self._stage_sink
+
         import os
 
         url = os.environ.get("GRAPHICS_SINK_URL")
         if not url:
             logger.debug("GRAPHICS_SINK_URL not set, using null sink")
-            return _NullStageSink()
+            self._stage_sink = _NullStageSink()
+            return self._stage_sink
 
         try:
             cs = GraphicsConnectionString.parse(url)
             frame_sink = FrameSinkFactory.create(cs.protocol, cs.address)
-            return StageSink(frame_sink=frame_sink, owns_sink=True)
+            self._stage_sink = StageSink(frame_sink=frame_sink, owns_sink=True)
+            return self._stage_sink
         except Exception as ex:
             logger.warning("Failed to create graphics stage sink from %s: %s", url, ex)
-            return _NullStageSink()
+            self._stage_sink = _NullStageSink()
+            return self._stage_sink
 
     def stop(self) -> None:
         """Stop the client and clean up resources."""
