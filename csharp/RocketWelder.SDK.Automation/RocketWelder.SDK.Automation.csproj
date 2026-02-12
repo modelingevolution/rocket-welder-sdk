@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <PackageId>RocketWelder.SDK.Automation</PackageId>
     <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
