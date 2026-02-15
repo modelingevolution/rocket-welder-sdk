@@ -17,6 +17,8 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.*" />
+    <PackageReference Include="ModelingEvolution.Drawing" Version="1.4.*" />
+    <PackageReference Include="ModelingEvolution.JsonParsableConverter" Version="1.*" />
   </ItemGroup>
 
   <ItemGroup>
