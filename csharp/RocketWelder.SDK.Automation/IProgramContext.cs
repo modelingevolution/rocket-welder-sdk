@@ -45,7 +45,7 @@ public interface IProgramContext
     /// Gets a registered device by type and optional name.
     /// Returns null if device not found.
     /// </summary>
-    /// <typeparam name="T">The device interface type (e.g., ICobot, IPlc).</typeparam>
+    /// <typeparam name="T">The device interface type (e.g., IRobot, IPlc).</typeparam>
     /// <param name="name">Optional name to distinguish multiple devices of the same type.</param>
     T? GetDevice<T>(string? name = null) where T : class;
 
@@ -53,7 +53,7 @@ public interface IProgramContext
     /// Gets a registered device by type and optional name.
     /// Throws if device not found.
     /// </summary>
-    /// <typeparam name="T">The device interface type (e.g., ICobot, IPlc).</typeparam>
+    /// <typeparam name="T">The device interface type (e.g., IRobot, IPlc).</typeparam>
     /// <param name="name">Optional name to distinguish multiple devices of the same type.</param>
     /// <exception cref="InvalidOperationException">Thrown when device is not registered.</exception>
     T GetRequiredDevice<T>(string? name = null) where T : class;
@@ -62,7 +62,7 @@ public interface IProgramContext
     /// Gets a registered device by type and device number.
     /// Returns null if device not found.
     /// </summary>
-    /// <typeparam name="T">The device interface type (e.g., ICobot, IPlc).</typeparam>
+    /// <typeparam name="T">The device interface type (e.g., IRobot, IPlc).</typeparam>
     /// <param name="id">The device number (auto-assigned during creation).</param>
     T? GetById<T>(uint id) where T : class;
 }
