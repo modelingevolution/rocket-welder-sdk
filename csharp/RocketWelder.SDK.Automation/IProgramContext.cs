@@ -65,4 +65,24 @@ public interface IProgramContext
     /// <typeparam name="T">The device interface type (e.g., IRobot, IPlc).</typeparam>
     /// <param name="id">The device number (auto-assigned during creation).</param>
     T? GetById<T>(uint id) where T : class;
+
+    /// <summary>
+    /// Gets shared data published by another program.
+    /// Returns default if key not found or type mismatch.
+    /// </summary>
+    /// <typeparam name="T">The data type.</typeparam>
+    /// <param name="key">The data key.</param>
+    T? GetData<T>(string key);
+
+    /// <summary>
+    /// Publishes data for other programs to consume.
+    /// When <paramref name="isPersisted"/> is true, the value is also appended to EventStore
+    /// for durability across restarts.
+    /// </summary>
+    /// <typeparam name="T">The data type.</typeparam>
+    /// <param name="key">The data key.</param>
+    /// <param name="value">The value to store.</param>
+    /// <param name="isPersisted">When true, appends an event to EventStore.</param>
+    /// <returns>True if the value was stored successfully.</returns>
+    bool SetData<T>(string key, T value, bool isPersisted = false);
 }
