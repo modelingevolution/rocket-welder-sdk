@@ -135,7 +135,7 @@ internal sealed class UiLayer : IUiLayer
 
     public void Draw(Polygon<float> polygon)
     {
-        var span = polygon.Span;
+        var span = polygon.AsSpan();
         if (span.Length == 0) return;
 
         EnsureBuffer(span.Length);
