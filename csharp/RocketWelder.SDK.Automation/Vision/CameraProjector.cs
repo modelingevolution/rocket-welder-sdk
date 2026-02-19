@@ -12,7 +12,7 @@ namespace RocketWelder.SDK.Automation.Vision;
 /// Projects 2D pixel coordinates to 3D points on a surface using camera intrinsics
 /// and hand-eye calibration.
 /// </summary>
-public class CameraProjector
+public class CameraProjector : ICameraProjector
 {
     private readonly CameraIntrinsics _intrinsics;
     private readonly Pose3d _cameraToGripper;
@@ -187,4 +187,35 @@ public class CameraProjector
     /// </summary>
     public Point3d ProjectPoint(Pointd pixel, Point3d a, Point3d b, Point3d c)
         => ProjectPoint(pixel, Pose3d.FromSurface(a, b, c));
+
+    /// <inheritdoc />
+    public Polyline3<double> ProjectPoints(Polyline<float> pixels, Pose3d surface)
+    {
+        var span = pixels.AsSpan();
+        var points = new Point3d[span.Length];
+        for (int i = 0; i < span.Length; i++)
+        {
+            var pixel = new Pointd(double.CreateChecked(span[i].X), double.CreateChecked(span[i].Y));
+            points[i] = ProjectPoint(pixel, surface);
+        }
+        return new Polyline3<double>(points);
+    }
+
+    /// <inheritdoc />
+    public Polyline3<double> ProjectPoints(Polyline<float> pixels, Triangle3d surface)
+        => ProjectPoints(pixels, surface.ToPose());
+
+    /// <inheritdoc />
+    public Polyline3<double> ProjectPoints(Polyline<double> pixels, Pose3d surface)
+    {
+        var span = pixels.AsSpan();
+        var points = new Point3d[span.Length];
+        for (int i = 0; i < span.Length; i++)
+            points[i] = ProjectPoint(new Pointd(span[i].X, span[i].Y), surface);
+        return new Polyline3<double>(points);
+    }
+
+    /// <inheritdoc />
+    public Polyline3<double> ProjectPoints(Polyline<double> pixels, Triangle3d surface)
+        => ProjectPoints(pixels, surface.ToPose());
 }

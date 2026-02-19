@@ -1,3 +1,5 @@
+using RocketWelder.SDK.Automation.Vision;
+
 namespace RocketWelder.SDK.Automation;
 
 /// <summary>
@@ -23,4 +25,10 @@ public interface ICamera : IDisposable
     /// Caller must dispose the returned <see cref="MatFrame"/> to return pooled memory.
     /// </summary>
     MatFrame? TryGetImage();
+
+    /// <summary>
+    /// Camera projector for pixel-to-3D projection using this camera's intrinsics
+    /// and hand-eye calibration.
+    /// </summary>
+    ICameraProjector Projector { get; }
 }

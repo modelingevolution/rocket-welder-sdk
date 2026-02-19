@@ -142,6 +142,20 @@ public sealed class SegmentationFrameHandleF : IDisposable
     }
 
     /// <summary>
+    /// Finds the first segmentation instance with the given class ID, or null if not found.
+    /// </summary>
+    public SegmentationInstanceF? FindFirst(byte classId)
+    {
+        var instances = Instances;
+        for (int i = 0; i < instances.Length; i++)
+        {
+            if (instances[i].ClassId == classId)
+                return instances[i];
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Returns pooled buffers. MUST be called when done with the frame.
     /// Safe to call multiple times.
     /// </summary>
