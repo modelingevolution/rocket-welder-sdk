@@ -63,12 +63,8 @@ public class CameraProjector : ICameraProjector
     /// <returns>Pose with position at the specified distance and Z-axis along ray direction.</returns>
     public Pose3d ProjectPoseAt(Pointd pixel, double distance)
     {
-        // 1. Pixel to ray direction in camera frame (normalized)
-        var dirCam = new Vector3d(
-            (pixel.X - _intrinsics.Cx) / _intrinsics.Fx,
-            (pixel.Y - _intrinsics.Cy) / _intrinsics.Fy,
-            1.0
-        ).Normalize();
+        // 1. Pixel to undistorted ray direction in camera frame
+        var dirCam = PixelToRay(pixel);
 
         // 2. Get current gripper pose
         var gripperToBase = _getCurrentPosition();
@@ -139,12 +135,8 @@ public class CameraProjector : ICameraProjector
     /// <returns>3D point on surface in robot base frame.</returns>
     public Point3d ProjectPoint(Pointd pixel, Pose3d surface)
     {
-        // 1. Pixel to ray direction in camera frame (normalized)
-        var dirCam = new Vector3d(
-            (pixel.X - _intrinsics.Cx) / _intrinsics.Fx,
-            (pixel.Y - _intrinsics.Cy) / _intrinsics.Fy,
-            1.0
-        ).Normalize();
+        // 1. Pixel to undistorted ray direction in camera frame
+        var dirCam = PixelToRay(pixel);
 
         // 2. Get current gripper pose
         var gripperToBase = _getCurrentPosition();
@@ -218,4 +210,38 @@ public class CameraProjector : ICameraProjector
     /// <inheritdoc />
     public Polyline3<double> ProjectPoints(Polyline<double> pixels, Triangle3d surface)
         => ProjectPoints(pixels, surface.ToPose());
+
+    /// <summary>
+    /// Converts a pixel coordinate to a normalized, undistorted ray direction in camera frame.
+    /// Applies iterative Brown-Conrady undistortion (same algorithm as cv::undistortPoints).
+    /// </summary>
+    private Vector3d PixelToRay(Pointd pixel)
+    {
+        // Normalize distorted pixel to camera coordinates
+        double xd = (pixel.X - _intrinsics.Cx) / _intrinsics.Fx;
+        double yd = (pixel.Y - _intrinsics.Cy) / _intrinsics.Fy;
+
+        double k1 = _intrinsics.K1, k2 = _intrinsics.K2, k3 = _intrinsics.K3;
+        double p1 = _intrinsics.P1, p2 = _intrinsics.P2;
+
+        bool hasDistortion = k1 != 0 || k2 != 0 || k3 != 0 || p1 != 0 || p2 != 0;
+        if (!hasDistortion)
+            return new Vector3d(xd, yd, 1.0).Normalize();
+
+        // Iterative undistortion: solve (xd,yd) = distort(xu,yu) for (xu,yu)
+        double xu = xd, yu = yd;
+        for (int i = 0; i < 10; i++)
+        {
+            double r2 = xu * xu + yu * yu;
+            double r4 = r2 * r2;
+            double r6 = r4 * r2;
+            double radial = 1.0 + k1 * r2 + k2 * r4 + k3 * r6;
+            double dx = 2.0 * p1 * xu * yu + p2 * (r2 + 2.0 * xu * xu);
+            double dy = p1 * (r2 + 2.0 * yu * yu) + 2.0 * p2 * xu * yu;
+            xu = (xd - dx) / radial;
+            yu = (yd - dy) / radial;
+        }
+
+        return new Vector3d(xu, yu, 1.0).Normalize();
+    }
 }
