@@ -61,6 +61,57 @@ public readonly record struct CameraIntrinsics(
 
     /// <summary>Radial distortion coefficient 3</summary>
     public double K3 => D[4];
+
+    /// <summary>
+    /// Projects a 3D point in camera frame to a 2D pixel coordinate
+    /// using the pinhole model with Brown-Conrady distortion.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Point<double> PointToPixel(Point3<double> cameraPoint)
+    {
+        double xn = cameraPoint.X / cameraPoint.Z;
+        double yn = cameraPoint.Y / cameraPoint.Z;
+
+        double r2 = xn * xn + yn * yn;
+        double r4 = r2 * r2;
+        double r6 = r4 * r2;
+        double radial = 1.0 + K1 * r2 + K2 * r4 + K3 * r6;
+
+        double xd = xn * radial + 2.0 * P1 * xn * yn + P2 * (r2 + 2.0 * xn * xn);
+        double yd = yn * radial + P1 * (r2 + 2.0 * yn * yn) + 2.0 * P2 * xn * yn;
+
+        return new Point<double>(Fx * xd + Cx, Fy * yd + Cy);
+    }
+
+    /// <summary>
+    /// Converts a pixel coordinate to a normalized, undistorted ray direction in camera frame.
+    /// Applies iterative Brown-Conrady undistortion (same algorithm as cv::undistortPoints).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public Vector3<double> PixelToRay(Point<double> pixel)
+    {
+        double xd = (pixel.X - Cx) / Fx;
+        double yd = (pixel.Y - Cy) / Fy;
+
+        bool hasDistortion = K1 != 0 || K2 != 0 || K3 != 0 || P1 != 0 || P2 != 0;
+        if (!hasDistortion)
+            return new Vector3<double>(xd, yd, 1.0).Normalize();
+
+        double xu = xd, yu = yd;
+        for (int i = 0; i < 10; i++)
+        {
+            double r2 = xu * xu + yu * yu;
+            double r4 = r2 * r2;
+            double r6 = r4 * r2;
+            double radial = 1.0 + K1 * r2 + K2 * r4 + K3 * r6;
+            double dx = 2.0 * P1 * xu * yu + P2 * (r2 + 2.0 * xu * xu);
+            double dy = P1 * (r2 + 2.0 * yu * yu) + 2.0 * P2 * xu * yu;
+            xu = (xd - dx) / radial;
+            yu = (yd - dy) / radial;
+        }
+
+        return new Vector3<double>(xu, yu, 1.0).Normalize();
+    }
 }
 
 /// <summary>
