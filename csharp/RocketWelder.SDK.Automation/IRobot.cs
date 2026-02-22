@@ -70,6 +70,21 @@ public interface IRobot : IDisposable
     // === Motion ===
 
     /// <summary>
+    /// When true, the robot uses joint-space guidance instead of Cartesian.
+    /// Must be set before <see cref="Connect"/> for protocols that need to know the mode
+    /// from the first message (e.g., ABB EGM with EGMRunJoint in RAPID).
+    /// Default is false (Cartesian mode).
+    /// </summary>
+    bool JointMode { get; set; }
+
+    /// <summary>
+    /// Moves the robot by sending absolute joint angles.
+    /// Non-blocking for streaming robots (ABB EGM), blocking for direct robots (Fairino).
+    /// </summary>
+    /// <param name="joints">6 joint angles.</param>
+    void MoveJoint(Degree<double>[] joints);
+
+    /// <summary>
     /// Moves the robot linearly to the target pose.
     /// Behavior is implementation-specific:
     /// - Blocking robots (Fairino): waits until motion completes
