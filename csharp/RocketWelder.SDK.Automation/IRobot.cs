@@ -65,7 +65,7 @@ public interface IRobot : IDisposable
     bool TryGetTeachingPoint(string name, out Pose3<double> pose);
 
     /// <summary>Gets the current joint angles in degrees.</summary>
-    Degree<double>[] GetJointPositions();
+    Joints6<double> GetJointPositions();
 
     // === Motion ===
 
@@ -82,7 +82,7 @@ public interface IRobot : IDisposable
     /// Non-blocking for streaming robots (ABB EGM), blocking for direct robots (Fairino).
     /// </summary>
     /// <param name="joints">6 joint angles.</param>
-    void MoveJoint(Degree<double>[] joints);
+    void MoveJoint(Joints6<double> joints);
 
     /// <summary>
     /// Moves the robot linearly to the target pose.
