@@ -212,5 +212,8 @@ public class CameraProjector : ICameraProjector
     public Polyline3<double> ProjectPoints(Polyline<double> pixels, Triangle3d surface)
         => ProjectPoints(pixels, surface.ToPose());
 
+    /// <inheritdoc />
+    public Pose3d GetTcpForCameraPose(Pose3d cameraPose) => cameraPose * _cameraToGripper.Inverse();
+
     private Vector3d PixelToRay(Pointd pixel) => _intrinsics.PixelToRay(pixel);
 }

@@ -90,4 +90,12 @@ public interface ICameraProjector
     /// Projects all points of a 2D polyline (double pixel coordinates) onto a surface defined by a triangle.
     /// </summary>
     Polyline3<double> ProjectPoints(Polyline<double> pixels, Triangle3d surface);
+
+    /// <summary>
+    /// Computes the robot TCP pose that positions the camera at the specified pose in base frame.
+    /// Uses the hand-eye calibration: tcp = cameraPose * inv(cameraToGripper).
+    /// </summary>
+    /// <param name="cameraPose">Desired camera pose in robot base frame.</param>
+    /// <returns>Robot TCP pose that achieves the desired camera position and orientation.</returns>
+    Pose3d GetTcpForCameraPose(Pose3d cameraPose);
 }
