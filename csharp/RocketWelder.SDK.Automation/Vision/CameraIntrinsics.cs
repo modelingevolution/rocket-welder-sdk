@@ -24,15 +24,19 @@ public struct DistortionCoefficients
 }
 
 /// <summary>
-/// Camera intrinsic parameters: matrix K and distortion coefficients D.
-/// Serializes as JSON array: [fx, fy, cx, cy, k1, k2, p1, p2, k3].
+/// Camera intrinsic parameters: matrix K, distortion coefficients D, and image dimensions.
+/// Serializes as JSON array: [fx, fy, cx, cy, k1, k2, p1, p2, k3] or [fx, fy, cx, cy, k1, k2, p1, p2, k3, width, height].
 /// </summary>
 /// <param name="K">Camera matrix (fx, fy, cx, cy)</param>
 /// <param name="D">Distortion coefficients [k1, k2, p1, p2, k3]</param>
+/// <param name="Width">Image width in pixels (0 if unknown)</param>
+/// <param name="Height">Image height in pixels (0 if unknown)</param>
 [JsonConverter(typeof(CameraIntrinsicsJsonConverter))]
 public readonly record struct CameraIntrinsics(
     Matrix<double> K,
-    DistortionCoefficients D
+    DistortionCoefficients D,
+    int Width = 0,
+    int Height = 0
 )
 {
     /// <summary>Focal length X (pixels)</summary>
@@ -135,12 +139,23 @@ public class CameraIntrinsicsJsonConverter : JsonConverter<CameraIntrinsics>
         reader.Read(); var p2 = reader.GetDouble();
         reader.Read(); var k3 = reader.GetDouble();
 
-        if (!reader.Read() || reader.TokenType != JsonTokenType.EndArray)
+        // Backward-compatible: read optional Width, Height if present
+        int width = 0, height = 0;
+        reader.Read();
+        if (reader.TokenType == JsonTokenType.Number)
+        {
+            width = reader.GetInt32();
+            reader.Read(); height = reader.GetInt32();
+            reader.Read();
+        }
+
+        if (reader.TokenType != JsonTokenType.EndArray)
             throw new JsonException("Expected end of array for CameraIntrinsics.");
 
         return new CameraIntrinsics(
             new Matrix<double>(fx, 0, 0, fy, cx, cy),
-            new DistortionCoefficients(k1, k2, p1, p2, k3));
+            new DistortionCoefficients(k1, k2, p1, p2, k3),
+            width, height);
     }
 
     public override void Write(Utf8JsonWriter writer, CameraIntrinsics value, JsonSerializerOptions options)
@@ -155,6 +170,8 @@ public class CameraIntrinsicsJsonConverter : JsonConverter<CameraIntrinsics>
         writer.WriteNumberValue(value.P1);
         writer.WriteNumberValue(value.P2);
         writer.WriteNumberValue(value.K3);
+        writer.WriteNumberValue(value.Width);
+        writer.WriteNumberValue(value.Height);
         writer.WriteEndArray();
     }
 }
