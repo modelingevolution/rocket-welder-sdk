@@ -22,6 +22,7 @@
     <PackageReference Include="ModelingEvolution.Drawing" Version="1.7.0.65" />
     <PackageReference Include="ModelingEvolution.JsonParsableConverter" Version="1.0.1" />
     <PackageReference Include="ModelingEvolution.Mjpeg" Version="1.3.0" />
+    <PackageReference Include="System.Reactive" Version="6.*" />
   </ItemGroup>
 
   <ItemGroup>
