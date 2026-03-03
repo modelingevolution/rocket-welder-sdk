@@ -36,6 +36,13 @@ public interface IProgramContext
     IUiSink Ui { get; }
 
     /// <summary>
+    /// Store for program actions (steering commands, decisions).
+    /// Actions are stored in EventStore with automatic frame correlation —
+    /// the frame ID is captured from the last retrieved keypoints/segmentation frame.
+    /// </summary>
+    IActionsStore Actions { get; }
+
+    /// <summary>
     /// True when running in test/dry-run mode.
     /// Programs should log intended actions instead of executing them.
     /// </summary>
