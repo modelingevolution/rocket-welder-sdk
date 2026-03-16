@@ -4,6 +4,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS build
 WORKDIR /src
 
+# Copy nuget.config if present (for private feed during propagation delay)
+COPY nuget.config* .
 # Copy the project file and restore dependencies (SDK from NuGet)
 COPY examples/SimpleClient/SimpleClient.csproj .
 RUN dotnet restore

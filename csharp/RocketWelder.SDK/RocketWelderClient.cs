@@ -1485,27 +1485,22 @@ namespace RocketWelder.SDK
                 var kpSink = GetOrCreateKeyPointsSink();
                 var stageSink = GetOrCreateStageSink();
 
-                ulong frameNumber = 0;
-
-                _controller.Start((Mat inputMat) =>
+                _controller.Start((FrameMetadata frameMetadata, Mat inputMat, Mat outputMat) =>
                 {
-                    frameNumber++;
-                    var metadata = new FrameMetadata(frameNumber, 0);
-
                     var caps = _controller.GetMetadata()?.Caps;
                     if (caps == null)
                     {
-                        _logger.LogWarning("GstCaps not available, skipping AI output");
-                        using var noOpStageWriter = stageSink.CreateWriter(frameNumber);
-                        onFrame(metadata, inputMat, NoOpSegmentationWriter.Instance, NoOpKeyPointsWriter.Instance, noOpStageWriter);
+                        _logger.LogWarning("GstCaps not available for frame {FrameNumber}, skipping AI output", frameMetadata.FrameNumber);
+                        using var noOpStageWriter = stageSink.CreateWriter(frameMetadata.FrameNumber);
+                        onFrame(frameMetadata, inputMat, NoOpSegmentationWriter.Instance, NoOpKeyPointsWriter.Instance, noOpStageWriter);
                         return;
                     }
 
-                    using var segWriter = segSink.CreateWriter(frameNumber, (uint)caps.Value.Width, (uint)caps.Value.Height);
-                    using var kpWriter = kpSink.CreateWriter(frameNumber);
-                    using var stageWriter = stageSink.CreateWriter(frameNumber);
+                    using var segWriter = segSink.CreateWriter(frameMetadata.FrameNumber, (uint)caps.Value.Width, (uint)caps.Value.Height);
+                    using var kpWriter = kpSink.CreateWriter(frameMetadata.FrameNumber);
+                    using var stageWriter = stageSink.CreateWriter(frameMetadata.FrameNumber);
 
-                    onFrame(metadata, inputMat, segWriter, kpWriter, stageWriter);
+                    onFrame(frameMetadata, inputMat, segWriter, kpWriter, stageWriter);
                 }, cancellationToken);
 
                 Started?.Invoke(this, EventArgs.Empty);
