@@ -338,7 +338,7 @@ class OneWayShmController(IController):
         Matches C# CreateMat behavior - creates Mat wrapping the data.
 
         Frame data layout from GStreamer zerosink:
-        [FrameMetadata (16 bytes)][Pixel Data (WxHxC bytes)]
+        [FrameMetadata (24 bytes)][Pixel Data (WxHxC bytes)]
 
         Args:
             frame: ZeroBuffer frame
@@ -363,8 +363,8 @@ class OneWayShmController(IController):
                 else:
                     channels = 3  # Default to RGB
 
-                # Frame data has 16-byte FrameMetadata prefix that must be stripped
-                # Layout: [FrameMetadata (16 bytes)][Pixel Data]
+                # Frame data has 24-byte FrameMetadata prefix that must be stripped
+                # Layout: [FrameMetadata (24 bytes)][Pixel Data]
                 if frame.size < FRAME_METADATA_SIZE:
                     logger.error(
                         "Frame too small for FrameMetadata: %d bytes (need at least %d)",
@@ -373,7 +373,7 @@ class OneWayShmController(IController):
                     )
                     return None
 
-                # Get pixel data (skip 16-byte FrameMetadata prefix)
+                # Get pixel data (skip 24-byte FrameMetadata prefix)
                 pixel_data = np.frombuffer(frame.data[FRAME_METADATA_SIZE:], dtype=np.uint8)
 
                 # Check pixel data size matches expected
@@ -406,7 +406,7 @@ class OneWayShmController(IController):
             # No caps available - try to infer from frame size
             logger.warning("No GstCaps available, attempting to infer from frame size")
 
-            # Frame data has 16-byte FrameMetadata prefix
+            # Frame data has 24-byte FrameMetadata prefix
             if frame.size < FRAME_METADATA_SIZE:
                 logger.error(
                     "Frame too small for FrameMetadata: %d bytes (need at least %d)",
@@ -415,7 +415,7 @@ class OneWayShmController(IController):
                 )
                 return None
 
-            # Calculate pixel data size (frame size minus 16-byte metadata prefix)
+            # Calculate pixel data size (frame size minus 24-byte metadata prefix)
             pixel_data_size = frame.size - FRAME_METADATA_SIZE
 
             # First, check if it's a perfect square (square frame)
@@ -474,7 +474,7 @@ class OneWayShmController(IController):
                         width=width, height=height, format=format_str
                     )
 
-                    # Create Mat from pixel data (skip 16-byte FrameMetadata prefix)
+                    # Create Mat from pixel data (skip 24-byte FrameMetadata prefix)
                     pixel_data = np.frombuffer(frame.data[FRAME_METADATA_SIZE:], dtype=np.uint8)
                     if channels == 3:
                         return pixel_data.reshape((height, width, 3))  # type: ignore[no-any-return]

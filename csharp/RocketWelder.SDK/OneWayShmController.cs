@@ -125,14 +125,14 @@ namespace RocketWelder.SDK
                     if (!frame.IsValid)
                         continue; // Skip invalid frames
 
-                    // Frame has 16-byte FrameMetadata prefix that must be skipped
+                    // Frame has 24-byte FrameMetadata prefix that must be skipped
                     if (frame.Size < FrameMetadata.Size)
                     {
                         _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", frame.Size);
                         continue;
                     }
 
-                    // Create Mat wrapping pixel data (skip 16-byte FrameMetadata prefix)
+                    // Create Mat wrapping pixel data (skip 24-byte FrameMetadata prefix)
                     unsafe
                     {
                         byte* pixelDataPtr = frame.Pointer + FrameMetadata.Size;
@@ -201,7 +201,7 @@ namespace RocketWelder.SDK
                     if (!frame.IsValid)
                         continue; // Skip invalid frames
 
-                    // Frame has 16-byte FrameMetadata prefix
+                    // Frame has 24-byte FrameMetadata prefix
                     if (frame.Size < FrameMetadata.Size)
                     {
                         _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", frame.Size);
@@ -272,7 +272,7 @@ namespace RocketWelder.SDK
                     if (!frame.IsValid)
                         continue; // Skip invalid frames
 
-                    // Frame has 16-byte FrameMetadata prefix that must be read
+                    // Frame has 24-byte FrameMetadata prefix that must be read
                     if (frame.Size < FrameMetadata.Size)
                     {
                         _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", frame.Size);
@@ -340,14 +340,14 @@ namespace RocketWelder.SDK
                     if (!frame.IsValid)
                         continue; // Skip invalid frames
 
-                    // Frame has 16-byte FrameMetadata prefix that must be skipped
+                    // Frame has 24-byte FrameMetadata prefix that must be skipped
                     if (frame.Size < FrameMetadata.Size)
                     {
                         _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", frame.Size);
                         continue;
                     }
 
-                    // Create Mat wrapping pixel data (skip 16-byte FrameMetadata prefix)
+                    // Create Mat wrapping pixel data (skip 24-byte FrameMetadata prefix)
                     unsafe
                     {
                         byte* pixelDataPtr = frame.Pointer + FrameMetadata.Size;
@@ -411,7 +411,7 @@ namespace RocketWelder.SDK
                     if (!frame.IsValid)
                         continue; // Skip invalid frames
 
-                    // Frame has 16-byte FrameMetadata prefix that must be skipped
+                    // Frame has 24-byte FrameMetadata prefix that must be skipped
                     if (frame.Size < FrameMetadata.Size)
                     {
                         _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", frame.Size);
@@ -427,7 +427,7 @@ namespace RocketWelder.SDK
                     // Allocate output Mat for first frame
                     using var outputMat = new Mat(_gstCaps!.Value.Height, _gstCaps.Value.Width, _gstCaps.Value.Depth, _gstCaps.Value.Channels);
 
-                    // Create Mat wrapping pixel data (skip 16-byte FrameMetadata prefix)
+                    // Create Mat wrapping pixel data (skip 24-byte FrameMetadata prefix)
                     unsafe
                     {
                         byte* pixelDataPtr = frame.Pointer + FrameMetadata.Size;
@@ -478,7 +478,7 @@ namespace RocketWelder.SDK
                     if (!frame.IsValid)
                         continue; // Skip invalid frames
 
-                    // Frame has 16-byte FrameMetadata prefix that must be skipped
+                    // Frame has 24-byte FrameMetadata prefix that must be skipped
                     if (frame.Size < FrameMetadata.Size)
                     {
                         _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", frame.Size);
@@ -492,7 +492,7 @@ namespace RocketWelder.SDK
                     _logger.LogInformation("Received metadata from buffer '{BufferName}': {Caps}",
                         _connection.BufferName, _gstCaps);
 
-                    // Create Mat wrapping pixel data (skip 16-byte FrameMetadata prefix)
+                    // Create Mat wrapping pixel data (skip 24-byte FrameMetadata prefix)
                     unsafe
                     {
                         byte* pixelDataPtr = frame.Pointer + FrameMetadata.Size;

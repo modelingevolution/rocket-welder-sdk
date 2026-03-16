@@ -93,8 +93,8 @@ class TestOneWayShmController:
         controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="RGB")
         on_frame = Mock()
 
-        # Create mock frame with 16-byte metadata prefix + pixel data (2x2x3 = 12 bytes)
-        metadata_prefix = bytes(16)  # 16-byte FrameMetadata
+        # Create mock frame with 24-byte metadata prefix + pixel data (2x2x3 = 12 bytes)
+        metadata_prefix = bytes(24)  # 24-byte FrameMetadata
         pixel_data = np.zeros((12,), dtype=np.uint8)  # 2x2x3
         frame_data = metadata_prefix + bytes(pixel_data)
         mock_frame = MagicMock()
@@ -127,8 +127,8 @@ class TestOneWayShmController:
     def test_create_mat_from_frame_no_caps(self, controller):
         """Test _create_mat_from_frame when no caps are available."""
         frame = MagicMock()
-        # Use 16-byte prefix + 5 bytes pixel data (not a perfect square)
-        metadata_prefix = bytes(16)
+        # Use 24-byte prefix + 5 bytes pixel data (not a perfect square)
+        metadata_prefix = bytes(24)
         pixel_data = b"tests"
         frame_data = metadata_prefix + pixel_data
         frame.data = memoryview(frame_data)
@@ -142,8 +142,8 @@ class TestOneWayShmController:
         # Set up GstCaps
         controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="RGB")
 
-        # Create frame with 16-byte prefix + pixel data (2x2x3 = 12 bytes)
-        metadata_prefix = bytes(16)
+        # Create frame with 24-byte prefix + pixel data (2x2x3 = 12 bytes)
+        metadata_prefix = bytes(24)
         pixel_data = np.zeros((12,), dtype=np.uint8)
         frame_data = metadata_prefix + bytes(pixel_data)
         frame = MagicMock()
@@ -158,8 +158,8 @@ class TestOneWayShmController:
         """Test _create_mat_from_frame with grayscale format."""
         controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="GRAY8")
 
-        # Create frame with 16-byte prefix + pixel data (2x2x1 = 4 bytes)
-        metadata_prefix = bytes(16)
+        # Create frame with 24-byte prefix + pixel data (2x2x1 = 4 bytes)
+        metadata_prefix = bytes(24)
         pixel_data = np.zeros((4,), dtype=np.uint8)
         frame_data = metadata_prefix + bytes(pixel_data)
         frame = MagicMock()
@@ -174,8 +174,8 @@ class TestOneWayShmController:
         """Test _create_mat_from_frame with RGBA format."""
         controller._gst_caps = GstCaps.from_simple(width=2, height=2, format="RGBA")
 
-        # Create frame with 16-byte prefix + pixel data (2x2x4 = 16 bytes)
-        metadata_prefix = bytes(16)
+        # Create frame with 24-byte prefix + pixel data (2x2x4 = 16 bytes)
+        metadata_prefix = bytes(24)
         pixel_data = np.zeros((16,), dtype=np.uint8)
         frame_data = metadata_prefix + bytes(pixel_data)
         frame = MagicMock()
@@ -296,12 +296,13 @@ class TestDuplexShmController:
 
         from rocket_welder_sdk.gst_metadata import GstCaps
 
-        # Create FrameMetadata bytes (16 bytes - only frame_number + timestamp_ns)
+        # Create FrameMetadata bytes (24 bytes: frame_number + timestamp_ns + exposure_time_us)
         # Width/height/format now come from GstCaps, not FrameMetadata
         frame_number = 42
         timestamp_ns = 1234567890
+        exposure_time_us = 5000
 
-        metadata_bytes = struct.pack("<QQ", frame_number, timestamp_ns)
+        metadata_bytes = struct.pack("<QQQ", frame_number, timestamp_ns, exposure_time_us)
 
         # Set up GstCaps (required for width/height/format)
         controller._gst_caps = GstCaps(

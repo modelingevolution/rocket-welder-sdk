@@ -209,7 +209,7 @@ public class BallDetectionService : BackgroundService
         _lifetime.StopApplication();
     }
 
-    private void ProcessFrameWithWriters(Mat input, ISegmentationResultWriter segWriter, IKeyPointsWriter kpWriter, IStageWriter stageWriter, Mat output)
+    private void ProcessFrameWithWriters(FrameMetadata metadata, Mat input, ISegmentationResultWriter segWriter, IKeyPointsWriter kpWriter, IStageWriter stageWriter)
     {
         _frameCount++;
 
@@ -230,7 +230,7 @@ public class BallDetectionService : BackgroundService
             _keyWritten +=1;
         }
 
-        // Draw ball position as text overlay in upper left corner
+        // Draw ball position and exposure time as text overlay
         var layer = stageWriter[0];
         layer.SetFontSize(24);
         layer.SetFontColor(new RgbColor(255, 255, 255)); // White text for visibility
@@ -243,21 +243,24 @@ public class BallDetectionService : BackgroundService
             layer.DrawText("Ball: not detected", 10, 30);
         }
 
+        var exposureText = metadata.HasExposureTime
+            ? $"ET: {metadata.ExposureTimeUs}us"
+            : "ET: N/A";
+        layer.DrawText(exposureText, 10, 60);
+
         // Log every 30 frames
         if (_frameCount % 30 == 0)
         {
             if (center.HasValue)
             {
-                _logger.LogInformation("Frame {Frame}: Ball at ({X}, {Y}), confidence: {Conf:F2}, Segmentations written: {Seg}, Keypoints written: {Keys}",
-                    _frameCount, center.Value.X, center.Value.Y, confidence, _segWritten, _keyWritten);
+                _logger.LogInformation("Frame {Frame}: Ball at ({X}, {Y}), confidence: {Conf:F2}, ET: {ExposureTime}, Segmentations written: {Seg}, Keypoints written: {Keys}",
+                    _frameCount, center.Value.X, center.Value.Y, confidence, exposureText, _segWritten, _keyWritten);
             }
             else
             {
-                _logger.LogInformation("Frame {Frame}: No ball detected", _frameCount);
+                _logger.LogInformation("Frame {Frame}: No ball detected, ET: {ExposureTime}", _frameCount, exposureText);
             }
         }
-
-        // NOTE: We do NOT modify output - this is a sink-only example
 
         CheckExit();
     }

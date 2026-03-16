@@ -6,17 +6,17 @@
 
 ### Implemented Components
 
-| Component | File | Description |
-|-----------|------|-------------|
-| `BinaryFrameWriter` | `BinaryFrameWriter.cs` | Zero-allocation binary writer for `Span<byte>` |
-| `BinaryFrameReader` | `BinaryFrameReader.cs` | Zero-allocation binary reader (existed) |
-| `VarintExtensions` | `VarintExtensions.cs` | Varint/ZigZag encoding helpers (existed) |
-| `SegmentationProtocol` | `SegmentationProtocol.cs` | Static `Write()`/`Read()` for segmentation frames |
-| `SegmentationFrame` | `SegmentationFrame.cs` | Decoded segmentation frame structure |
+| Component              | File                      | Description                                                |
+| ---------------------- | ------------------------- | ---------------------------------------------------------- |
+| `BinaryFrameWriter`    | `BinaryFrameWriter.cs`    | Zero-allocation binary writer for `Span<byte>`             |
+| `BinaryFrameReader`    | `BinaryFrameReader.cs`    | Zero-allocation binary reader (existed)                    |
+| `VarintExtensions`     | `VarintExtensions.cs`     | Varint/ZigZag encoding helpers (existed)                   |
+| `SegmentationProtocol` | `SegmentationProtocol.cs` | Static `Write()`/`Read()` for segmentation frames          |
+| `SegmentationFrame`    | `SegmentationFrame.cs`    | Decoded segmentation frame structure                       |
 | `SegmentationInstance` | `SegmentationInstance.cs` | Single segmentation instance (classId, instanceId, points) |
-| `KeypointsProtocol` | `KeypointsProtocol.cs` | Static `WriteMasterFrame()`/`WriteDeltaFrame()`/`Read()` |
-| `KeypointsFrame` | `KeypointsFrame.cs` | Decoded keypoints frame structure |
-| `Keypoint` | `Keypoint.cs` | Single keypoint (id, position, confidence) |
+| `KeypointsProtocol`    | `KeypointsProtocol.cs`    | Static `WriteMasterFrame()`/`WriteDeltaFrame()`/`Read()`   |
+| `KeypointsFrame`       | `KeypointsFrame.cs`       | Decoded keypoints frame structure                          |
+| `Keypoint`             | `Keypoint.cs`             | Single keypoint (id, position, confidence)                 |
 
 ### Round-Trip Testing Architecture
 

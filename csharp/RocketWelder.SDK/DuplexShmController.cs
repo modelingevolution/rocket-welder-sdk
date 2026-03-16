@@ -100,7 +100,7 @@ namespace RocketWelder.SDK
             if (_onFrame == null)
                 return;
 
-            // Frame now has FrameMetadata prepended (16 bytes: frame_number + timestamp_ns)
+            // Frame now has FrameMetadata prepended (24 bytes: frame_number + timestamp_ns + exposure_time_us)
             if (request.Size < FrameMetadata.Size)
             {
                 _logger.LogWarning("Frame too small for FrameMetadata: {Size} bytes", request.Size);
@@ -118,7 +118,7 @@ namespace RocketWelder.SDK
 
             unsafe
             {
-                // Read FrameMetadata from the beginning of the frame (16 bytes)
+                // Read FrameMetadata from the beginning of the frame (24 bytes)
                 var frameMetadata = FrameMetadata.FromPointer((IntPtr)request.Pointer);
 
                 // Calculate pointer to actual pixel data (after metadata)

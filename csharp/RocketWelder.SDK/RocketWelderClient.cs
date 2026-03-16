@@ -1414,6 +1414,111 @@ namespace RocketWelder.SDK
         }
 
         /// <summary>
+        /// Starts receiving frames with FrameMetadata, segmentation, keypoints, and graphics output support (DUPLEX MODE).
+        /// The callback receives per-frame exposure time and other metadata alongside writers.
+        /// </summary>
+        /// <param name="onFrame">Callback receiving FrameMetadata, input Mat, segmentation writer, keypoints writer, stage writer, and output Mat</param>
+        /// <param name="cancellationToken">Optional cancellation token</param>
+        public void Start(Action<FrameMetadata, Mat, ISegmentationResultWriter, IKeyPointsWriter, IStageWriter, Mat> onFrame, CancellationToken cancellationToken = default)
+        {
+            if (IsRunning)
+                throw new InvalidOperationException("Client is already running");
+
+            try
+            {
+                _logger.LogInformation("Starting RocketWelder client with metadata + AI output + graphics (duplex): {Connection}", Connection);
+
+                LogSinkConfiguration();
+                _logger.LogInformation("Graphics sink URL: {Url}", GetGraphicsSinkUrl() ?? "(not configured)");
+
+                var segSink = GetOrCreateSegmentationSink();
+                var kpSink = GetOrCreateKeyPointsSink();
+                var stageSink = GetOrCreateStageSink();
+
+                _controller.Start((FrameMetadata frameMetadata, Mat inputMat, Mat outputMat) =>
+                {
+                    var caps = _controller.GetMetadata()?.Caps;
+                    if (caps == null)
+                    {
+                        _logger.LogWarning("GstCaps not available for frame {FrameNumber}, skipping AI output", frameMetadata.FrameNumber);
+                        using var noOpStageWriter = stageSink.CreateWriter(frameMetadata.FrameNumber);
+                        onFrame(frameMetadata, inputMat, NoOpSegmentationWriter.Instance, NoOpKeyPointsWriter.Instance, noOpStageWriter, outputMat);
+                        return;
+                    }
+
+                    using var segWriter = segSink.CreateWriter(frameMetadata.FrameNumber, (uint)caps.Value.Width, (uint)caps.Value.Height);
+                    using var kpWriter = kpSink.CreateWriter(frameMetadata.FrameNumber);
+                    using var stageWriter = stageSink.CreateWriter(frameMetadata.FrameNumber);
+
+                    onFrame(frameMetadata, inputMat, segWriter, kpWriter, stageWriter, outputMat);
+                }, cancellationToken);
+
+                Started?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to start RocketWelder client with metadata + AI output + graphics");
+                OnError?.Invoke(this, new ErrorEventArgs(ex));
+                throw;
+            }
+        }
+
+        /// <summary>
+        /// Starts receiving frames with FrameMetadata, segmentation, keypoints, and graphics output support (ONE-WAY MODE).
+        /// The callback receives per-frame exposure time and other metadata alongside writers.
+        /// </summary>
+        /// <param name="onFrame">Callback receiving FrameMetadata, input Mat, segmentation writer, keypoints writer, and stage writer</param>
+        /// <param name="cancellationToken">Optional cancellation token</param>
+        public void Start(Action<FrameMetadata, Mat, ISegmentationResultWriter, IKeyPointsWriter, IStageWriter> onFrame, CancellationToken cancellationToken = default)
+        {
+            if (IsRunning)
+                throw new InvalidOperationException("Client is already running");
+
+            try
+            {
+                _logger.LogInformation("Starting RocketWelder client with metadata + AI output + graphics (one-way): {Connection}", Connection);
+
+                LogSinkConfiguration();
+                _logger.LogInformation("Graphics sink URL: {Url}", GetGraphicsSinkUrl() ?? "(not configured)");
+
+                var segSink = GetOrCreateSegmentationSink();
+                var kpSink = GetOrCreateKeyPointsSink();
+                var stageSink = GetOrCreateStageSink();
+
+                ulong frameNumber = 0;
+
+                _controller.Start((Mat inputMat) =>
+                {
+                    frameNumber++;
+                    var metadata = new FrameMetadata(frameNumber, 0);
+
+                    var caps = _controller.GetMetadata()?.Caps;
+                    if (caps == null)
+                    {
+                        _logger.LogWarning("GstCaps not available, skipping AI output");
+                        using var noOpStageWriter = stageSink.CreateWriter(frameNumber);
+                        onFrame(metadata, inputMat, NoOpSegmentationWriter.Instance, NoOpKeyPointsWriter.Instance, noOpStageWriter);
+                        return;
+                    }
+
+                    using var segWriter = segSink.CreateWriter(frameNumber, (uint)caps.Value.Width, (uint)caps.Value.Height);
+                    using var kpWriter = kpSink.CreateWriter(frameNumber);
+                    using var stageWriter = stageSink.CreateWriter(frameNumber);
+
+                    onFrame(metadata, inputMat, segWriter, kpWriter, stageWriter);
+                }, cancellationToken);
+
+                Started?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to start RocketWelder client with metadata + AI output + graphics");
+                OnError?.Invoke(this, new ErrorEventArgs(ex));
+                throw;
+            }
+        }
+
+        /// <summary>
         /// Gets the segmentation sink for external use (e.g., custom frame processing).
         /// Returns null if not configured.
         /// </summary>

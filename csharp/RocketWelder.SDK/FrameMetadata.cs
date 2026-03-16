@@ -5,11 +5,12 @@ namespace RocketWelder.SDK
 {
     /// <summary>
     /// Frame metadata prepended to each frame in zerobuffer shared memory.
-    /// This structure is 16 bytes, 8-byte aligned.
+    /// This structure is 24 bytes, 8-byte aligned.
     ///
     /// Layout:
-    ///   [0-7]   frame_number    - Sequential frame index (0-based)
-    ///   [8-15]  timestamp_ns    - GStreamer PTS in nanoseconds (UInt64.MaxValue if unavailable)
+    ///   [0-7]   frame_number      - Sequential frame index (0-based)
+    ///   [8-15]  timestamp_ns      - GStreamer PTS in nanoseconds (UInt64.MaxValue if unavailable)
+    ///   [16-23] exposure_time_us  - Exposure time in microseconds (UInt64.MaxValue if unavailable)
     ///
     /// Note: Width, height, and format are NOT included here because they are
     /// stream-level properties that never change per-frame. They are stored once
@@ -22,12 +23,17 @@ namespace RocketWelder.SDK
         /// <summary>
         /// Size of the FrameMetadata structure in bytes.
         /// </summary>
-        public const int Size = 16;
+        public const int Size = 24;
 
         /// <summary>
         /// Value indicating timestamp is unavailable.
         /// </summary>
         public const ulong TimestampUnavailable = ulong.MaxValue;
+
+        /// <summary>
+        /// Value indicating exposure time is unavailable.
+        /// </summary>
+        public const ulong ExposureTimeUnavailable = ulong.MaxValue;
 
         /// <summary>
         /// Sequential frame index (0-based, increments per frame).
@@ -41,12 +47,29 @@ namespace RocketWelder.SDK
         public readonly ulong TimestampNs;
 
         /// <summary>
-        /// Creates a new FrameMetadata instance.
+        /// Exposure time in microseconds.
+        /// UInt64.MaxValue indicates exposure time is unavailable.
+        /// </summary>
+        public readonly ulong ExposureTimeUs;
+
+        /// <summary>
+        /// Creates a new FrameMetadata instance with exposure time.
+        /// </summary>
+        public FrameMetadata(ulong frameNumber, ulong timestampNs, ulong exposureTimeUs)
+        {
+            FrameNumber = frameNumber;
+            TimestampNs = timestampNs;
+            ExposureTimeUs = exposureTimeUs;
+        }
+
+        /// <summary>
+        /// Creates a new FrameMetadata instance without exposure time (defaults to unavailable).
         /// </summary>
         public FrameMetadata(ulong frameNumber, ulong timestampNs)
         {
             FrameNumber = frameNumber;
             TimestampNs = timestampNs;
+            ExposureTimeUs = ExposureTimeUnavailable;
         }
 
         /// <summary>
@@ -55,10 +78,23 @@ namespace RocketWelder.SDK
         public bool HasTimestamp => TimestampNs != TimestampUnavailable;
 
         /// <summary>
+        /// Gets whether the exposure time is available.
+        /// </summary>
+        public bool HasExposureTime => ExposureTimeUs != ExposureTimeUnavailable;
+
+        /// <summary>
         /// Gets the timestamp as a TimeSpan, or null if unavailable.
         /// </summary>
         public TimeSpan? Timestamp => HasTimestamp
             ? TimeSpan.FromTicks((long)(TimestampNs / 100)) // 1 tick = 100 ns
+            : null;
+
+        /// <summary>
+        /// Gets the exposure time as a TimeSpan, or null if unavailable.
+        /// 1 microsecond = 10 ticks.
+        /// </summary>
+        public TimeSpan? ExposureTime => HasExposureTime
+            ? TimeSpan.FromTicks((long)(ExposureTimeUs * 10))
             : null;
 
         /// <summary>
@@ -88,7 +124,10 @@ namespace RocketWelder.SDK
             var timestamp = HasTimestamp
                 ? $"{TimestampNs / 1_000_000.0:F3}ms"
                 : "N/A";
-            return $"Frame {FrameNumber} @ {timestamp}";
+            var exposure = HasExposureTime
+                ? $"{ExposureTimeUs}us"
+                : "N/A";
+            return $"Frame {FrameNumber} @ {timestamp} exp={exposure}";
         }
     }
 }

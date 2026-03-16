@@ -170,8 +170,8 @@ namespace RocketWelder.SDK.Server
         /// <returns>Processed output frame from the client</returns>
         public unsafe Mat SendFrame(Mat inputFrame, TimeSpan? responseTimeout = null)
         {
-            Console.WriteLine($"[Server] SendFrame called, frame #{_frameNumber}");
-            Console.Out.Flush();
+            // Console.WriteLine($"[Server] SendFrame called, frame #{_frameNumber}");
+            // Console.Out.Flush();
 
             if (!_started || _client == null)
                 throw new InvalidOperationException("Server not started");
@@ -186,20 +186,20 @@ namespace RocketWelder.SDK.Server
             // Calculate frame data size (with FrameMetadata prefix)
             var pixelDataSize = _caps.FrameSize;
             var totalSize = FrameMetadata.Size + pixelDataSize;
-            Console.WriteLine($"[Server] Frame size: {pixelDataSize}, total with metadata: {totalSize}");
-            Console.Out.Flush();
+            // Console.WriteLine($"[Server] Frame size: {pixelDataSize}, total with metadata: {totalSize}");
+            // Console.Out.Flush();
 
             // Create frame metadata
             var frameMetadata = new FrameMetadata(_frameNumber, (ulong)(Stopwatch.GetTimestamp() * 1000));
 
             // Acquire buffer and write frame
-            Console.WriteLine($"[Server] Calling AcquireRequestBuffer...");
-            Console.Out.Flush();
+            // Console.WriteLine($"[Server] Calling AcquireRequestBuffer...");
+            // Console.Out.Flush();
             _client.AcquireRequestBuffer(totalSize, out var buffer);
-            Console.WriteLine($"[Server] AcquireRequestBuffer returned, buffer size: {buffer.Length}");
-            Console.Out.Flush();
+            // Console.WriteLine($"[Server] AcquireRequestBuffer returned, buffer size: {buffer.Length}");
+            // Console.Out.Flush();
 
-            // Write FrameMetadata (16 bytes)
+            // Write FrameMetadata (24 bytes)
             MemoryMarshal.Write(buffer.Slice(0, FrameMetadata.Size), frameMetadata);
 
             // Write pixel data (zero-copy from Mat)
@@ -207,16 +207,16 @@ namespace RocketWelder.SDK.Server
             srcSpan.CopyTo(buffer.Slice(FrameMetadata.Size));
 
             // Commit and wait for response
-            Console.WriteLine($"[Server] Calling CommitRequest...");
-            Console.Out.Flush();
+            // Console.WriteLine($"[Server] Calling CommitRequest...");
+            // Console.Out.Flush();
             _client.CommitRequest();
-            Console.WriteLine($"[Server] CommitRequest done, waiting for response...");
-            Console.Out.Flush();
+            // Console.WriteLine($"[Server] CommitRequest done, waiting for response...");
+            // Console.Out.Flush();
 
             var effectiveTimeout = responseTimeout ?? TimeSpan.FromSeconds(5);
             var response = _client.ReceiveResponse(effectiveTimeout);
-            Console.WriteLine($"[Server] ReceiveResponse returned, IsValid: {response.IsValid}");
-            Console.Out.Flush();
+            // Console.WriteLine($"[Server] ReceiveResponse returned, IsValid: {response.IsValid}");
+            // Console.Out.Flush();
 
             if (!response.IsValid)
             {

@@ -14,7 +14,7 @@ import numpy as np
 
 from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
-from .frame_metadata import FrameMetadata  # noqa: TC001 - used at runtime in callbacks
+from .frame_metadata import EXPOSURE_TIME_UNAVAILABLE, FrameMetadata  # noqa: TC001 - used at runtime in callbacks
 from .graphics import ILayerCanvas, IStageSink, IStageWriter, RgbColor, StageSink
 from .high_level.connection_strings import (
     GraphicsConnectionString,
@@ -476,6 +476,168 @@ class RocketWelderClient:
             # Start the controller with our wrapper (single-Mat callback for OneWay)
             self._controller.start(writer_callback_oneway, cancellation_token)
             logger.info("RocketWelder client started with writers (one-way): %s", self._connection)
+
+    def start_with_metadata_writers(
+        self,
+        on_frame: Callable[
+            [FrameMetadata, Mat, ISegmentationResultWriter, IKeyPointsWriter, IStageWriter, Mat], None
+        ],
+        cancellation_token: Optional[threading.Event] = None,
+    ) -> None:
+        """
+        Start receiving frames with FrameMetadata and writers (duplex mode).
+
+        Same as start_with_writers() but the callback also receives FrameMetadata,
+        giving access to frame_number, timestamp_ns, and exposure_time_us.
+
+        Args:
+            on_frame: Callback receiving (metadata, input_mat, seg_writer, kp_writer, stage_writer, output_mat).
+            cancellation_token: Optional cancellation token
+
+        Raises:
+            RuntimeError: If already running
+            ValueError: If connection type is not supported or not duplex mode
+        """
+        with self._lock:
+            if self._controller and self._controller.is_running:
+                raise RuntimeError("Client is already running")
+
+            if self._connection.connection_mode != ConnectionMode.DUPLEX:
+                raise ValueError("start_with_metadata_writers() requires duplex connection mode")
+
+            if self._connection.protocol == Protocol.SHM:
+                self._controller = DuplexShmController(self._connection)
+            elif self._connection.protocol == Protocol.FILE or bool(
+                self._connection.protocol & Protocol.MJPEG  # type: ignore[operator]
+            ):
+                self._controller = OpenCvController(self._connection)
+            else:
+                raise ValueError(f"Unsupported protocol: {self._connection.protocol}")
+
+            seg_sink = self._get_or_create_segmentation_sink()
+            kp_sink = self._get_or_create_keypoints_sink()
+            stage_sink = self._get_or_create_stage_sink()
+
+            def writer_callback(
+                frame_metadata: FrameMetadata, input_mat: Mat, output_mat: Mat  # type: ignore[valid-type]
+            ) -> None:
+                metadata = self._controller.get_metadata() if self._controller else None
+                caps = metadata.caps if metadata else None
+
+                if caps is None:
+                    logger.warning(
+                        "GstCaps not available for frame %d, using no-op writers",
+                        frame_metadata.frame_number,
+                    )
+                    with stage_sink.create_writer(frame_metadata.frame_number) as stage_writer:
+                        on_frame(
+                            frame_metadata,
+                            input_mat,
+                            _NoOpSegmentationWriter(),
+                            _NoOpKeyPointsWriter(),
+                            stage_writer,
+                            output_mat,
+                        )
+                    return
+
+                with seg_sink.create_writer(
+                    frame_metadata.frame_number, caps.width, caps.height
+                ) as seg_writer, kp_sink.create_writer(
+                    frame_metadata.frame_number
+                ) as kp_writer, stage_sink.create_writer(
+                    frame_metadata.frame_number
+                ) as stage_writer:
+                    on_frame(
+                        frame_metadata, input_mat, seg_writer, kp_writer, stage_writer, output_mat
+                    )
+
+            self._controller.start(writer_callback, cancellation_token)  # type: ignore[arg-type]
+            logger.info(
+                "RocketWelder client started with metadata+writers: %s", self._connection
+            )
+
+    def start_with_metadata_writers_oneway(
+        self,
+        on_frame: Callable[
+            [FrameMetadata, Mat, ISegmentationResultWriter, IKeyPointsWriter, IStageWriter], None
+        ],
+        cancellation_token: Optional[threading.Event] = None,
+    ) -> None:
+        """
+        Start receiving frames with FrameMetadata and writers in ONE-WAY mode.
+
+        Same as start_with_writers_oneway() but the callback also receives FrameMetadata,
+        giving access to frame_number, timestamp_ns, and exposure_time_us.
+
+        Args:
+            on_frame: Callback receiving (metadata, input_mat, seg_writer, kp_writer, stage_writer).
+            cancellation_token: Optional cancellation token
+
+        Raises:
+            RuntimeError: If already running
+            ValueError: If connection type is not supported
+        """
+        with self._lock:
+            if self._controller and self._controller.is_running:
+                raise RuntimeError("Client is already running")
+
+            if self._connection.protocol == Protocol.SHM:
+                if self._connection.connection_mode == ConnectionMode.DUPLEX:
+                    raise ValueError(
+                        "start_with_metadata_writers_oneway() is for OneWay mode. "
+                        "Use start_with_metadata_writers() for Duplex mode."
+                    )
+                self._controller = OneWayShmController(self._connection)
+            elif self._connection.protocol == Protocol.FILE or bool(
+                self._connection.protocol & Protocol.MJPEG  # type: ignore[operator]
+            ):
+                self._controller = OpenCvController(self._connection)
+            else:
+                raise ValueError(f"Unsupported protocol: {self._connection.protocol}")
+
+            seg_sink = self._get_or_create_segmentation_sink()
+            kp_sink = self._get_or_create_keypoints_sink()
+            stage_sink = self._get_or_create_stage_sink()
+
+            frame_number_holder = [0]
+
+            def writer_callback_oneway(input_mat: Mat) -> None:  # type: ignore[valid-type]
+                frame_number_holder[0] += 1
+                frame_number = frame_number_holder[0]
+                frame_metadata = FrameMetadata(frame_number, 0, EXPOSURE_TIME_UNAVAILABLE)
+
+                metadata = self._controller.get_metadata() if self._controller else None
+                caps = metadata.caps if metadata else None
+
+                if caps is None:
+                    logger.warning(
+                        "GstCaps not available for frame %d, using no-op writers",
+                        frame_number,
+                    )
+                    with stage_sink.create_writer(frame_number) as stage_writer:
+                        on_frame(
+                            frame_metadata,
+                            input_mat,
+                            _NoOpSegmentationWriter(),
+                            _NoOpKeyPointsWriter(),
+                            stage_writer,
+                        )
+                    return
+
+                with seg_sink.create_writer(
+                    frame_number, caps.width, caps.height
+                ) as seg_writer, kp_sink.create_writer(
+                    frame_number
+                ) as kp_writer, stage_sink.create_writer(
+                    frame_number
+                ) as stage_writer:
+                    on_frame(frame_metadata, input_mat, seg_writer, kp_writer, stage_writer)
+
+            self._controller.start(writer_callback_oneway, cancellation_token)
+            logger.info(
+                "RocketWelder client started with metadata+writers (one-way): %s",
+                self._connection,
+            )
 
     def _ensure_output_sinks_created(self) -> None:
         """Ensure all output sinks are created if their URLs are configured.

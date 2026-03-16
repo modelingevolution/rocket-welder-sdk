@@ -14,7 +14,12 @@ from .confidence import Confidence
 from .connection_string import ConnectionMode, ConnectionString, Protocol
 from .controllers import DuplexShmController, IController, OneWayShmController
 from .delta_frame import DeltaFrame
-from .frame_metadata import FRAME_METADATA_SIZE, FrameMetadata, GstVideoFormat
+from .frame_metadata import (
+    EXPOSURE_TIME_UNAVAILABLE,
+    FRAME_METADATA_SIZE,
+    FrameMetadata,
+    GstVideoFormat,
+)
 from .graphics import (
     FrameType,
     ILayerCanvas,
@@ -85,6 +90,7 @@ if _log_level:
 
 __all__ = [
     "ACTIONS_SINK_URL_ENV",
+    "EXPOSURE_TIME_UNAVAILABLE",
     "FRAME_METADATA_SIZE",
     "GRAPHICS_SINK_URL_ENV",
     "KEYPOINTS_SINK_URL_ENV",

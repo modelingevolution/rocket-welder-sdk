@@ -4,9 +4,10 @@ Frame metadata structure prepended to each frame in zerobuffer shared memory.
 This module provides the FrameMetadata dataclass that matches the C++ struct
 defined in frame_metadata.h.
 
-Protocol Layout (16 bytes, 8-byte aligned):
-    [0-7]   frame_number    - Sequential frame index (0-based)
-    [8-15]  timestamp_ns    - GStreamer PTS in nanoseconds (UINT64_MAX if unavailable)
+Protocol Layout (24 bytes, 8-byte aligned):
+    [0-7]   frame_number      - Sequential frame index (0-based)
+    [8-15]  timestamp_ns      - GStreamer PTS in nanoseconds (UINT64_MAX if unavailable)
+    [16-23] exposure_time_us  - Exposure time in microseconds (UINT64_MAX if unavailable)
 
 Note: Width, height, and format are NOT included here because they are
 stream-level properties that never change per-frame. They are stored once
@@ -21,14 +22,17 @@ from dataclasses import dataclass
 from typing import ClassVar, Dict, Optional
 
 # Size of the FrameMetadata structure in bytes
-FRAME_METADATA_SIZE = 16
+FRAME_METADATA_SIZE = 24
 
 # Value indicating timestamp is unavailable
 TIMESTAMP_UNAVAILABLE = 0xFFFFFFFFFFFFFFFF  # UINT64_MAX
 
-# Struct format: little-endian, 2 uint64
+# Value indicating exposure time is unavailable
+EXPOSURE_TIME_UNAVAILABLE = 0xFFFFFFFFFFFFFFFF  # UINT64_MAX
+
+# Struct format: little-endian, 3 uint64
 # Q = unsigned long long (8 bytes)
-_FRAME_METADATA_FORMAT = "<QQ"
+_FRAME_METADATA_FORMAT = "<QQQ"
 
 
 @dataclass(frozen=True)
@@ -39,6 +43,7 @@ class FrameMetadata:
     Attributes:
         frame_number: Sequential frame index (0-based, increments per frame)
         timestamp_ns: GStreamer PTS in nanoseconds (TIMESTAMP_UNAVAILABLE if not set)
+        exposure_time_us: Exposure time in microseconds (EXPOSURE_TIME_UNAVAILABLE if not set)
 
     Note: Width, height, and format come from GstCaps in ZeroBuffer metadata section,
     not from per-frame metadata. This avoids redundant data.
@@ -46,6 +51,7 @@ class FrameMetadata:
 
     frame_number: int
     timestamp_ns: int
+    exposure_time_us: int
 
     @classmethod
     def from_bytes(cls, data: bytes | memoryview) -> FrameMetadata:
@@ -53,7 +59,7 @@ class FrameMetadata:
         Parse FrameMetadata from raw bytes.
 
         Args:
-            data: At least 16 bytes of data
+            data: At least 24 bytes of data
 
         Returns:
             FrameMetadata instance
@@ -64,14 +70,14 @@ class FrameMetadata:
         if len(data) < FRAME_METADATA_SIZE:
             raise ValueError(f"Data must be at least {FRAME_METADATA_SIZE} bytes, got {len(data)}")
 
-        # Unpack the struct
-        frame_number, timestamp_ns = struct.unpack(
+        frame_number, timestamp_ns, exposure_time_us = struct.unpack(
             _FRAME_METADATA_FORMAT, data[:FRAME_METADATA_SIZE]
         )
 
         return cls(
             frame_number=frame_number,
             timestamp_ns=timestamp_ns,
+            exposure_time_us=exposure_time_us,
         )
 
     @property
@@ -80,16 +86,29 @@ class FrameMetadata:
         return self.timestamp_ns != TIMESTAMP_UNAVAILABLE
 
     @property
+    def has_exposure_time(self) -> bool:
+        """Check if exposure time is available."""
+        return self.exposure_time_us != EXPOSURE_TIME_UNAVAILABLE
+
+    @property
     def timestamp_ms(self) -> Optional[float]:
         """Get timestamp in milliseconds, or None if unavailable."""
         if self.has_timestamp:
             return self.timestamp_ns / 1_000_000.0
         return None
 
+    @property
+    def exposure_time_ms(self) -> Optional[float]:
+        """Get exposure time in milliseconds, or None if unavailable."""
+        if self.has_exposure_time:
+            return self.exposure_time_us / 1_000.0
+        return None
+
     def __str__(self) -> str:
         """Return string representation."""
         timestamp = f"{self.timestamp_ns / 1_000_000.0:.3f}ms" if self.has_timestamp else "N/A"
-        return f"Frame {self.frame_number} @ {timestamp}"
+        exposure = f"{self.exposure_time_us}\u00b5s" if self.has_exposure_time else "N/A"
+        return f"Frame {self.frame_number} @ {timestamp} exp={exposure}"
 
 
 # Common GstVideoFormat values - kept for reference when working with GstCaps
