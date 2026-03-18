@@ -15,12 +15,11 @@ COPY examples/SimpleClient/ .
 RUN dotnet publish -c Release -o /app/publish
 
 # Runtime stage - Using Ubuntu 24.04 (Noble) for GLIBC 2.38+ compatibility
-# Using .NET 10.0 ASP.NET Core runtime
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble
 WORKDIR /app
 
-# Install OpenCV dependencies and tools for debugging
-RUN apt-get update && apt-get install -y \
+# Install all dependencies BEFORE copying app (maximizes Docker layer caching)
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libgomp1 \
     libgdiplus \
     libc6-dev \
@@ -42,22 +41,13 @@ RUN apt-get update && apt-get install -y \
     gfortran \
     libgstreamer1.0-0 \
     libgstreamer-plugins-base1.0-0 \
-    # Useful tools for debugging
-    procps \
-    iputils-ping \
-    net-tools \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy published app
-COPY --from=build /app/publish .
-
-# Install minimal OpenCV/EmguCV dependencies and X11 for preview
-RUN apt-get update && apt-get install -y \
+    # EmguCV/OpenCV native dependencies
     libgeotiff5 \
     libdc1394-25 \
     libopenexr-3-1-30 \
     libhdf5-103-1 \
     libvtk9.1t64 \
+    # X11 for preview
     libx11-6 \
     libxext6 \
     libxrender1 \
@@ -68,14 +58,20 @@ RUN apt-get update && apt-get install -y \
     libxinerama1 \
     libxkbcommon-x11-0 \
     libglu1-mesa \
+    # Debugging tools
+    procps \
+    iputils-ping \
+    net-tools \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy published app (changes frequently — after apt layer for cache efficiency)
+COPY --from=build /app/publish .
 
 # Create symlink for Emgu.CV native library
 RUN ln -s /app/runtimes/ubuntu-x64/native/libcvextern.so /app/libcvextern.so || true
 
 # Ensure Emgu.CV native libraries are accessible
-# The runtime package should handle this, but we'll set library path just in case
-ENV LD_LIBRARY_PATH=/app/runtimes/ubuntu-x64/native:/app:$LD_LIBRARY_PATH
+ENV LD_LIBRARY_PATH=/app/runtimes/ubuntu-x64/native:/app:${LD_LIBRARY_PATH:-}
 
 # Set up logging
 ENV ZEROBUFFER_LOG_LEVEL=INFO
@@ -90,5 +86,3 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Entry point - runs the client with CONNECTION_STRING env var
 ENTRYPOINT ["dotnet", "SimpleClient.dll"]
-
-# No default CMD - will use CONNECTION_STRING from environment

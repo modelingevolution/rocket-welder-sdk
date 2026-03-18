@@ -173,6 +173,127 @@ class OneWayShmController(IController):
         self._worker_thread = None
         logger.info("Stopped controller for buffer '%s'", self._connection.buffer_name)
 
+    def start_with_metadata(
+        self,
+        on_frame: Callable[[FrameMetadata, Mat], None],  # type: ignore[valid-type]
+        cancellation_token: Optional[threading.Event] = None,
+    ) -> None:
+        """
+        Start receiving frames with FrameMetadata parsed from the zerobuffer prefix.
+
+        Args:
+            on_frame: Callback receiving (FrameMetadata, Mat) per frame
+            cancellation_token: Optional cancellation token
+        """
+        if self._is_running:
+            raise RuntimeError("Controller is already running")
+
+        logger.debug("Starting OneWayShmController (with metadata) for buffer '%s'", self._connection.buffer_name)
+        self._is_running = True
+        self._cancellation_token = cancellation_token
+
+        config = BufferConfig(
+            metadata_size=int(self._connection.metadata_size),
+            payload_size=int(self._connection.buffer_size),
+        )
+
+        if not self._connection.buffer_name:
+            raise ValueError("Buffer name is required for shared memory connection")
+        self._reader = Reader(self._connection.buffer_name, config)
+
+        logger.info(
+            "Created shared memory buffer '%s' (with metadata) size %s",
+            self._connection.buffer_name,
+            self._connection.buffer_size,
+        )
+
+        self._worker_thread = threading.Thread(
+            target=self._process_frames_with_metadata,
+            args=(on_frame,),
+            name=f"RocketWelder-{self._connection.buffer_name}",
+        )
+        self._worker_thread.start()
+
+    def _process_frames_with_metadata(
+        self, on_frame: Callable[[FrameMetadata, Mat], None]  # type: ignore[valid-type]
+    ) -> None:
+        """Process frames, parsing FrameMetadata from the 24-byte prefix."""
+        try:
+            self._on_first_frame_with_metadata(on_frame)
+
+            while self._is_running and (
+                not self._cancellation_token or not self._cancellation_token.is_set()
+            ):
+                try:
+                    timeout_seconds = self._connection.timeout_ms / 1000.0
+                    frame = self._reader.read_frame(timeout=timeout_seconds)  # type: ignore[union-attr]
+
+                    if frame is None or not frame.is_valid:
+                        continue
+
+                    with frame:
+                        if frame.size < FRAME_METADATA_SIZE:
+                            logger.warning("Frame too small for FrameMetadata: %d bytes", frame.size)
+                            continue
+                        metadata = FrameMetadata.from_bytes(frame.data)
+                        mat = self._create_mat_from_frame(frame)
+                        if mat is not None:
+                            on_frame(metadata, mat)
+
+                except WriterDeadException:
+                    logger.info("Writer disconnected from buffer '%s'", self._connection.buffer_name)
+                    self._is_running = False
+                    break
+                except Exception as e:
+                    logger.error("Error processing frame from buffer '%s': %s", self._connection.buffer_name, e)
+                    if not self._is_running:
+                        break
+
+        except Exception as e:
+            logger.error("Fatal error in frame processing loop (with metadata): %s", e)
+
+    def _on_first_frame_with_metadata(
+        self, on_frame: Callable[[FrameMetadata, Mat], None]  # type: ignore[valid-type]
+    ) -> None:
+        """Wait for and process first frame with metadata, extracting GstCaps."""
+        logger.debug("Waiting for first frame (with metadata) on buffer '%s'", self._connection.buffer_name)
+
+        while self._is_running and (
+            not self._cancellation_token or not self._cancellation_token.is_set()
+        ):
+            try:
+                timeout_seconds = self._connection.timeout_ms / 1000.0
+                frame = self._reader.read_frame(timeout=timeout_seconds)  # type: ignore[union-attr]
+
+                if frame is None or not frame.is_valid:
+                    continue
+
+                with frame:
+                    self._parse_metadata_from_reader()
+
+                    if frame.size < FRAME_METADATA_SIZE:
+                        logger.warning("First frame too small for FrameMetadata: %d bytes", frame.size)
+                        continue
+                    metadata = FrameMetadata.from_bytes(frame.data)
+                    mat = self._create_mat_from_frame(frame)
+                    if mat is not None:
+                        logger.info(
+                            "First frame (with metadata): frame_number=%d, exposure_time=%s",
+                            metadata.frame_number,
+                            f"{metadata.exposure_time_us}us" if metadata.has_exposure_time else "N/A",
+                        )
+                        on_frame(metadata, mat)
+                        return
+
+            except WriterDeadException:
+                logger.info("Writer disconnected before first frame on '%s'", self._connection.buffer_name)
+                self._is_running = False
+                return
+            except Exception as e:
+                logger.error("Error waiting for first frame on '%s': %s", self._connection.buffer_name, e)
+                if not self._is_running:
+                    return
+
     def _process_frames(self, on_frame: Callable[[Mat], None]) -> None:  # type: ignore[valid-type]
         """
         Process frames from shared memory.

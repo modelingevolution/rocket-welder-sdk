@@ -15,11 +15,15 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   publish-pypi:
     runs-on: ubuntu-latest
-    
+    environment:
+      name: pypi
+      url: https://pypi.org/project/rocket-welder-sdk/
+
     steps:
     - name: Checkout
       uses: actions/checkout@v4
@@ -69,22 +73,10 @@ jobs:
       working-directory: ./python
       run: twine check dist/*
     
-    - name: Publish to Test PyPI
-      working-directory: ./python
-      env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
-      run: |
-        twine upload --repository testpypi dist/* --skip-existing
-      continue-on-error: true
-    
     - name: Publish to PyPI
-      working-directory: ./python
-      env:
-        TWINE_USERNAME: __token__
-        TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-      run: |
-        twine upload dist/* --skip-existing
+      uses: pypa/gh-action-pypi-publish@release/v1
+      with:
+        packages-dir: python/dist/
     
     - name: Summary
       run: |
@@ -93,7 +85,6 @@ jobs:
         echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Package**: rocket-welder-sdk" >> $GITHUB_STEP_SUMMARY
         echo "- **PyPI**: https://pypi.org/project/rocket-welder-sdk/" >> $GITHUB_STEP_SUMMARY
-        echo "- **Test PyPI**: https://test.pypi.org/project/rocket-welder-sdk/" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "Install with:" >> $GITHUB_STEP_SUMMARY
         echo '```bash' >> $GITHUB_STEP_SUMMARY

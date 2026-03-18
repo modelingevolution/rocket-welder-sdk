@@ -599,22 +599,16 @@ class RocketWelderClient:
             kp_sink = self._get_or_create_keypoints_sink()
             stage_sink = self._get_or_create_stage_sink()
 
-            frame_number_holder = [0]
-
-            def writer_callback_oneway(input_mat: Mat) -> None:  # type: ignore[valid-type]
-                frame_number_holder[0] += 1
-                frame_number = frame_number_holder[0]
-                frame_metadata = FrameMetadata(frame_number, 0, EXPOSURE_TIME_UNAVAILABLE)
-
+            def writer_callback_oneway(frame_metadata: FrameMetadata, input_mat: Mat) -> None:  # type: ignore[valid-type]
                 metadata = self._controller.get_metadata() if self._controller else None
                 caps = metadata.caps if metadata else None
 
                 if caps is None:
                     logger.warning(
                         "GstCaps not available for frame %d, using no-op writers",
-                        frame_number,
+                        frame_metadata.frame_number,
                     )
-                    with stage_sink.create_writer(frame_number) as stage_writer:
+                    with stage_sink.create_writer(frame_metadata.frame_number) as stage_writer:
                         on_frame(
                             frame_metadata,
                             input_mat,
@@ -625,15 +619,15 @@ class RocketWelderClient:
                     return
 
                 with seg_sink.create_writer(
-                    frame_number, caps.width, caps.height
+                    frame_metadata.frame_number, caps.width, caps.height
                 ) as seg_writer, kp_sink.create_writer(
-                    frame_number
+                    frame_metadata.frame_number
                 ) as kp_writer, stage_sink.create_writer(
-                    frame_number
+                    frame_metadata.frame_number
                 ) as stage_writer:
                     on_frame(frame_metadata, input_mat, seg_writer, kp_writer, stage_writer)
 
-            self._controller.start(writer_callback_oneway, cancellation_token)
+            self._controller.start_with_metadata(writer_callback_oneway, cancellation_token)
             logger.info(
                 "RocketWelder client started with metadata+writers (one-way): %s",
                 self._connection,

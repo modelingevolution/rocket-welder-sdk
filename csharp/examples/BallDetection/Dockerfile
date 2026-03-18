@@ -18,10 +18,7 @@ RUN dotnet publish -c Release -o /app/publish
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble
 WORKDIR /app
 
-# Copy published app first (to leverage cache for apt-get layer)
-COPY --from=build /app/publish .
-
-# Install all dependencies in a single RUN command to reduce layers
+# Install all dependencies BEFORE copying app (maximizes Docker layer caching)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Core dependencies
     libgomp1 \
@@ -67,6 +64,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     iputils-ping \
     net-tools \
     && rm -rf /var/lib/apt/lists/*
+
+# Copy published app (changes frequently — after apt layer for cache efficiency)
+COPY --from=build /app/publish .
 
 # Create symlink for Emgu.CV native library
 RUN ln -s /app/runtimes/ubuntu-x64/native/libcvextern.so /app/libcvextern.so || true
