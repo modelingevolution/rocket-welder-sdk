@@ -423,6 +423,17 @@ public class SimulatedRobotTests
         robot.GetJointPositions().Should().Be(HOME);
     }
 
+    /// <summary>Test 2.18b — ExecuteWaypoints on disconnected robot throws.</summary>
+    [Fact]
+    public void ExecuteWaypoints_WhenNotConnected_ShouldThrow()
+    {
+        using var robot = new SimulatedRobot(_model);
+        var act = () => robot.ExecuteWaypoints(new[] { WP1, WP2 }, DefaultVelocity);
+        act.Should().Throw<InvalidOperationException>()
+           .WithMessage("*not connected*");
+        robot.GetJointPositions().Should().Be(HOME);
+    }
+
     /// <summary>Test 2.19 — ExecuteWaypoints with empty list throws.</summary>
     [Fact]
     public void ExecuteWaypoints_EmptyList_ShouldThrow()

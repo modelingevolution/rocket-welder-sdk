@@ -209,6 +209,7 @@ public sealed class SimulatedRobot : IRobot
     public SimulationRunResult ExecuteWaypoints(IReadOnlyList<Pose3<double>> waypoints, Velocity velocity)
     {
         ThrowIfDisposed();
+        ThrowIfNotConnected();
         ArgumentNullException.ThrowIfNull(waypoints);
         if (waypoints.Count == 0)
             throw new ArgumentException("Waypoint list must not be empty.", nameof(waypoints));
