@@ -50,9 +50,6 @@ public static class ForwardKinematics
     /// Computes Modified DH (Craig convention) transform matrix for a single joint.
     /// T_i = Rot_x(alpha_{i-1}) * Trans_x(a_{i-1}) * Rot_z(theta_i) * Trans_z(d_i)
     /// </summary>
-    /// <summary>
-    /// Computes Modified DH (Craig convention) transform matrix for a single joint.
-    /// </summary>
     public static Matrix4x4d ComputeDhMatrix(double alpha, double a, double d, double theta)
     {
         var ca = Math.Cos(alpha);
@@ -71,9 +68,6 @@ public static class ForwardKinematics
     /// <summary>
     /// Converts a Pose3 (X,Y,Z in mm, Rx,Ry,Rz in degrees as ZYX Euler) to a 4x4 homogeneous matrix.
     /// R = Rz(rz) * Ry(ry) * Rx(rx) — ZYX intrinsic (Tait-Bryan).
-    /// </summary>
-    /// <summary>
-    /// Converts a Pose3 to a 4x4 homogeneous matrix using ZYX Euler convention.
     /// </summary>
     public static Matrix4x4d PoseToMatrix(Pose3<double> pose)
     {
@@ -96,9 +90,6 @@ public static class ForwardKinematics
 
     /// <summary>
     /// Extracts Pose3 (X,Y,Z, Rx,Ry,Rz in ZYX Euler degrees) from a 4x4 homogeneous matrix.
-    /// </summary>
-    /// <summary>
-    /// Extracts Pose3 from a 4x4 homogeneous matrix using ZYX Euler decomposition.
     /// </summary>
     public static Pose3<double> MatrixToPose(Matrix4x4d m)
     {
