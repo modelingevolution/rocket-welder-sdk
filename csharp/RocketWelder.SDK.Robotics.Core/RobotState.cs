@@ -17,5 +17,5 @@ public sealed record RobotState(
     /// Creates a RobotState with the current timestamp.
     /// </summary>
     public static RobotState Create(Joints6<double> joints, Pose3<double> tcpPose, IReadOnlyList<Pose3<double>> framePoses) =>
-        new(joints, tcpPose, framePoses, DateTimeOffset.UtcNow);
+        new(joints, tcpPose, framePoses is Pose3<double>[] arr ? Array.AsReadOnly(arr) : framePoses, DateTimeOffset.UtcNow);
 }
