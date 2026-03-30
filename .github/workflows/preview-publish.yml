@@ -161,20 +161,6 @@ jobs:
       env:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
 
-    - name: Pack SDK.Server
-      working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK.Server/RocketWelder.SDK.Server.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ needs.preview-version.outputs.version }}
-
-    - name: Push SDK.Server to NuGet
-      working-directory: ./csharp
-      run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.Server.*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-
     - name: Pack SDK.Robotics.Core
       working-directory: ./csharp
       run: dotnet pack RocketWelder.SDK.Robotics.Core/RocketWelder.SDK.Robotics.Core.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ needs.preview-version.outputs.version }}
@@ -204,7 +190,7 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Version**: ${{ needs.preview-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        for PKG in SDK.Automation SDK.Types SDK.Protocols SDK SDK.Blazor SDK.Server SDK.Robotics.Core; do
+        for PKG in SDK.Automation SDK.Types SDK.Protocols SDK SDK.Blazor SDK.Robotics.Core; do
           echo "### RocketWelder.$PKG" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
           echo "dotnet add package RocketWelder.$PKG --version ${{ needs.preview-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
