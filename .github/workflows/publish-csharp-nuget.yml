@@ -120,6 +120,34 @@ jobs:
       env:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
 
+    - name: Pack SDK.Server
+      working-directory: ./csharp
+      run: dotnet pack RocketWelder.SDK.Server/RocketWelder.SDK.Server.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
+
+    - name: Push SDK.Server to NuGet
+      working-directory: ./csharp
+      run: |
+        dotnet nuget push ./nupkg/RocketWelder.SDK.Server.*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
+    - name: Pack SDK.Robotics.Core
+      working-directory: ./csharp
+      run: dotnet pack RocketWelder.SDK.Robotics.Core/RocketWelder.SDK.Robotics.Core.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
+
+    - name: Push SDK.Robotics.Core to NuGet
+      working-directory: ./csharp
+      run: |
+        dotnet nuget push ./nupkg/RocketWelder.SDK.Robotics.Core.*.nupkg \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
     - name: Publish to ModelingEvolution NuGet
       working-directory: ./csharp
       run: |
@@ -163,4 +191,16 @@ jobs:
         echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Blazor" >> $GITHUB_STEP_SUMMARY
         echo '```bash' >> $GITHUB_STEP_SUMMARY
         echo 'dotnet add package RocketWelder.SDK.Blazor --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### RocketWelder.SDK.Server" >> $GITHUB_STEP_SUMMARY
+        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Server" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo 'dotnet add package RocketWelder.SDK.Server --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### RocketWelder.SDK.Robotics.Core" >> $GITHUB_STEP_SUMMARY
+        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Robotics.Core" >> $GITHUB_STEP_SUMMARY
+        echo '```bash' >> $GITHUB_STEP_SUMMARY
+        echo 'dotnet add package RocketWelder.SDK.Robotics.Core --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
