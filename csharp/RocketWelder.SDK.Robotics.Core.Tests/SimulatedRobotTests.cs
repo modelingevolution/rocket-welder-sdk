@@ -63,12 +63,13 @@ public class SimulatedRobotTests
     {
         using var robot = new SimulatedRobot(_model);
         robot.Connect();
-        var result = robot.MoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 200));
+        // J3 limit is [-162, 162]; 200 overshoots +162 by 38.
+        var result = robot.MoveJoint(new Joints6<double>(0, 0, 200, 0, 0, 0));
         result.Success.Should().BeFalse();
         result.Reason.Should().Be(MoveFailureReason.JointLimitsExceeded);
         result.Violations.Should().NotBeNull();
-        result.Violations![0].JointIndex.Should().Be(5);
-        result.Violations[0].OvershootDeg.Should().Be(25);
+        result.Violations![0].JointIndex.Should().Be(2);
+        result.Violations[0].OvershootDeg.Should().Be(38);
         robot.GetJointPositions().Should().Be(HOME, "state should remain at HOME");
     }
 
@@ -330,13 +331,15 @@ public class SimulatedRobotTests
     {
         using var robot = new SimulatedRobot(_model);
         robot.Connect();
-        var result = robot.MoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 200));
+        // J3 limit is [-162, 162]; 200 overshoots.
+        var outOfLimit = new Joints6<double>(0, 0, 200, 0, 0, 0);
+        var result = robot.MoveJoint(outOfLimit);
         result.Success.Should().BeFalse();
         result.Reason.Should().Be(MoveFailureReason.JointLimitsExceeded);
         robot.GetJointPositions().Should().Be(HOME, "state should remain at HOME on failure");
 
         // IRobot adapter never surfaces joint-limit violations as exceptions under ADR-004.
-        var act = () => ((IRobot)robot).MoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 200));
+        var act = () => ((IRobot)robot).MoveJoint(outOfLimit);
         act.Should().NotThrow();
     }
 
