@@ -51,7 +51,7 @@ public class SimulatedRobotTests
     {
         using var robot = new SimulatedRobot(_model);
         robot.Connect();
-        var result = robot.TryMoveLin(new Pose3<double>(2000, 0, 0, 0, 0, 0), DefaultVelocity);
+        var result = robot.MoveLin(new Pose3<double>(2000, 0, 0, 0, 0, 0), DefaultVelocity);
         result.Success.Should().BeFalse();
         result.Reason.Should().Be(MoveFailureReason.OutOfReach);
         AssertPoseEquals(FK_HOME, robot.GetActualPose(), because: "state should be unchanged after failed move");
@@ -63,7 +63,7 @@ public class SimulatedRobotTests
     {
         using var robot = new SimulatedRobot(_model);
         robot.Connect();
-        var result = robot.TryMoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 200));
+        var result = robot.MoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 200));
         result.Success.Should().BeFalse();
         result.Reason.Should().Be(MoveFailureReason.JointLimitsExceeded);
         result.Violations.Should().NotBeNull();
@@ -77,7 +77,7 @@ public class SimulatedRobotTests
     {
         using var robot = new SimulatedRobot(_model);
         robot.Connect();
-        var result = robot.TryMoveJoint(CFG_A);
+        var result = robot.MoveJoint(CFG_A);
         result.Success.Should().BeTrue();
         robot.GetJointPositions().Should().Be(CFG_A);
     }
@@ -186,7 +186,7 @@ public class SimulatedRobotTests
         using var robot = new SimulatedRobot(_model);
         robot.Connect();
 
-        var failResult = robot.TryMoveLin(new Pose3<double>(2000, 0, 0, 0, 0, 0), DefaultVelocity);
+        var failResult = robot.MoveLin(new Pose3<double>(2000, 0, 0, 0, 0, 0), DefaultVelocity);
         failResult.Success.Should().BeFalse();
 
         ((IRobot)robot).ResetAllErrors();
@@ -324,15 +324,20 @@ public class SimulatedRobotTests
         robot2.GetJointPositions().Should().Be(HOME, "robot2 should be unaffected");
     }
 
-    /// <summary>Test 2.15 — MoveJoint with out-of-limit joints throws.</summary>
+    /// <summary>Test 2.15 — MoveJoint with out-of-limit joints returns structured failure, never throws (ADR-004).</summary>
     [Fact]
-    public void MoveJoint_OutOfLimits_ShouldThrow()
+    public void MoveJoint_OutOfLimits_ReturnsJointLimitsExceeded_NoThrow()
     {
         using var robot = new SimulatedRobot(_model);
         robot.Connect();
+        var result = robot.MoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 200));
+        result.Success.Should().BeFalse();
+        result.Reason.Should().Be(MoveFailureReason.JointLimitsExceeded);
+        robot.GetJointPositions().Should().Be(HOME, "state should remain at HOME on failure");
+
+        // IRobot adapter never surfaces joint-limit violations as exceptions under ADR-004.
         var act = () => ((IRobot)robot).MoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 200));
-        act.Should().Throw<ArgumentOutOfRangeException>();
-        robot.GetJointPositions().Should().Be(HOME);
+        act.Should().NotThrow();
     }
 
     /// <summary>Test 1.14 — Configuration jump prevention.</summary>

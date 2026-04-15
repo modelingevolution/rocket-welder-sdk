@@ -134,41 +134,55 @@ public sealed class SimulatedRobot : IRobot
         set => _jointMode = value;
     }
 
-    public void MoveJoint(Joints6<double> joints)
+    /// <summary>
+    /// Move to target joint angles. Per ADR-004, never throws on runtime conditions
+    /// (joint-limit violation, collision) — those are reported via <see cref="MoveResult"/>.
+    /// </summary>
+    public MoveResult MoveJoint(Joints6<double> joints)
     {
         ThrowIfDisposed();
         ThrowIfNotConnected();
 
         var violations = _model.ValidateJoints(joints);
         if (violations.Count > 0)
-            throw new ArgumentOutOfRangeException(nameof(joints),
-                $"Joint angles exceed limits: joint {violations[0].JointIndex} requested {violations[0].RequestedDeg}deg, limit {violations[0].LimitDeg}deg");
+            return MoveResult.Failed(MoveFailureReason.JointLimitsExceeded, violations);
 
-        // ADR-004: collisions are runtime conditions, not programmer errors. MoveJoint
-        // silently rejects a colliding target (state unchanged, no pose emitted), matching
-        // MoveLin's non-throwing signalling. Callers needing a structured failure reason
-        // must use TryMoveJoint.
-        if (FirstCollision(joints) is not null) return;
+        if (FirstCollision(joints) is { } hit)
+            return MoveResult.RejectedByCollision(hit);
 
         _currentState = ForwardKinematics.Compute(_model, joints, _toolTransform, _basePose);
         _poseSubject.OnNext(_currentState.TcpPose);
+        return MoveResult.Succeeded();
     }
 
-    public int MoveLin(Pose3<double> target, Velocity velocity)
+    /// <summary>
+    /// Move linearly to target TCP pose. Per ADR-004, never throws on runtime
+    /// conditions (unreachable IK, collision) — those are reported via <see cref="MoveResult"/>.
+    /// </summary>
+    public MoveResult MoveLin(Pose3<double> target, Velocity velocity)
     {
         ThrowIfDisposed();
         ThrowIfNotConnected();
 
         var ikResult = InverseKinematics.Compute(_model, target, _currentState.Joints, _toolTransform, _basePose);
         if (!ikResult.Success)
-            return -1; // IRobot contract: non-zero on failure
+            return MoveResult.Failed(ikResult.Reason!.Value.ToMoveReason(), ikResult.Violations);
 
-        if (FirstCollision(ikResult.Joints) is not null)
-            return -2;
+        if (FirstCollision(ikResult.Joints) is { } hit)
+            return MoveResult.RejectedByCollision(hit);
 
         _currentState = ForwardKinematics.Compute(_model, ikResult.Joints, _toolTransform, _basePose);
         _poseSubject.OnNext(_currentState.TcpPose);
-        return 0;
+        return MoveResult.Succeeded();
+    }
+
+    void IRobot.MoveJoint(Joints6<double> joints) => MoveJoint(joints);
+
+    int IRobot.MoveLin(Pose3<double> target, Velocity velocity)
+    {
+        var r = MoveLin(target, velocity);
+        if (r.Success) return 0;
+        return r.Reason == MoveFailureReason.Collision ? -2 : -1;
     }
 
     public int MoveCircular(Pose3<double> pathPoint, Pose3<double> target, Velocity velocity) =>
@@ -195,46 +209,6 @@ public sealed class SimulatedRobot : IRobot
     #endregion
 
     #region SimulatedRobot-specific methods
-
-    /// <summary>
-    /// Attempts to move linearly to the target pose. Returns a structured result instead of throwing.
-    /// </summary>
-    public MoveResult TryMoveLin(Pose3<double> target, Velocity velocity)
-    {
-        ThrowIfDisposed();
-        ThrowIfNotConnected();
-
-        var ikResult = InverseKinematics.Compute(_model, target, _currentState.Joints, _toolTransform, _basePose);
-        if (!ikResult.Success)
-            return MoveResult.Failed(ikResult.Reason!.Value.ToMoveReason(), ikResult.Violations);
-
-        if (FirstCollision(ikResult.Joints) is { } hit)
-            return MoveResult.RejectedByCollision(hit);
-
-        _currentState = ForwardKinematics.Compute(_model, ikResult.Joints, _toolTransform, _basePose);
-        _poseSubject.OnNext(_currentState.TcpPose);
-        return MoveResult.Succeeded();
-    }
-
-    /// <summary>
-    /// Attempts to move to the given joint angles. Returns a structured result instead of throwing.
-    /// </summary>
-    public MoveResult TryMoveJoint(Joints6<double> joints)
-    {
-        ThrowIfDisposed();
-        ThrowIfNotConnected();
-
-        var violations = _model.ValidateJoints(joints);
-        if (violations.Count > 0)
-            return MoveResult.Failed(MoveFailureReason.JointLimitsExceeded, violations);
-
-        if (FirstCollision(joints) is { } hit)
-            return MoveResult.RejectedByCollision(hit);
-
-        _currentState = ForwardKinematics.Compute(_model, joints, _toolTransform, _basePose);
-        _poseSubject.OnNext(_currentState.TcpPose);
-        return MoveResult.Succeeded();
-    }
 
     /// <summary>
     /// Executes a sequence of waypoints with joint-space interpolation.

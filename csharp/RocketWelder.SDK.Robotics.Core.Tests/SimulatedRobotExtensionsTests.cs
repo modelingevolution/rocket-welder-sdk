@@ -101,78 +101,75 @@ public class SimulatedRobotExtensionsTests
         act.Should().Throw<ArgumentNullException>();
     }
 
-    // --- Collision-aware moves (Try*) ----------------------------------------
+    // --- Collision-aware moves (MoveResult contract per ADR-004) -------------
 
     [Fact]
-    public void TryMoveJoint_WithoutEnvironment_AcceptsAnyReachableTarget()
+    public void MoveJoint_WithoutEnvironment_AcceptsAnyReachableTarget()
     {
         using var r = Connected(NonDegenerateRobot());
-        var result = r.TryMoveJoint(new Joints6<double>(10, -20, 30, 0, 45, 0));
+        var result = r.MoveJoint(new Joints6<double>(10, -20, 30, 0, 45, 0));
         result.Success.Should().BeTrue();
     }
 
     [Fact]
-    public void TryMoveJoint_WithEnvironment_RejectsCollidingTarget()
+    public void MoveJoint_WithEnvironment_RejectsCollidingTarget_NoThrow()
     {
         var box = new BoxPrimitive("Wall", new Point3<double>(0, 0, 0), 10_000, 10_000, 10_000);
         using var r = Connected(NonDegenerateRobot(), EnvWith(box));
+        var beforeJoints = r.GetJointPositions();
 
-        var result = r.TryMoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 0));
+        var result = r.MoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 0));
         result.Success.Should().BeFalse();
         result.Reason.Should().Be(MoveFailureReason.Collision);
         result.Collision.Should().NotBeNull();
+        r.GetJointPositions().Should().Be(beforeJoints, "state must be unchanged on collision");
     }
 
     [Fact]
-    public void TryMoveLin_WithEnvironment_RejectsCollidingTarget()
+    public void MoveLin_WithEnvironment_RejectsCollidingTarget_NoThrow()
     {
         var box = new BoxPrimitive("Wall", new Point3<double>(0, 0, 0), 10_000, 10_000, 10_000);
         using var r = Connected(NonDegenerateRobot(), EnvWith(box));
 
         var actualPose = r.GetActualPose();
-        var result = r.TryMoveLin(actualPose, Velocity.Percentage(50));
+        var result = r.MoveLin(actualPose, Velocity.Percentage(50));
         result.Success.Should().BeFalse();
         result.Reason.Should().Be(MoveFailureReason.Collision);
         result.Collision.Should().NotBeNull();
     }
 
     [Fact]
-    public void TryMoveJoint_WithJointLimitViolation_StillReturnsJointLimitsExceeded_NotCollision()
+    public void MoveJoint_WithJointLimitViolation_ReturnsJointLimitsExceeded_NotCollision()
     {
         var box = new BoxPrimitive("Wall", new Point3<double>(0, 0, 0), 10_000, 10_000, 10_000);
         using var r = Connected(NonDegenerateRobot(), EnvWith(box));
 
-        var result = r.TryMoveJoint(new Joints6<double>(500, 0, 0, 0, 0, 0));
+        var result = r.MoveJoint(new Joints6<double>(500, 0, 0, 0, 0, 0));
         result.Success.Should().BeFalse();
         result.Reason.Should().Be(MoveFailureReason.JointLimitsExceeded);
     }
 
-    // --- Collision-aware moves (non-Try) -------------------------------------
+    // --- IRobot adapter (legacy int/void signatures) --------------------------
 
     [Fact]
-    public void MoveJoint_WithEnvironment_SilentlyRejectsCollision_StateUnchanged()
+    public void IRobotMoveLin_OnCollision_ReturnsMinusTwo()
     {
-        // ADR-004: MoveJoint never throws on collision (matches MoveLin's -2 return).
-        // Callers needing a structured failure reason use TryMoveJoint.
         var box = new BoxPrimitive("Wall", new Point3<double>(0, 0, 0), 10_000, 10_000, 10_000);
         using var r = Connected(NonDegenerateRobot(), EnvWith(box));
-        var beforeJoints = r.GetJointPositions();
-        var beforePose = r.GetActualPose();
 
-        Action act = () => r.MoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 0));
-        act.Should().NotThrow();
-        r.GetJointPositions().Should().Be(beforeJoints, "state must be unchanged on collision");
-        r.GetActualPose().Should().Be(beforePose, "pose must be unchanged on collision");
+        ((IRobot)r).MoveLin(r.GetActualPose(), Velocity.Percentage(50)).Should().Be(-2);
     }
 
     [Fact]
-    public void MoveLin_WithEnvironment_ReturnsNonZeroOnCollision()
+    public void IRobotMoveJoint_OnCollision_DoesNotThrow_StateUnchanged()
     {
         var box = new BoxPrimitive("Wall", new Point3<double>(0, 0, 0), 10_000, 10_000, 10_000);
         using var r = Connected(NonDegenerateRobot(), EnvWith(box));
+        var before = r.GetJointPositions();
 
-        var result = r.MoveLin(r.GetActualPose(), Velocity.Percentage(50));
-        result.Should().NotBe(0);
+        Action act = () => ((IRobot)r).MoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 0));
+        act.Should().NotThrow();
+        r.GetJointPositions().Should().Be(before);
     }
 
     // --- ExecuteWaypoints collision -----------------------------------------
