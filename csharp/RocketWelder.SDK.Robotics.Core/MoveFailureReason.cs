@@ -21,7 +21,8 @@ public enum MoveFailureReason
     Collision
 }
 
-internal static class MoveFailureReasonExtensions
+/// <summary>Conversion helpers between <see cref="IkFailureReason"/> and <see cref="MoveFailureReason"/>.</summary>
+public static class MoveFailureReasonExtensions
 {
     public static MoveFailureReason ToMoveReason(this IkFailureReason reason) => reason switch
     {
