@@ -1,3 +1,5 @@
+using System.Collections.Immutable;
+
 namespace RocketWelder.SDK.Robotics.Core;
 
 /// <summary>
@@ -10,7 +12,7 @@ public sealed class CollisionEnvironment
     public ICollisionSource Source { get; }
 
     /// <summary>Capsule radii (mm) for each of the six robot links. Indexed 0..5.</summary>
-    public IReadOnlyList<double> LinkRadii { get; }
+    public ImmutableArray<double> LinkRadii { get; }
 
     /// <summary>Tool geometry attached to the robot flange.</summary>
     public ToolModel Tool { get; }
@@ -41,7 +43,7 @@ public sealed class CollisionEnvironment
             throw new ArgumentOutOfRangeException(nameof(safetyMargin), safetyMargin, "SafetyMargin must be non-negative.");
 
         Source = source;
-        LinkRadii = linkRadii.ToArray();
+        LinkRadii = ImmutableArray.CreateRange(linkRadii);
         Tool = tool;
         SafetyMargin = safetyMargin;
     }

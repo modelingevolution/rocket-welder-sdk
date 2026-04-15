@@ -184,6 +184,44 @@ public class SimulatedRobotExtensionsTests
         result.FailedWaypointIndex.Should().Be(0);
     }
 
+    [Fact]
+    public void ExecuteWaypoints_WithSafeEndpointsButCollidingIntermediate_TruncatesAtLastSafeStep()
+    {
+        // Box placed along the J1=45° sweep, away from J1=0 and J1=90. Endpoints are
+        // collision-free; only intermediate interpolated joint states hit it. This
+        // regression asserts that path-level collision detection (not just target-only)
+        // catches the hit and the trajectory is truncated at the last safe sub-step.
+        var box = new BoxPrimitive("MidSwingObstacle", new Point3<double>(707, 707, 500), 150, 150, 400);
+        var model = NonDegenerateRobot();
+        var env = new CollisionEnvironment(new PrimitiveCollisionSource(box), TinyRadii, ToolModel.None);
+
+        using var r = new SimulatedRobot(model, environment: env);
+        r.Connect();
+        var startPose = r.GetActualPose();
+
+        using var probe = new SimulatedRobot(model);
+        probe.Connect();
+        probe.MoveJoint(new Joints6<double>(90, 0, 0, 0, 0, 0));
+        var targetPose = probe.GetActualPose();
+
+        // Sanity: endpoints are collision-free — so only path-level (intermediate) detection can catch this.
+        CollisionDetector.CheckCollision(model, Joints6<double>.Zero, env).Should().BeEmpty();
+        CollisionDetector.CheckCollision(model, new Joints6<double>(90, 0, 0, 0, 0, 0), env).Should().BeEmpty();
+
+        var result = r.ExecuteWaypoints(new[] { startPose, targetPose }, Velocity.Percentage(50));
+
+        result.Success.Should().BeFalse();
+        result.FailureReason.Should().Be(MoveFailureReason.Collision);
+        result.Collision.Should().NotBeNull();
+        result.FailedWaypointIndex.Should().Be(1);
+
+        foreach (var step in result.Steps)
+        {
+            CollisionDetector.CheckCollision(model, step.Joints, env)
+                .Should().BeEmpty("every recorded step must be collision-free (truncate-on-collision)");
+        }
+    }
+
     // --- Program execution ---------------------------------------------------
 
     [Fact]

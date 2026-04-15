@@ -24,9 +24,9 @@ public static class CollisionDetector
 
     /// <summary>
     /// Reports every self-collision pair and every environment collision for the given pose.
-    /// Returns an empty array when no contact. Never returns null.
+    /// Returns an empty list when no contact. Never returns null.
     /// </summary>
-    public static CollisionResult[] CheckCollision(
+    public static IReadOnlyList<CollisionResult> CheckCollision(
         RobotModel model,
         Joints6<double> joints,
         CollisionEnvironment environment)
@@ -35,12 +35,12 @@ public static class CollisionDetector
         ArgumentNullException.ThrowIfNull(environment);
 
         var state = ForwardKinematics.Compute(model, joints);
-        var segments = new (Point3<double> P0, Point3<double> P1)[6];
+        Span<Point3<double>> p0s = stackalloc Point3<double>[6];
+        Span<Point3<double>> p1s = stackalloc Point3<double>[6];
         for (int i = 0; i < 6; i++)
         {
-            var p0 = i == 0 ? new Point3<double>(0, 0, 0) : FramePosition(state, i - 1);
-            var p1 = FramePosition(state, i);
-            segments[i] = (p0, p1);
+            p0s[i] = i == 0 ? new Point3<double>(0, 0, 0) : FramePosition(state, i - 1);
+            p1s[i] = FramePosition(state, i);
         }
 
         var radii = environment.LinkRadii;
@@ -48,16 +48,16 @@ public static class CollisionDetector
 
         List<CollisionResult>? hits = null;
 
-        foreach (var (a, b) in SelfCollisionPairs)
+        for (int k = 0; k < SelfCollisionPairs.Count; k++)
         {
+            var (a, b) = SelfCollisionPairs[k];
             var (pa, pb, dist) = CollisionMath.ClosestPointsOnSegments(
-                segments[a].P0, segments[a].P1,
-                segments[b].P0, segments[b].P1);
+                p0s[a], p1s[a], p0s[b], p1s[b]);
 
             var clearance = dist - radii[a] - radii[b];
             if (clearance < margin)
             {
-                hits ??= new List<CollisionResult>();
+                hits ??= new List<CollisionResult>(4);
                 var midpoint = new Point3<double>(
                     (pa.X + pb.X) * 0.5,
                     (pa.Y + pb.Y) * 0.5,
@@ -69,11 +69,13 @@ public static class CollisionDetector
 
         var envHits = environment.Source.QueryCollision(model, joints, radii, environment.Tool, margin);
         if (envHits.Count == 0)
-            return hits is null ? Array.Empty<CollisionResult>() : hits.ToArray();
+            return hits ?? (IReadOnlyList<CollisionResult>)Array.Empty<CollisionResult>();
 
-        hits ??= new List<CollisionResult>(envHits.Count);
-        hits.AddRange(envHits);
-        return hits.ToArray();
+        if (hits is null) return envHits;
+
+        for (int i = 0; i < envHits.Count; i++)
+            hits.Add(envHits[i]);
+        return hits;
     }
 
     private static Point3<double> FramePosition(RobotState state, int linkIndex)

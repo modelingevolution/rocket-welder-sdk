@@ -39,11 +39,14 @@ public static class FkValidator
     public static string Export(IReadOnlyList<FkValidationRecord> records, JsonSerializerOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(records);
+        var items = new RecordDto[records.Count];
+        for (int i = 0; i < records.Count; i++)
+            items[i] = new RecordDto { Joints = records[i].Joints, TcpPose = records[i].TcpPose };
         var dto = new FkValidationFileDto
         {
             SchemaVersion = SchemaVersion,
             Units = new UnitsDto(),
-            Records = records.Select(r => new RecordDto { Joints = r.Joints, TcpPose = r.TcpPose }).ToList()
+            Records = items
         };
         return JsonSerializer.Serialize(dto, options ?? DefaultJson);
     }
@@ -57,8 +60,11 @@ public static class FkValidator
         if (!string.Equals(dto.SchemaVersion, SchemaVersion, StringComparison.Ordinal))
             throw new NotSupportedException(
                 $"Unsupported FK validation schema version '{dto.SchemaVersion}'. Expected '{SchemaVersion}'.");
-        var records = dto.Records ?? new List<RecordDto>();
-        return records.Select(r => new FkValidationRecord(r.Joints, r.TcpPose)).ToList();
+        var records = dto.Records ?? Array.Empty<RecordDto>();
+        var result = new FkValidationRecord[records.Length];
+        for (int i = 0; i < records.Length; i++)
+            result[i] = new FkValidationRecord(records[i].Joints, records[i].TcpPose);
+        return result;
     }
 
     /// <summary>
@@ -117,7 +123,7 @@ public static class FkValidator
         public UnitsDto Units { get; set; } = new();
 
         [JsonPropertyName("records")]
-        public List<RecordDto>? Records { get; set; }
+        public RecordDto[]? Records { get; set; }
     }
 
     private sealed class UnitsDto

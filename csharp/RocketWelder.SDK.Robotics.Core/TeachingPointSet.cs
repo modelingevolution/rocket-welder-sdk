@@ -70,10 +70,13 @@ public sealed class TeachingPointSet
     /// <summary>Serialize to JSON.</summary>
     public string ToJson(JsonSerializerOptions? options = null)
     {
-        var dto = new TeachingPointSetDto
+        var points = new TeachingPointDto[_order.Count];
+        for (int i = 0; i < _order.Count; i++)
         {
-            Points = _order.Select(n => new TeachingPointDto { Name = n, Pose = _poses[n] }).ToList()
-        };
+            var n = _order[i];
+            points[i] = new TeachingPointDto { Name = n, Pose = _poses[n] };
+        }
+        var dto = new TeachingPointSetDto { Points = points };
         return JsonSerializer.Serialize(dto, options ?? DefaultJson);
     }
 
@@ -103,7 +106,7 @@ public sealed class TeachingPointSet
     private sealed class TeachingPointSetDto
     {
         [JsonPropertyName("points")]
-        public List<TeachingPointDto>? Points { get; set; }
+        public TeachingPointDto[]? Points { get; set; }
     }
 
     private sealed class TeachingPointDto

@@ -89,7 +89,7 @@ public class CollisionDetectorTests
         var result = CollisionDetector.CheckCollision(
             RobotPresets.FairinoFR5(), Joints6<double>.Zero, Env(fat));
 
-        result.Length.Should().Be(10);
+        result.Count.Should().Be(10);
 
         var reported = result.Select(r => ParsePair(r.BodyA, r.BodyB)).ToHashSet();
         reported.Should().BeEquivalentTo(CollisionDetector.SelfCollisionPairs.ToHashSet());

@@ -266,14 +266,6 @@ public sealed class SimulatedRobot : IRobot
             }
 
             var targetJoints = ikResult.Joints;
-
-            if (FirstCollision(targetJoints) is { } hit)
-            {
-                if (steps.Count > 0)
-                    _currentState = steps[^1];
-                return SimulationRunResult.FailedByCollision(steps, wpIdx, hit);
-            }
-
             var maxDelta = (double)currentJoints.MaxAbsDelta(targetJoints);
             var numSteps = Math.Max(1, (int)Math.Ceiling(maxDelta / MaxStepDegrees));
 
@@ -281,6 +273,13 @@ public sealed class SimulatedRobot : IRobot
             {
                 var t = (double)s / numSteps;
                 var interpJoints = Joints6<double>.Lerp(currentJoints, targetJoints, t);
+
+                if (FirstCollision(interpJoints) is { } hit)
+                {
+                    _currentState = steps[^1];
+                    return SimulationRunResult.FailedByCollision(steps, wpIdx, hit);
+                }
+
                 var state = ForwardKinematics.Compute(_model, interpJoints, _toolTransform, _basePose);
                 steps.Add(state);
             }
@@ -372,18 +371,19 @@ public sealed class SimulatedRobot : IRobot
                     throw new NotSupportedException($"Unsupported ProgramStep: {step.GetType().Name}");
             }
 
-            if (FirstCollision(targetJoints) is { } hit)
-            {
-                _currentState = steps[^1];
-                return SimulationRunResult.FailedByCollision(steps, i, hit);
-            }
-
             var maxDelta = (double)currentJoints.MaxAbsDelta(targetJoints);
             var numSteps = Math.Max(1, (int)Math.Ceiling(maxDelta / MaxStepDegrees));
             for (int s = 1; s <= numSteps; s++)
             {
                 var t = (double)s / numSteps;
                 var interp = Joints6<double>.Lerp(currentJoints, targetJoints, t);
+
+                if (FirstCollision(interp) is { } hit)
+                {
+                    _currentState = steps[^1];
+                    return SimulationRunResult.FailedByCollision(steps, i, hit);
+                }
+
                 steps.Add(ForwardKinematics.Compute(_model, interp, _toolTransform, _basePose));
             }
             currentJoints = targetJoints;
@@ -398,7 +398,7 @@ public sealed class SimulatedRobot : IRobot
     {
         if (_collisionEnv is null) return null;
         var hits = CollisionDetector.CheckCollision(_model, joints, _collisionEnv);
-        return hits.Length == 0 ? null : hits[0];
+        return hits.Count == 0 ? null : hits[0];
     }
 
     #endregion
