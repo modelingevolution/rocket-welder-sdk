@@ -178,7 +178,7 @@ public sealed class SimulatedRobot : IRobot
 
         var ikResult = InverseKinematics.Compute(_model, target, _currentState.Joints, _toolTransform, _basePose);
         if (!ikResult.Success)
-            return MoveResult.Failed(ikResult.Reason!.Value, ikResult.Violations);
+            return MoveResult.Failed(ikResult.Reason!.Value.ToMoveReason(), ikResult.Violations);
 
         _currentState = ForwardKinematics.Compute(_model, ikResult.Joints, _toolTransform, _basePose);
         _poseSubject.OnNext(_currentState.TcpPose);
@@ -195,7 +195,7 @@ public sealed class SimulatedRobot : IRobot
 
         var violations = _model.ValidateJoints(joints);
         if (violations.Count > 0)
-            return MoveResult.Failed(IkFailureReason.JointLimitsExceeded, violations);
+            return MoveResult.Failed(MoveFailureReason.JointLimitsExceeded, violations);
 
         _currentState = ForwardKinematics.Compute(_model, joints, _toolTransform, _basePose);
         _poseSubject.OnNext(_currentState.TcpPose);

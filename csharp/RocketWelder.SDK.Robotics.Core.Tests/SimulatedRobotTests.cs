@@ -53,7 +53,7 @@ public class SimulatedRobotTests
         robot.Connect();
         var result = robot.TryMoveLin(new Pose3<double>(2000, 0, 0, 0, 0, 0), DefaultVelocity);
         result.Success.Should().BeFalse();
-        result.Reason.Should().Be(IkFailureReason.OutOfReach);
+        result.Reason.Should().Be(MoveFailureReason.OutOfReach);
         AssertPoseEquals(FK_HOME, robot.GetActualPose(), because: "state should be unchanged after failed move");
     }
 
@@ -65,7 +65,7 @@ public class SimulatedRobotTests
         robot.Connect();
         var result = robot.TryMoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 200));
         result.Success.Should().BeFalse();
-        result.Reason.Should().Be(IkFailureReason.JointLimitsExceeded);
+        result.Reason.Should().Be(MoveFailureReason.JointLimitsExceeded);
         result.Violations.Should().NotBeNull();
         result.Violations![0].JointIndex.Should().Be(5);
         result.Violations[0].OvershootDeg.Should().Be(25);
