@@ -2,7 +2,7 @@ using ModelingEvolution.Drawing;
 
 namespace RocketWelder.SDK.Robotics.Core.Tests;
 
-/// <summary>TASK-009 — TeachingPointSet CRUD + JSON.</summary>
+/// <summary>TASK-007 — TeachingPointSet CRUD + JSON.</summary>
 public class TeachingPointSetTests
 {
     private static Pose3<double> Pose(double x) => new(x, 0, 0, 0, 0, 0);

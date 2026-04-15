@@ -2,7 +2,7 @@ using ModelingEvolution.Drawing;
 
 namespace RocketWelder.SDK.Robotics.Core.Tests;
 
-/// <summary>TASK-008 — RobotProgram + ProgramStep + JSON.</summary>
+/// <summary>TASK-006 — RobotProgram + ProgramStep + JSON.</summary>
 public class RobotProgramTests
 {
     [Fact]

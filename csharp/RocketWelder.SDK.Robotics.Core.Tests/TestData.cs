@@ -18,7 +18,7 @@ internal static class TestData
 
     // Standard test waypoints — FK outputs of selected joint configs, chosen so
     // consecutive targets stay on the same IK branch (regression fixtures only).
-    // Source configs (see docs/iterations/iteration-3/dev-log.md TASK-012):
+    // Source configs (see docs/iterations/iteration-3/dev-log.md TASK-010):
     //   WP1: ( 0, -30, 30,   0, 60,   0)    WP2: (15, -40, 45, -15, 55, -20)
     //   WP3: (30, -50, 55, -30, 50, -40)    WP4: (10, -35, 40, -10, 60, -10)
     //   WP5: (-10, -25, 35,  10, 65,  10)

@@ -2,7 +2,7 @@ using ModelingEvolution.Drawing;
 
 namespace RocketWelder.SDK.Robotics.Core.Tests;
 
-/// <summary>TASK-003 — MoveResult evolution with MoveFailureReason and optional CollisionResult.</summary>
+/// <summary>TASK-001 — MoveResult evolution with MoveFailureReason and optional CollisionResult.</summary>
 public class MoveResultTests
 {
     [Fact]

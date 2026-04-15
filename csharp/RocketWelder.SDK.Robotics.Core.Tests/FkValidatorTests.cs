@@ -2,7 +2,7 @@ using ModelingEvolution.Drawing;
 
 namespace RocketWelder.SDK.Robotics.Core.Tests;
 
-/// <summary>TASK-010 — FkValidator import/export + Validate.</summary>
+/// <summary>TASK-008 — FkValidator import/export + Validate.</summary>
 public class FkValidatorTests
 {
     [Fact]

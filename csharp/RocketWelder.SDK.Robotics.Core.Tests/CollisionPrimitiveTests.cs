@@ -2,7 +2,7 @@ using ModelingEvolution.Drawing;
 
 namespace RocketWelder.SDK.Robotics.Core.Tests;
 
-/// <summary>TASK-004 — primitives, PrimitiveCollisionSource, safety margin.</summary>
+/// <summary>TASK-002 — primitives, PrimitiveCollisionSource, safety margin.</summary>
 public class CollisionPrimitiveTests
 {
     private static Point3<double> P(double x, double y, double z) => new(x, y, z);

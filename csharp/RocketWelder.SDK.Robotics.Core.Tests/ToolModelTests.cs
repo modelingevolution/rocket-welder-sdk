@@ -1,6 +1,6 @@
 namespace RocketWelder.SDK.Robotics.Core.Tests;
 
-/// <summary>TASK-005 — ToolModel hierarchy.</summary>
+/// <summary>TASK-003 — ToolModel hierarchy.</summary>
 public class ToolModelTests
 {
     [Fact]
