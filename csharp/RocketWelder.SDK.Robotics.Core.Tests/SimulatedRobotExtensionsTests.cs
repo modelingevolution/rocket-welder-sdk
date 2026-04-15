@@ -150,13 +150,19 @@ public class SimulatedRobotExtensionsTests
     // --- Collision-aware moves (non-Try) -------------------------------------
 
     [Fact]
-    public void MoveJoint_WithEnvironment_ThrowsOnCollision()
+    public void MoveJoint_WithEnvironment_SilentlyRejectsCollision_StateUnchanged()
     {
+        // ADR-004: MoveJoint never throws on collision (matches MoveLin's -2 return).
+        // Callers needing a structured failure reason use TryMoveJoint.
         var box = new BoxPrimitive("Wall", new Point3<double>(0, 0, 0), 10_000, 10_000, 10_000);
         using var r = Connected(NonDegenerateRobot(), EnvWith(box));
+        var beforeJoints = r.GetJointPositions();
+        var beforePose = r.GetActualPose();
 
         Action act = () => r.MoveJoint(new Joints6<double>(0, 0, 0, 0, 0, 0));
-        act.Should().Throw<InvalidOperationException>().WithMessage("*collide*");
+        act.Should().NotThrow();
+        r.GetJointPositions().Should().Be(beforeJoints, "state must be unchanged on collision");
+        r.GetActualPose().Should().Be(beforePose, "pose must be unchanged on collision");
     }
 
     [Fact]

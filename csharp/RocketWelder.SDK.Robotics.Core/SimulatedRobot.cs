@@ -144,10 +144,11 @@ public sealed class SimulatedRobot : IRobot
             throw new ArgumentOutOfRangeException(nameof(joints),
                 $"Joint angles exceed limits: joint {violations[0].JointIndex} requested {violations[0].RequestedDeg}deg, limit {violations[0].LimitDeg}deg");
 
-        var collision = FirstCollision(joints);
-        if (collision is { } hit)
-            throw new InvalidOperationException(
-                $"Target configuration collides: {hit.BodyA} vs {hit.BodyB} (penetration {hit.PenetrationDepth:F3} mm).");
+        // ADR-004: collisions are runtime conditions, not programmer errors. MoveJoint
+        // silently rejects a colliding target (state unchanged, no pose emitted), matching
+        // MoveLin's non-throwing signalling. Callers needing a structured failure reason
+        // must use TryMoveJoint.
+        if (FirstCollision(joints) is not null) return;
 
         _currentState = ForwardKinematics.Compute(_model, joints, _toolTransform, _basePose);
         _poseSubject.OnNext(_currentState.TcpPose);
