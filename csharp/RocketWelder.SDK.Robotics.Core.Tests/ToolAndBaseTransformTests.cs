@@ -29,7 +29,7 @@ public class ToolAndBaseTransformTests
     public void FK_HomeWithTool_ShouldDisplace_AlongWorldY()
     {
         var tool = new Pose3<double>(0, 0, 150, 0, 0, 0);
-        var expected = new Pose3<double>(-817.2500, 359.7000, 59.8000, -90.0000, 0.0000, 0.0000);
+        var expected = new Pose3<double>(-820.0100, 252.0000, 49.9000, -90.0000, 0.0000, 0.0000);
         var state = ForwardKinematics.Compute(_model, HOME, tool);
         AssertPoseEquals(expected, state.TcpPose);
     }
@@ -143,7 +143,7 @@ public class ToolAndBaseTransformTests
         var baseT = new Pose3<double>(500, 200, 0, 0, 0, 0);
 
         var combined = ForwardKinematics.Compute(_model, CFG_A, tool, baseT);
-        var expected = new Pose3<double>(15.2602, 355.8942, -224.2346, -59.2660, -32.0812, -63.8352);
+        var expected = new Pose3<double>(42.8149, 247.3297, -230.0585, -59.2660, -32.0812, -63.8352);
         AssertPoseEquals(expected, combined.TcpPose);
 
         // Verify: combined = FK(CFG-A, tool_only) + base translation

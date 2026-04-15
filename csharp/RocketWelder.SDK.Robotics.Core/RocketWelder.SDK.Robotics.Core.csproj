@@ -17,6 +17,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="RocketWelder.SDK.Robotics.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="ModelingEvolution.Drawing" Version="1.7.0.65" />
     <PackageReference Include="System.Reactive" Version="6.*" />
   </ItemGroup>
