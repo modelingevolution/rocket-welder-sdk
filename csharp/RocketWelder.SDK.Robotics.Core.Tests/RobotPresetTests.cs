@@ -100,6 +100,54 @@ public class RobotPresetTests
         model.DhChain[5].D.Should().BeApproximately(d6, 0.001, "d6");
     }
 
+    /// <summary>
+    /// Finding #10 smoke test — FK at HOME on every v6 preset must return a finite
+    /// TCP position whose distance from the base origin is within the DH-derived
+    /// geometric reach bound (sum of link offsets). No datasheet reach figures are
+    /// consulted here — the bound is computed directly from the preset's own DH
+    /// chain, so this is a pure self-consistency check.
+    /// </summary>
+    [Theory]
+    [InlineData("Fairino FR3")]
+    [InlineData("Fairino FR5")]
+    [InlineData("Fairino FR10")]
+    [InlineData("Fairino FR16")]
+    [InlineData("Fairino FR20")]
+    [InlineData("Fairino FR30")]
+    public void FairinoV6_Presets_FK_AtHome_ShouldBe_Finite_And_WithinReach(string name)
+    {
+        var model = name switch
+        {
+            "Fairino FR3" => RobotPresets.FairinoFR3(),
+            "Fairino FR5" => RobotPresets.FairinoFR5(),
+            "Fairino FR10" => RobotPresets.FairinoFR10(),
+            "Fairino FR16" => RobotPresets.FairinoFR16(),
+            "Fairino FR20" => RobotPresets.FairinoFR20(),
+            "Fairino FR30" => RobotPresets.FairinoFR30(),
+            _ => throw new ArgumentOutOfRangeException(nameof(name)),
+        };
+
+        var state = ForwardKinematics.Compute(model, Joints6<double>.Zero);
+
+        double.IsFinite(state.TcpPose.X).Should().BeTrue($"{name} TCP X must be finite");
+        double.IsFinite(state.TcpPose.Y).Should().BeTrue($"{name} TCP Y must be finite");
+        double.IsFinite(state.TcpPose.Z).Should().BeTrue($"{name} TCP Z must be finite");
+
+        // Triangle-inequality upper bound on |TCP| from the DH chain: sum of |a| and |d|
+        // across all six joint rows. 1.1 slack absorbs FK rounding / base-frame offset.
+        var geometricReach = 0.0;
+        foreach (var j in model.DhChain)
+            geometricReach += Math.Abs(j.A) + Math.Abs(j.D);
+
+        var tcpMag = Math.Sqrt(
+            state.TcpPose.X * state.TcpPose.X +
+            state.TcpPose.Y * state.TcpPose.Y +
+            state.TcpPose.Z * state.TcpPose.Z);
+
+        tcpMag.Should().BeLessThanOrEqualTo(geometricReach * 1.1,
+            $"{name} TCP magnitude must be within DH-derived reach × 1.1");
+    }
+
     [Theory]
     [InlineData("Fairino FR3")]
     [InlineData("Fairino FR5")]
