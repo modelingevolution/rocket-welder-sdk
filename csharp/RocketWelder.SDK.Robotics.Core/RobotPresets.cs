@@ -38,27 +38,27 @@ public static class RobotPresets
         return new RobotModel(name, chain, FairinoV6Limits, Joints6<double>.Zero);
     }
 
-    /// <summary>Fairino FR3 6-DOF collaborative robot (3 kg payload, 590 mm reach).</summary>
+    /// <summary>Fairino FR3 6-DOF collaborative robot. See fairino-preset-reference.md.</summary>
     public static RobotModel FairinoFR3() =>
         FairinoV6("Fairino FR3", d1: 140, a2: 280,  a3: 240.01, d5: 102,    d6: 102);
 
-    /// <summary>Fairino FR5 6-DOF collaborative robot (5 kg payload, 922 mm reach).</summary>
+    /// <summary>Fairino FR5 6-DOF collaborative robot. See fairino-preset-reference.md.</summary>
     public static RobotModel FairinoFR5() =>
         FairinoV6("Fairino FR5", d1: 152, a2: 425,  a3: 395.01, d5: 102.1,  d6: 102);
 
-    /// <summary>Fairino FR10 6-DOF collaborative robot (10 kg payload, 1422 mm reach).</summary>
+    /// <summary>Fairino FR10 6-DOF collaborative robot. See fairino-preset-reference.md.</summary>
     public static RobotModel FairinoFR10() =>
         FairinoV6("Fairino FR10", d1: 180, a2: 700, a3: 586,    d5: 159,    d6: 114);
 
-    /// <summary>Fairino FR16 6-DOF collaborative robot (16 kg payload, 1052 mm reach).</summary>
+    /// <summary>Fairino FR16 6-DOF collaborative robot. See fairino-preset-reference.md.</summary>
     public static RobotModel FairinoFR16() =>
         FairinoV6("Fairino FR16", d1: 180, a2: 520, a3: 400,    d5: 159,    d6: 114);
 
-    /// <summary>Fairino FR20 6-DOF collaborative robot (20 kg payload, 1922 mm reach).</summary>
+    /// <summary>Fairino FR20 6-DOF collaborative robot. See fairino-preset-reference.md.</summary>
     public static RobotModel FairinoFR20() =>
         FairinoV6("Fairino FR20", d1: 215, a2: 1000, a3: 716,   d5: 166.01, d6: 138);
 
-    /// <summary>Fairino FR30 6-DOF collaborative robot (30 kg payload, 1442 mm reach).</summary>
+    /// <summary>Fairino FR30 6-DOF collaborative robot. See fairino-preset-reference.md.</summary>
     public static RobotModel FairinoFR30() =>
         FairinoV6("Fairino FR30", d1: 215, a2: 700, a3: 536,    d5: 166.01, d6: 138);
 }
