@@ -27,7 +27,29 @@ docker build -f examples/08-yolo-stress/Dockerfile -t rw-yolo-stress .
 `CONTOUR_MODE=none` produces hundreds–thousands of vertices per polygon —
 the path that PR #30 (native-player) un-truncated.
 
-## Run
+## Run with docker-compose (easiest)
+
+```bash
+cp .env.example .env      # edit VIDEO_PATH and PLUGINS_PATH
+docker compose up
+```
+
+This starts the GStreamer feeder (`zerosink`) and the YOLO stress
+container together. Point native-player at `shm://rw-stress?...` and the
+unix socket from `SEG_SOCKET` (default `/tmp/rw-seg.sock`).
+
+To overlay it onto the rocket-welder2 stack:
+
+```bash
+cd /path/to/rocket-welder2/src
+docker compose \
+  -f docker-compose.rw.yml -f docker-compose.rw.x64.yml \
+  -f docker-compose.rw.nvidia.yml \
+  -f /path/to/rocket-welder-sdk/python/examples/08-yolo-stress/docker-compose.yml \
+  up
+```
+
+## Run manually
 
 Three components: GStreamer feeder, this stress generator, native-player.
 
