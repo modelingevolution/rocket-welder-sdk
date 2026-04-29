@@ -51,6 +51,9 @@ services:
 
   yolo-stress:
     image: rw-yolo-stress:latest
+    build:
+      context: ../..
+      dockerfile: examples/08-yolo-stress/Dockerfile
     container_name: rw-yolo-stress
     runtime: nvidia
     ipc: host

@@ -31,8 +31,11 @@ the path that PR #30 (native-player) un-truncated.
 
 ```bash
 cp .env.example .env      # edit VIDEO_PATH and PLUGINS_PATH
-docker compose up
+docker compose up --build
 ```
+
+`--build` is only needed the first time (or after code changes); subsequent
+runs can use plain `docker compose up`.
 
 This starts the GStreamer feeder (`zerosink`) and the YOLO stress
 container together. Point native-player at `shm://rw-stress?...` and the
