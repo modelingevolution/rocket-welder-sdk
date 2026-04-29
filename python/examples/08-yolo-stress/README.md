@@ -24,50 +24,34 @@ segmentation sink.
 `CONTOUR_MODE=none` produces hundreds–thousands of vertices per polygon —
 the path that native-player PR #30 un-truncated.
 
+## Build
+
+From the SDK root:
+
+```bash
+./build_docker_samples.sh --python-only --example 08-yolo-stress
+```
+
+Produces `rocket-welder-client-python-yolo-stress:latest` (auto-detected
+as a GPU example, so the Jetson variant is also built when on Jetson).
+
 ## Run
 
-### 1. Start a GStreamer pipeline that writes into the zerobuffer
+The container is managed by **rocket-welder2** — configure it on the
+`zerosink` element in the pipeline editor:
 
-Either via rocket-welder2 (recommended — uses its lifecycle/UI):
+- Mode: **Docker**
+- Image: `rw-yolo-stress`
+- Tag: `latest`
 
-```
-rw pipeline create "filesrc location=/path/to/video.mp4 ! decodebin \
-  ! videoconvert ! videoscale \
-  ! video/x-raw,format=RGB,width=1920,height=1080 \
-  ! zerosink buffer-name=rw-stress buffer-size=67108864 metadata-size=4096"
-rw pipeline start <id>
-```
+When the pipeline starts, rocket-welder2 spawns the container with the
+right `CONNECTION_STRING`, `SEGMENTATION_SINK_URL`, and `/tmp` /
+`/dev/shm` bind mounts (see `ZeroBufferBehavior` /
+`ZeroRocketContainer`). When the pipeline stops, the container is torn
+down. The shared-memory buffer name and segmentation socket path are
+generated per session — no manual coordination needed.
 
-or directly on the host with `gst-launch-1.0`:
-
-```bash
-GST_PLUGIN_PATH=/mnt/d/source/modelingevolution/streamer/src/out/build/Linux-WSL-Debug/app/plugins \
-gst-launch-1.0 -v \
-  filesrc location=/path/to/sample-1080p.mp4 \
-  ! decodebin ! videoconvert ! videoscale \
-  ! video/x-raw,format=RGB,width=1920,height=1080 \
-  ! zerosink buffer-name=rw-stress buffer-size=67108864 metadata-size=4096
-```
-
-### 2. Start the YOLO stress container
-
-```bash
-cp .env.example .env      # tweak knobs if needed
-docker compose up --build
-```
-
-`--build` only on first run / after code changes.
-
-`--ipc=host` (already in compose) is what lets zerobuffer's POSIX shared
-memory work across host ↔ container. `/tmp` is bind-mounted so the unix
-socket native-player consumes is visible to it.
-
-### 3. Point native-player at the same buffer + socket
-
-`shm://${BUFFER_NAME}?size=64MB&metadata=4KB` for frames,
-`socket://${SEG_SOCKET}` for the segmentation overlay.
-
-## Standalone `docker run` (no compose)
+For ad-hoc local testing without rocket-welder2:
 
 ```bash
 docker run --rm -it \
@@ -79,6 +63,10 @@ docker run --rm -it \
   -v /tmp:/tmp \
   rw-yolo-stress
 ```
+
+A producer pipeline must be writing to the same `BUFFER_NAME` first
+(e.g. `gst-launch-1.0 ... ! zerosink buffer-name=rw-stress ...`). The
+container blocks on the SDK reader until the producer attaches.
 
 ## Tuning
 
