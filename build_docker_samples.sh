@@ -47,16 +47,17 @@ if [ "$PLATFORM" = "arm64" ] && [ -f /etc/nv_tegra_release ]; then
     BUILD_JETSON=true
 fi
 
-# Python examples definition: folder:name:needs_gpu
+# Python examples definition: folder:name:needs_gpu:opt_in
+# opt_in=true examples are skipped unless explicitly named via --example.
 PYTHON_EXAMPLES=(
-    "01-simple:simple:false"
-    "02-advanced:advanced:false"
-    "03-integration:integration:false"
-    "04-ui-controls:ui-controls:false"
-    "05-ball-detector:ball-detector:false"
-    "06-yolo:yolo:true"
-    "07-simple-with-data:simple-with-data:false"
-    "08-yolo-stress:yolo-stress:true"
+    "01-simple:simple:false:false"
+    "02-advanced:advanced:false:false"
+    "03-integration:integration:false:false"
+    "04-ui-controls:ui-controls:false:false"
+    "05-ball-detector:ball-detector:false:false"
+    "06-yolo:yolo:true:false"
+    "07-simple-with-data:simple-with-data:false:false"
+    "08-yolo-stress:yolo-stress:true:true"
 )
 
 # C# examples definition: folder:name
@@ -170,12 +171,16 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Python examples:"
             for example in "${PYTHON_EXAMPLES[@]}"; do
-                IFS=':' read -r folder name needs_gpu <<< "$example"
+                IFS=':' read -r folder name needs_gpu opt_in <<< "$example"
                 gpu_note=""
                 if [ "$needs_gpu" = "true" ]; then
                     gpu_note=" (GPU required)"
                 fi
-                echo "  - $folder ($name)$gpu_note"
+                opt_in_note=""
+                if [ "$opt_in" = "true" ]; then
+                    opt_in_note=" (opt-in: build with --example $folder)"
+                fi
+                echo "  - $folder ($name)$gpu_note$opt_in_note"
             done
             echo ""
             echo "Examples:"
@@ -326,13 +331,16 @@ if [ "$BUILD_PYTHON" = true ]; then
     PYTHON_SDK_VERSION=$(get_python_sdk_version)
 
     for example in "${PYTHON_EXAMPLES[@]}"; do
-        IFS=':' read -r folder name needs_gpu <<< "$example"
+        IFS=':' read -r folder name needs_gpu opt_in <<< "$example"
 
         # Skip if filter is set and doesn't match
         if [ -n "$EXAMPLE_FILTER" ]; then
             if [[ "$folder" != *"$EXAMPLE_FILTER"* ]] && [[ "$name" != *"$EXAMPLE_FILTER"* ]]; then
                 continue
             fi
+        elif [ "$opt_in" = "true" ]; then
+            # Opt-in examples are only built when explicitly named via --example.
+            continue
         fi
 
         # Check if example folder exists
