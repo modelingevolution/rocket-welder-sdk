@@ -55,7 +55,6 @@ services:
       context: ../..
       dockerfile: examples/08-yolo-stress/Dockerfile
     container_name: rw-yolo-stress
-    runtime: nvidia
     ipc: host
     network_mode: host
     depends_on:
