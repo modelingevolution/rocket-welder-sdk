@@ -1,51 +1,27 @@
 # YOLO segmentation stress generator for native-player overlay perf testing.
 #
-# Standalone usage:
-#   docker compose up
+# This container only runs the YOLO worker. The video pipeline
+# (filesrc -> zerosink) is owned by rocket-welder2 and runs on the host.
+# Same model as `05-ball-detector`.
 #
-# Overlay onto the rocket-welder2 stack (from rocket-welder2/src/):
-#   docker compose \
-#     -f docker-compose.rw.yml -f docker-compose.rw.x64.yml \
-#     -f docker-compose.rw.nvidia.yml \
-#     -f /path/to/rocket-welder-sdk/python/examples/08-yolo-stress/docker-compose.yml \
-#     up
+# Usage:
+#   1. In rocket-welder2 (or via gst-launch on host) start a pipeline that
+#      writes RGB 1920x1080 frames into a zerobuffer named ${BUFFER_NAME}.
+#      Example pipeline string:
+#        filesrc location=/path/to/video.mp4 ! decodebin ! videoconvert
+#        ! videoscale ! video/x-raw,format=RGB,width=1920,height=1080
+#        ! zerosink buffer-name=rw-stress buffer-size=67108864 metadata-size=4096
+#   2. cp .env.example .env  (and edit if needed)
+#   3. docker compose up --build
+#   4. Point native-player at shm://${BUFFER_NAME} and ${SEG_SOCKET}.
 #
-# Required env (export or put in .env next to this file):
-#   VIDEO_PATH       Absolute path to a 1080p .mp4 on the host.
-#   PLUGINS_PATH     Path to GStreamer plugins folder containing gstzerobuffer.so
-#                    (e.g. /mnt/d/source/modelingevolution/streamer/src/out/build/Linux-WSL-Debug/app/plugins).
-#
-# Optional env:
-#   YOLO_MODEL              ultralytics model (default yolov8x-seg.pt)
-#   CONF_THRESHOLD          detection confidence floor (default 0.05)
-#   INSTANCE_MULTIPLIER     re-emit each polygon N times (default 4)
-#   CONTOUR_MODE            none|simple (default none = max vertices)
-#   BUFFER_NAME             zerobuffer shm name (default rw-stress)
-#   SEG_SOCKET              host path for segmentation unix socket
-#                           (default /tmp/rw-seg.sock)
+# Requires:
+#   - NVIDIA Container Toolkit registered with Docker (run
+#     /tmp/install-nvidia-container-toolkit.sh on Linux hosts).
 
 name: rw-yolo-stress
 
 services:
-  feeder:
-    build:
-      context: .
-      dockerfile: Dockerfile.feeder
-    image: rw-stress-feeder:latest
-    container_name: rw-stress-feeder
-    ipc: host
-    network_mode: host
-    volumes:
-      - "${VIDEO_PATH:?set VIDEO_PATH to a 1080p mp4}:/data/video.mp4:ro"
-      - "${PLUGINS_PATH:?set PLUGINS_PATH to streamer plugins folder}:/gst-plugins:ro"
-    environment:
-      GST_PLUGIN_PATH: /gst-plugins
-      GST_DEBUG: "2,GST_PLUGIN_LOADING:4"
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - "gst-inspect-1.0 zerosink >/dev/null 2>&1 || { echo 'zerosink not loadable inside this image - see README troubleshooting'; ldd /gst-plugins/gstzerobuffer.so | sed -n '1,40p'; exit 1; }; exec gst-launch-1.0 -v filesrc location=/data/video.mp4 ! decodebin ! videoconvert ! videoscale ! video/x-raw,format=RGB,width=1920,height=1080 ! zerosink buffer-name=${BUFFER_NAME:-rw-stress} buffer-size=67108864 metadata-size=4096"
-    restart: unless-stopped
-
   yolo-stress:
     image: rw-yolo-stress:latest
     build:
@@ -54,8 +30,6 @@ services:
     container_name: rw-yolo-stress
     ipc: host
     network_mode: host
-    depends_on:
-      - feeder
     environment:
       CONNECTION_STRING: "shm://${BUFFER_NAME:-rw-stress}?size=64MB&metadata=4KB"
       SEGMENTATION_SINK_URL: "unix:///tmp/rw-seg.sock"

@@ -1,19 +1,14 @@
 # 08 - YOLO Segmentation Stress Generator
 
 Heavy YOLOv8 instance segmentation feed for stress-testing the native-player
-overlay rendering pipeline. Sink-only: no frame mutation. Video stays in
-GStreamer (`filesrc -> zerosink`); this app only consumes frames and writes
-dense, high-vertex polygons to the segmentation sink.
+overlay rendering pipeline. Sink-only: no frame mutation.
 
-**Requires** an NVIDIA GPU + NVIDIA Container Toolkit.
+Architecture mirrors `05-ball-detector`: the GStreamer pipeline runs on the
+host (or inside rocket-welder2), this container only reads frames from the
+shared zerobuffer and writes dense, high-vertex polygons to the
+segmentation sink.
 
-## Build
-
-From the `python/` SDK root:
-
-```bash
-docker build -f examples/08-yolo-stress/Dockerfile -t rw-yolo-stress .
-```
+**Requires** an NVIDIA GPU + NVIDIA Container Toolkit on the host.
 
 ## Stress knobs (env vars)
 
@@ -21,67 +16,29 @@ docker build -f examples/08-yolo-stress/Dockerfile -t rw-yolo-stress .
 |-----------------------|------------------|--------------------------------------------------------|
 | `YOLO_MODEL`          | `yolov8x-seg.pt` | Ultralytics model (try `yolov8m-seg.pt` for less load) |
 | `CONF_THRESHOLD`      | `0.05`           | Lower = more instances per frame                       |
-| `INSTANCE_MULTIPLIER` | `1`              | Re-emit each polygon N times with jitter               |
+| `INSTANCE_MULTIPLIER` | `4`              | Re-emit each polygon N times with jitter               |
 | `CONTOUR_MODE`        | `none`           | `none` keeps every mask vertex; `simple` decimates     |
+| `BUFFER_NAME`         | `rw-stress`      | zerobuffer shm name; must match the GStreamer pipeline |
+| `SEG_SOCKET`          | `/tmp/rw-seg.sock` | Unix socket native-player consumes                   |
 
 `CONTOUR_MODE=none` produces hundreds–thousands of vertices per polygon —
-the path that PR #30 (native-player) un-truncated.
+the path that native-player PR #30 un-truncated.
 
-## Run with docker-compose (easiest)
+## Run
 
-```bash
-cp .env.example .env      # edit VIDEO_PATH and PLUGINS_PATH
-docker compose up --build
+### 1. Start a GStreamer pipeline that writes into the zerobuffer
+
+Either via rocket-welder2 (recommended — uses its lifecycle/UI):
+
+```
+rw pipeline create "filesrc location=/path/to/video.mp4 ! decodebin \
+  ! videoconvert ! videoscale \
+  ! video/x-raw,format=RGB,width=1920,height=1080 \
+  ! zerosink buffer-name=rw-stress buffer-size=67108864 metadata-size=4096"
+rw pipeline start <id>
 ```
 
-`--build` is only needed the first time (or after code changes); subsequent
-runs can use plain `docker compose up`.
-
-The feeder image is built from a tiny `Dockerfile.feeder` based on
-`ubuntu:24.04` so the locally-built `gstzerobuffer.so` (compiled against
-Ubuntu 24.04 / GStreamer 1.24 / glibc 2.39) loads cleanly. If your host
-distro differs, change the base image in `Dockerfile.feeder` to match.
-
-### Troubleshooting
-
-**`no element "zerosink"`** — the plugin couldn't load. The compose
-entrypoint runs `gst-inspect-1.0 zerosink` first and dumps `ldd` of the
-`.so` if it fails. Common causes:
-
-- Wrong base image: rebuild `Dockerfile.feeder` on a distro that matches
-  the one the plugin was compiled on.
-- GStreamer version mismatch: the apt `libgstreamer1.0-0` major.minor must
-  match the build host's. If you upgrade gstreamer on the host, rebuild
-  the feeder image.
-
-**`could not select device driver "nvidia"`** — NVIDIA Container Toolkit
-not registered with Docker. Run
-`sudo bash /tmp/install-nvidia-container-toolkit.sh` (the script written
-during setup), or on Docker Desktop / WSL2 enable GPU integration in
-Docker Desktop's settings.
-
-This starts the GStreamer feeder (`zerosink`) and the YOLO stress
-container together. Point native-player at `shm://rw-stress?...` and the
-unix socket from `SEG_SOCKET` (default `/tmp/rw-seg.sock`).
-
-To overlay it onto the rocket-welder2 stack:
-
-```bash
-cd /path/to/rocket-welder2/src
-docker compose \
-  -f docker-compose.rw.yml -f docker-compose.rw.x64.yml \
-  -f docker-compose.rw.nvidia.yml \
-  -f /path/to/rocket-welder-sdk/python/examples/08-yolo-stress/docker-compose.yml \
-  up
-```
-
-## Run manually
-
-Three components: GStreamer feeder, this stress generator, native-player.
-
-### 1. GStreamer feeder (host or container)
-
-The `zerosink` element ships in the streamer plugin set:
+or directly on the host with `gst-launch-1.0`:
 
 ```bash
 GST_PLUGIN_PATH=/mnt/d/source/modelingevolution/streamer/src/out/build/Linux-WSL-Debug/app/plugins \
@@ -92,49 +49,60 @@ gst-launch-1.0 -v \
   ! zerosink buffer-name=rw-stress buffer-size=67108864 metadata-size=4096
 ```
 
-If you put the same plugins folder in another machine/container, point
-`GST_PLUGIN_PATH` at it. The plugin folder also contains `gstmultipart.so`,
-which collides with the system `multipartdemux` — harmless warnings, but to
-silence them mount **only** `gstzerobuffer.so` into a clean directory.
+### 2. Start the YOLO stress container
 
-### 2. YOLO stress generator
+```bash
+cp .env.example .env      # tweak knobs if needed
+docker compose up --build
+```
+
+`--build` only on first run / after code changes.
+
+`--ipc=host` (already in compose) is what lets zerobuffer's POSIX shared
+memory work across host ↔ container. `/tmp` is bind-mounted so the unix
+socket native-player consumes is visible to it.
+
+### 3. Point native-player at the same buffer + socket
+
+`shm://${BUFFER_NAME}?size=64MB&metadata=4KB` for frames,
+`unix://${SEG_SOCKET}` for the segmentation overlay.
+
+## Standalone `docker run` (no compose)
 
 ```bash
 docker run --rm -it \
-  --runtime=nvidia --gpus all \
+  --gpus all \
   --ipc=host \
   -e CONNECTION_STRING="shm://rw-stress?size=64MB&metadata=4KB" \
-  -e SEGMENTATION_SINK_URL="unix:///tmp/seg.sock" \
-  -e YOLO_MODEL=yolov8x-seg.pt \
+  -e SEGMENTATION_SINK_URL="unix:///tmp/rw-seg.sock" \
   -e INSTANCE_MULTIPLIER=4 \
-  -e CONF_THRESHOLD=0.05 \
-  -e CONTOUR_MODE=none \
   -v /tmp:/tmp \
   rw-yolo-stress
 ```
 
-`--ipc=host` is required so zerobuffer's POSIX shared memory is visible
-across containers. The `/tmp` mount exposes the unix socket that
-native-player connects to.
+## Tuning
 
-### 3. native-player
-
-Point native-player at the same `SEGMENTATION_SINK_URL` and the same
-`shm://rw-stress` for the video frames. Use your existing native-player
-launch flow.
-
-## Tuning checklist
-
-- Start with defaults; verify native-player renders without dropping.
-- Bump `INSTANCE_MULTIPLIER` (2 -> 4 -> 8) until the overlay path saturates.
+- Defaults first; verify native-player renders without dropping.
+- Bump `INSTANCE_MULTIPLIER` (2 → 4 → 8) until the overlay path saturates.
 - Switch `YOLO_MODEL` between `yolov8m-seg.pt` and `yolov8x-seg.pt` to keep
   inference fast or maximize instance count.
-- `CONF_THRESHOLD=0.01` for absolute worst-case instance density.
+- `CONF_THRESHOLD=0.01` for worst-case instance density.
+
+## Troubleshooting
+
+**`could not select device driver "nvidia"`** — NVIDIA Container Toolkit
+not registered with Docker. Run
+`sudo bash /tmp/install-nvidia-container-toolkit.sh`. On Docker Desktop /
+WSL2, enable GPU integration in Docker Desktop's settings.
+
+**Frames never arrive** — buffer name mismatch or the pipeline isn't
+running yet. Confirm `BUFFER_NAME` matches `zerosink buffer-name=...`.
+The container will block on the SDK reader until the producer attaches.
 
 ## Notes
 
 - Sink-only: the input frame is never modified.
-- Overlay stats (frames, fps, instances/frame, vertices/frame) are written
-  via the stage writer so they show up in native-player's HUD.
-- Output via `seg.append(class_id, instance_id, conf, points)` matches
-  `05-ball-detector`; native-player consumes it the same way.
+- Stats (frames, fps, instances/frame, vertices/frame) emitted via the
+  stage writer — show up in native-player's HUD.
+- `seg.append(class_id, instance_id, conf, points)` matches the
+  `05-ball-detector` wire format.
