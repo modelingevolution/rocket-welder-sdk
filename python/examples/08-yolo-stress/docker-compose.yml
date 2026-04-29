@@ -32,7 +32,7 @@ services:
     network_mode: host
     environment:
       CONNECTION_STRING: "shm://${BUFFER_NAME:-rw-stress}?size=64MB&metadata=4KB"
-      SEGMENTATION_SINK_URL: "unix:///tmp/rw-seg.sock"
+      SEGMENTATION_SINK_URL: "socket:///tmp/rw-seg.sock"
       YOLO_MODEL: "${YOLO_MODEL:-yolov8x-seg.pt}"
       CONF_THRESHOLD: "${CONF_THRESHOLD:-0.05}"
       INSTANCE_MULTIPLIER: "${INSTANCE_MULTIPLIER:-4}"

@@ -65,7 +65,7 @@ socket native-player consumes is visible to it.
 ### 3. Point native-player at the same buffer + socket
 
 `shm://${BUFFER_NAME}?size=64MB&metadata=4KB` for frames,
-`unix://${SEG_SOCKET}` for the segmentation overlay.
+`socket://${SEG_SOCKET}` for the segmentation overlay.
 
 ## Standalone `docker run` (no compose)
 
@@ -74,7 +74,7 @@ docker run --rm -it \
   --gpus all \
   --ipc=host \
   -e CONNECTION_STRING="shm://rw-stress?size=64MB&metadata=4KB" \
-  -e SEGMENTATION_SINK_URL="unix:///tmp/rw-seg.sock" \
+  -e SEGMENTATION_SINK_URL="socket:///tmp/rw-seg.sock" \
   -e INSTANCE_MULTIPLIER=4 \
   -v /tmp:/tmp \
   rw-yolo-stress
