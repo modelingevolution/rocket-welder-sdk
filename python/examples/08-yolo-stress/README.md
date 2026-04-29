@@ -37,6 +37,29 @@ docker compose up --build
 `--build` is only needed the first time (or after code changes); subsequent
 runs can use plain `docker compose up`.
 
+The feeder image is built from a tiny `Dockerfile.feeder` based on
+`ubuntu:24.04` so the locally-built `gstzerobuffer.so` (compiled against
+Ubuntu 24.04 / GStreamer 1.24 / glibc 2.39) loads cleanly. If your host
+distro differs, change the base image in `Dockerfile.feeder` to match.
+
+### Troubleshooting
+
+**`no element "zerosink"`** — the plugin couldn't load. The compose
+entrypoint runs `gst-inspect-1.0 zerosink` first and dumps `ldd` of the
+`.so` if it fails. Common causes:
+
+- Wrong base image: rebuild `Dockerfile.feeder` on a distro that matches
+  the one the plugin was compiled on.
+- GStreamer version mismatch: the apt `libgstreamer1.0-0` major.minor must
+  match the build host's. If you upgrade gstreamer on the host, rebuild
+  the feeder image.
+
+**`could not select device driver "nvidia"`** — NVIDIA Container Toolkit
+not registered with Docker. Run
+`sudo bash /tmp/install-nvidia-container-toolkit.sh` (the script written
+during setup), or on Docker Desktop / WSL2 enable GPU integration in
+Docker Desktop's settings.
+
 This starts the GStreamer feeder (`zerosink`) and the YOLO stress
 container together. Point native-player at `shm://rw-stress?...` and the
 unix socket from `SEG_SOCKET` (default `/tmp/rw-seg.sock`).

@@ -28,7 +28,10 @@ name: rw-yolo-stress
 
 services:
   feeder:
-    image: restreamio/gstreamer:latest-prod
+    build:
+      context: .
+      dockerfile: Dockerfile.feeder
+    image: rw-stress-feeder:latest
     container_name: rw-stress-feeder
     ipc: host
     network_mode: host
@@ -37,16 +40,10 @@ services:
       - "${PLUGINS_PATH:?set PLUGINS_PATH to streamer plugins folder}:/gst-plugins:ro"
     environment:
       GST_PLUGIN_PATH: /gst-plugins
+      GST_DEBUG: "2,GST_PLUGIN_LOADING:4"
     entrypoint: ["/bin/sh", "-c"]
     command:
-      - >
-        gst-launch-1.0 -v
-        filesrc location=/data/video.mp4
-        ! decodebin ! videoconvert ! videoscale
-        ! video/x-raw,format=RGB,width=1920,height=1080
-        ! zerosink buffer-name=${BUFFER_NAME:-rw-stress}
-                   buffer-size=67108864
-                   metadata-size=4096
+      - "gst-inspect-1.0 zerosink >/dev/null 2>&1 || { echo 'zerosink not loadable inside this image - see README troubleshooting'; ldd /gst-plugins/gstzerobuffer.so | sed -n '1,40p'; exit 1; }; exec gst-launch-1.0 -v filesrc location=/data/video.mp4 ! decodebin ! videoconvert ! videoscale ! video/x-raw,format=RGB,width=1920,height=1080 ! zerosink buffer-name=${BUFFER_NAME:-rw-stress} buffer-size=67108864 metadata-size=4096"
     restart: unless-stopped
 
   yolo-stress:
