@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="ModelingEvolution.Drawing" Version="1.7.0.65" />
+    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.1.68" />
     <PackageReference Include="System.Reactive" Version="6.*" />
   </ItemGroup>
 
