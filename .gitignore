@@ -125,3 +125,6 @@ local_settings.*
 /python/test_venv
 /python/test_output
 /python/venv38
+
+# Tooling caches
+.nuget-help.db
