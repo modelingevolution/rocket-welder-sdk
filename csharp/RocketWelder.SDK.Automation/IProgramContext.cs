@@ -49,6 +49,14 @@ public interface IProgramContext
     bool IsDryRun { get; }
 
     /// <summary>
+    /// Identifier of the current program execution (one program runs at a time per program;
+    /// preserved across pause/stop within the same run, freshly minted on a new run).
+    /// Used by the runtime to scope <see cref="Lifetime.Run"/> data; programs may also use it
+    /// for diagnostics / log correlation.
+    /// </summary>
+    RunId RunId { get; }
+
+    /// <summary>
     /// Gets a registered device by type and optional name.
     /// Returns null if device not found.
     /// </summary>
@@ -74,22 +82,30 @@ public interface IProgramContext
     T? GetById<T>(uint id) where T : class;
 
     /// <summary>
-    /// Gets shared data published by another program.
-    /// Returns default if key not found or type mismatch.
+    /// Reads a value previously stored via <see cref="SetData{T}"/>.
+    /// Returns <c>default</c> if the key is absent in the addressed scope, or on type mismatch.
     /// </summary>
     /// <typeparam name="T">The data type.</typeparam>
     /// <param name="key">The data key.</param>
-    T? GetData<T>(string key);
+    /// <param name="lifetime">Run-scoped (cleared on new run) vs Permanent (survives runs).</param>
+    /// <param name="share">Program-private vs Global (visible to all programs).</param>
+    T? GetData<T>(string key,
+                  Lifetime lifetime = Lifetime.Permanent,
+                  ShareMode share = ShareMode.Global);
 
     /// <summary>
-    /// Publishes data for other programs to consume.
-    /// When <paramref name="isPersisted"/> is true, the value is also appended to EventStore
-    /// for durability across restarts.
+    /// Stores a value. Every cell of the <see cref="Lifetime"/> × <see cref="ShareMode"/> matrix
+    /// is durable (EventStore-backed). <see cref="Lifetime.Run"/> writes go to a per-run stream
+    /// and are cleared when a new run starts; <see cref="Lifetime.Permanent"/> writes survive
+    /// across runs.
     /// </summary>
     /// <typeparam name="T">The data type.</typeparam>
     /// <param name="key">The data key.</param>
     /// <param name="value">The value to store.</param>
-    /// <param name="isPersisted">When true, appends an event to EventStore.</param>
+    /// <param name="lifetime">Run-scoped (cleared on new run) vs Permanent (survives runs).</param>
+    /// <param name="share">Program-private vs Global (visible to all programs).</param>
     /// <returns>True if the value was stored successfully.</returns>
-    bool SetData<T>(string key, T value, bool isPersisted = false);
+    bool SetData<T>(string key, T value,
+                    Lifetime lifetime = Lifetime.Permanent,
+                    ShareMode share = ShareMode.Global);
 }
