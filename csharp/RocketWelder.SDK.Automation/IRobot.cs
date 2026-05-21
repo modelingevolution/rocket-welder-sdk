@@ -67,6 +67,22 @@ public interface IRobot : IDisposable
     /// <summary>Gets the current joint angles in degrees.</summary>
     Joints6<double> GetJointPositions();
 
+    // === Teaching ===
+
+    /// <summary>Enter teaching mode. Vendor-specific — e.g. Fairino enables pendant
+    /// Axle-Record button polling so <see cref="TeachingPointAdded"/> fires on each press.</summary>
+    void StartTeaching();
+
+    /// <summary>Leave teaching mode.</summary>
+    void EndTeaching();
+
+    /// <summary>Snapshot of all teach-points currently stored in the controller's DB.</summary>
+    IReadOnlyList<TeachingPoint> PeekTeachingPoints();
+
+    /// <summary>Raised when the operator records a new teach-point on the controller
+    /// (pendant press, or other vendor-native mechanism), while in teaching mode.</summary>
+    event EventHandler<TeachingPoint>? TeachingPointAdded;
+
     // === Motion ===
 
     /// <summary>
