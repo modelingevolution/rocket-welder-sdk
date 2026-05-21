@@ -19,7 +19,7 @@
   <ItemGroup>
     <PackageReference Include="Emgu.CV" Version="4.11.0.5746" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
-    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.1.68" />
+    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.3.70" />
     <PackageReference Include="ModelingEvolution.JsonParsableConverter" Version="1.0.1" />
     <PackageReference Include="ModelingEvolution.Mjpeg" Version="1.4.0" />
     <PackageReference Include="System.Reactive" Version="6.*" />
