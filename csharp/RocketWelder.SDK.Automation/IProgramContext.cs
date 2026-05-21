@@ -54,7 +54,12 @@ public interface IProgramContext
     /// Used by the runtime to scope <see cref="Lifetime.Run"/> data; programs may also use it
     /// for diagnostics / log correlation.
     /// </summary>
-    RunId RunId { get; }
+    /// <remarks>
+    /// Default interface implementation returns <c>default(RunId)</c> so that implementations
+    /// authored before 1.11.2 (when this member was introduced) remain source-compatible.
+    /// Hosts that support per-run scoping must override this.
+    /// </remarks>
+    RunId RunId => default;
 
     /// <summary>
     /// Gets a registered device by type and optional name.
@@ -89,9 +94,15 @@ public interface IProgramContext
     /// <param name="key">The data key.</param>
     /// <param name="lifetime">Run-scoped (cleared on new run) vs Permanent (survives runs).</param>
     /// <param name="share">Program-private vs Global (visible to all programs).</param>
+    /// <remarks>
+    /// Default interface implementation returns <c>default</c> so that implementations
+    /// authored before 1.11.2 (when this signature was introduced) remain source-compatible.
+    /// Hosts must override to provide actual data storage.
+    /// </remarks>
     T? GetData<T>(string key,
                   Lifetime lifetime = Lifetime.Permanent,
-                  ShareMode share = ShareMode.Global);
+                  ShareMode share = ShareMode.Global)
+        => default;
 
     /// <summary>
     /// Stores a value. Every cell of the <see cref="Lifetime"/> × <see cref="ShareMode"/> matrix
@@ -105,7 +116,13 @@ public interface IProgramContext
     /// <param name="lifetime">Run-scoped (cleared on new run) vs Permanent (survives runs).</param>
     /// <param name="share">Program-private vs Global (visible to all programs).</param>
     /// <returns>True if the value was stored successfully.</returns>
+    /// <remarks>
+    /// Default interface implementation returns <c>false</c> so that implementations authored
+    /// before 1.11.2 (when this signature was introduced) remain source-compatible.
+    /// Hosts must override to provide actual data storage.
+    /// </remarks>
     bool SetData<T>(string key, T value,
                     Lifetime lifetime = Lifetime.Permanent,
-                    ShareMode share = ShareMode.Global);
+                    ShareMode share = ShareMode.Global)
+        => false;
 }
