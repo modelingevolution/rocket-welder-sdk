@@ -122,6 +122,16 @@ public sealed class SimulatedRobot : IRobot
         return _teachingPoints.TryGet(name, out pose);
     }
 
+    // === IRobot Teaching (no-op for the simulator — no pendant) ===
+
+    public void StartTeaching() { }
+
+    public void EndTeaching() { }
+
+    public IReadOnlyList<TeachingPoint> PeekTeachingPoints() => Array.Empty<TeachingPoint>();
+
+    public event EventHandler<TeachingPoint>? TeachingPointAdded { add { } remove { } }
+
     public Joints6<double> GetJointPositions()
     {
         ThrowIfDisposed();
