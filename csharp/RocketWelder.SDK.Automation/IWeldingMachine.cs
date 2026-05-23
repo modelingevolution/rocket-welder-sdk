@@ -1,6 +1,5 @@
 using ModelingEvolution.Drawing;
 using ModelingEvolution.Signals;
-using RocketWelder.SDK.Automation.AdaptivePoints;
 
 namespace RocketWelder.SDK.Automation;
 
@@ -15,9 +14,8 @@ namespace RocketWelder.SDK.Automation;
 /// <c>Current.Subscribe</c> to receive <c>Sample&lt;Amps&lt;float&gt;&gt;</c> events.
 /// </item>
 /// <item>
-/// <b>Commands</b> — <see cref="Load"/> / <see cref="ArcOn"/> / <see cref="ArcOff"/> are the
-/// write surface used by generated <c>IProgram</c> source (<c>ProgramTemplate</c>). Load
-/// resolves welding parameters from a seam catalogue.
+/// <b>Commands</b> — <see cref="ArcOn"/> / <see cref="ArcOff"/> are async write operations
+/// against the welder hardware, used by generated <c>IProgram</c> source.
 /// </item>
 /// </list>
 /// </summary>
@@ -32,12 +30,9 @@ public interface IWeldingMachine
     /// </summary>
     ISignal<Amps<float>> Current { get; }
 
-    /// <summary>Load welding parameters for the given seam (resolved via a catalogue).</summary>
-    void Load(SeamType seam);
+    /// <summary>Strike the arc. Returns when the hardware has acknowledged the command.</summary>
+    ValueTask ArcOn();
 
-    /// <summary>Strike the arc.</summary>
-    void ArcOn();
-
-    /// <summary>Extinguish the arc.</summary>
-    void ArcOff();
+    /// <summary>Extinguish the arc. Returns when the hardware has acknowledged the command.</summary>
+    ValueTask ArcOff();
 }
