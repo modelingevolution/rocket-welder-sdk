@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.3.70" />
+    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.6.73" />
     <PackageReference Include="System.Reactive" Version="6.*" />
   </ItemGroup>
 

@@ -38,7 +38,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
     <PackageReference Include="BlazorBlaze" Version="1.1.5" />
     <PackageReference Include="BlazorBlaze.Server" Version="1.1.5" />
-    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.3.70" />
+    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.6.73" />
     <PackageReference Include="ZeroBuffer" Version="1.2.8" />
   </ItemGroup>
 
