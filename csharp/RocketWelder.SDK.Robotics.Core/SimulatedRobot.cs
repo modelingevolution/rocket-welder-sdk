@@ -32,23 +32,30 @@ public sealed class SimulatedRobot : IRobot
     /// is supplied, every move checks the target configuration for self and environment collisions
     /// before committing.
     /// </summary>
+    /// <param name="id">Stable robot identity (Epic 029, FR-1.1). Defaults to a fresh
+    /// <c>DeviceId.New("simulated")</c> so each simulator gets a unique catalogue scope.</param>
     public SimulatedRobot(
         RobotModel model,
         Pose3<double>? toolTransform = null,
         Pose3<double>? basePose = null,
-        CollisionEnvironment? environment = null)
+        CollisionEnvironment? environment = null,
+        DeviceId? id = null)
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _toolTransform = toolTransform;
         _basePose = basePose;
         _collisionEnv = environment;
         _currentState = ForwardKinematics.Compute(model, model.HomePosition, toolTransform, basePose);
+        Id = id ?? DeviceId.New("simulated");
     }
 
     /// <summary>The robot model backing this simulator.</summary>
     public RobotModel Model => _model;
 
     #region IRobot Implementation
+
+    /// <inheritdoc/>
+    public DeviceId Id { get; }
 
     public Uri Address
     {
