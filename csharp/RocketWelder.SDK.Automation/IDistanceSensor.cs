@@ -98,4 +98,27 @@ public interface IDistanceSensor : IDisposable
     /// "can I trust this sensor right now?".
     /// </summary>
     Task<DistanceReading?> ReadAsync(CancellationToken ct = default);
+
+    // ── Sensor-bound services ─────────────────────────────────────
+
+    /// <summary>
+    /// Projector that lifts the sensor's 1-D reading to a 3D point in robot-base frame,
+    /// composing the eye-in-hand offset (<c>sensorToTcp</c>) with the current TCP pose.
+    /// Mirrors <see cref="Vision.ICameraProjector"/>'s role for a 1-D sensor.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown by the getter (or by methods on the returned projector) when no
+    /// <see cref="IRobot"/> is registered, since projection requires a TCP pose.
+    /// </exception>
+    IDistanceSensorProjector Projector { get; }
+
+    /// <summary>
+    /// Sensor-bound view locator. Computes TCP poses that aim the beam perpendicular to a
+    /// target plane at the sensor's sweet-spot distance (<see cref="TargetDistanceMM"/>).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown by the getter (or by methods on the returned locator) when no
+    /// <see cref="IRobot"/> is registered, since locator output is a TCP pose.
+    /// </exception>
+    IDistanceSensorViewLocator Locator { get; }
 }

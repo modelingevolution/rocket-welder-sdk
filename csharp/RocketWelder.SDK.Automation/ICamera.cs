@@ -1,3 +1,4 @@
+using RocketWelder.SDK.Automation.AdaptivePoints;
 using RocketWelder.SDK.Automation.Vision;
 
 namespace RocketWelder.SDK.Automation;
@@ -31,4 +32,15 @@ public interface ICamera : IDisposable
     /// and hand-eye calibration.
     /// </summary>
     ICameraProjector Projector { get; }
+
+    /// <summary>
+    /// Camera-bound view locator. Computes TCP poses that put this camera in a usable
+    /// view of a target. Standoff and roll convention are baked into the implementation
+    /// supplied by the host at camera construction.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown by the getter (or by methods on the returned locator) when no
+    /// <see cref="IRobot"/> is registered, since locator output is a TCP pose.
+    /// </exception>
+    ICameraViewLocator Locator { get; }
 }
