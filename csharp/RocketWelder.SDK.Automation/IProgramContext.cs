@@ -87,6 +87,22 @@ public interface IProgramContext
     T? GetById<T>(uint id) where T : class;
 
     /// <summary>
+    /// Resolve a host-provided SDK service available to programs (catalogues, registries,
+    /// sinks). Returns null if not registered. Use the typed accessors
+    /// (<see cref="Segmentation"/>, <see cref="Keypoints"/>, etc.) where they exist; this
+    /// generic resolver covers SDK services that do not have a dedicated property —
+    /// notably <c>IAdaptivePointService</c>, surfaced via the
+    /// <c>ctx.GetAdaptivePoint(name)</c> extension (Epic 029, FR-1.1).
+    /// </summary>
+    /// <typeparam name="T">The service contract type.</typeparam>
+    /// <remarks>
+    /// Default interface implementation returns <c>null</c> so that <see cref="IProgramContext"/>
+    /// implementations authored before this member was introduced remain source-compatible.
+    /// Hosts must override to expose services to programs.
+    /// </remarks>
+    T? GetService<T>() where T : class => null;
+
+    /// <summary>
     /// Reads a value previously stored via <see cref="SetData{T}"/>.
     /// Returns <c>default</c> if the key is absent in the addressed scope, or on type mismatch.
     /// </summary>
