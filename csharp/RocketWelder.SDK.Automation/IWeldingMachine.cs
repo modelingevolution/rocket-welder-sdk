@@ -22,13 +22,20 @@ namespace RocketWelder.SDK.Automation;
 public interface IWeldingMachine : IDevice
 {
     /// <summary>
-    /// Live welding current as a signal. Consumers gate on <see cref="ISignal{T}.HasValue"/>
-    /// before reading <see cref="ISignal{T}.Value"/> (<c>HasValue == false</c> when the device
-    /// is unmapped or no read has succeeded yet), or call
-    /// <see cref="ISignal{T}.Subscribe"/> to receive <c>Sample&lt;Amps&lt;float&gt;&gt;</c>
-    /// events as each polled value arrives.
+    /// Live (measured) welding current as a signal. Consumers gate on
+    /// <see cref="ISignal{T}.HasValue"/> before reading <see cref="ISignal{T}.Value"/>
+    /// (<c>HasValue == false</c> when the device is unmapped or no read has succeeded yet),
+    /// or call <see cref="ISignal{T}.Subscribe"/> to receive
+    /// <c>Sample&lt;Amps&lt;float&gt;&gt;</c> events as each polled value arrives.
     /// </summary>
     ISignal<Amps<float>> Current { get; }
+
+    /// <summary>
+    /// Target / commanded welding current (setpoint or current-guide depending on vendor).
+    /// Same <see cref="ISignal{T}"/> semantics as <see cref="Current"/>; <c>HasValue == false</c>
+    /// for welders that don't expose a setpoint surface or until the first polled value.
+    /// </summary>
+    ISignal<Amps<float>> TargetCurrent { get; }
 
     /// <summary>Strike the arc. Returns when the hardware has acknowledged the command.</summary>
     ValueTask ArcOn();
