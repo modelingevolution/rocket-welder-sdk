@@ -9,7 +9,7 @@ namespace RocketWelder.SDK.Automation;
 /// decoded pixels stay in pooled memory, pinned and wrapped in a Mat.
 /// Caller must dispose the <see cref="MatFrame"/> to return the buffer to the pool.
 /// </summary>
-public interface ICamera : IDisposable
+public interface ICamera : IDevice
 {
     /// <summary>
     /// The serial number identifying this camera (matches GstPylonSrc.DeviceSerialNumber).

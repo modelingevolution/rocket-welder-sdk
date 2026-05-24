@@ -6,18 +6,8 @@ namespace RocketWelder.SDK.Automation;
 /// Vendor-agnostic interface for robot control.
 /// Implementations: FairinoCobot, AbbEgmRobot, etc.
 /// </summary>
-public interface IRobot : IDisposable
+public interface IRobot : IDevice
 {
-    // === Identity ===
-
-    /// <summary>
-    /// Stable identity of this robot, assigned by the host application at registration.
-    /// Used by the SDK and downstream catalogues (adaptive-points, calibration, telemetry)
-    /// to scope state per-robot. The host mints the value when the device is registered
-    /// (in rocket-welder2 this is the <c>CreatePeripheralDevice</c> command's recipient id).
-    /// </summary>
-    DeviceId Id { get; }
-
     // === Connection ===
 
     /// <summary>Robot endpoint address. Scheme encodes the protocol:

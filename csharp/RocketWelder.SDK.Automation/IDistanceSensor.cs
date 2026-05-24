@@ -12,7 +12,7 @@ namespace RocketWelder.SDK.Automation;
 /// Implementations: <c>Adam6017DistanceSensor</c> (ADAM-6017 + Panasonic HL-G212B
 /// over Modbus TCP).
 /// </summary>
-public interface IDistanceSensor : IDisposable
+public interface IDistanceSensor : IDevice
 {
     // ── Connection ────────────────────────────────────────────────
 

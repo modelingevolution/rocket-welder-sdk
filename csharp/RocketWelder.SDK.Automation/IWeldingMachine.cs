@@ -19,7 +19,7 @@ namespace RocketWelder.SDK.Automation;
 /// </item>
 /// </list>
 /// </summary>
-public interface IWeldingMachine
+public interface IWeldingMachine : IDevice
 {
     /// <summary>
     /// Live welding current as a signal. Consumers gate on <see cref="ISignal{T}.HasValue"/>
