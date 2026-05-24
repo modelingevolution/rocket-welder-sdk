@@ -34,6 +34,10 @@ public static class ServiceCollectionExtensions
         services.AddHttpClient<IRocketWelderClient, RocketWelderClient>(http =>
         {
             http.BaseAddress = new Uri("http://localhost:9001");
+            // Bounded default so a hung server doesn't pin a tool invocation
+            // indefinitely (.NET's HttpClient default is 100s). Override via the
+            // caller-supplied configure delegate.
+            http.Timeout = TimeSpan.FromSeconds(30);
             configure?.Invoke(http);
         });
         return services;

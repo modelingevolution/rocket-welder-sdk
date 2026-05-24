@@ -1,4 +1,11 @@
+using RocketWelder.SDK.Http.Cameras;
 using RocketWelder.SDK.Http.Devices;
+using RocketWelder.SDK.Http.DistanceSensors;
+using RocketWelder.SDK.Http.Modbus;
+using RocketWelder.SDK.Http.Pipelines;
+using RocketWelder.SDK.Http.Programs;
+using RocketWelder.SDK.Http.Robots;
+using RocketWelder.SDK.Http.Skills;
 
 namespace RocketWelder.SDK.Http;
 
@@ -13,7 +20,21 @@ public sealed class RocketWelderClient : IRocketWelderClient
     {
         ArgumentNullException.ThrowIfNull(http);
         Devices = new DevicesApi(http);
+        Pipelines = new PipelinesApi(http);
+        Programs = new ProgramsApi(http);
+        Robots = new RobotsApi(http);
+        Cameras = new CamerasApi(http);
+        DistanceSensors = new DistanceSensorsApi(http);
+        Modbus = new ModbusApi(http);
+        Skills = new SkillsApi(http);
     }
 
     public IDevicesApi Devices { get; }
+    public IPipelinesApi Pipelines { get; }
+    public IProgramsApi Programs { get; }
+    public IRobotsApi Robots { get; }
+    public ICamerasApi Cameras { get; }
+    public IDistanceSensorsApi DistanceSensors { get; }
+    public IModbusApi Modbus { get; }
+    public ISkillsApi Skills { get; }
 }

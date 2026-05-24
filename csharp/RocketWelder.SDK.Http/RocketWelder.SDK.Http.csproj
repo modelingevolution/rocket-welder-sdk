@@ -12,7 +12,7 @@
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
     <Copyright>Copyright © ModelingEvolution 2026</Copyright>
-    <Description>Strongly-typed C# HTTP client for the rocket-welder2 REST API. Drives welder operations (devices, pipelines, programs, recordings) from in-process hosts, terminal MCP tools, the Modellution IDE, or any external .NET process. One client, one wire shape, regardless of where the caller runs.</Description>
+    <Description>Strongly-typed C# HTTP client for the rocket-welder2 REST API. Drives welder operations (devices, pipelines, programs, robots, cameras, distance sensors, modbus tags, skills) from in-process hosts, terminal MCP tools, the Modellution IDE, or any external .NET process. One client, one wire shape, regardless of where the caller runs.</Description>
     <PackageTags>rocketwelder;sdk;http;rest;client;welder</PackageTags>
     <PackageProjectUrl>https://github.com/modelingevolution/rocket-welder-sdk</PackageProjectUrl>
     <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
