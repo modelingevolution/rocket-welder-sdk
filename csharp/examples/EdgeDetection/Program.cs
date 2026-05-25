@@ -157,14 +157,19 @@ public static class EdgeDetector
                 new MCvTermCriteria(30, 0.01));
             var refined = refinedVec.ToArray();
 
-            // Confidence: contour area / convex-hull area.
-            // Convex shapes (a clean cube face) → ratio ≈ 1.0.
-            // Noisy or self-intersecting contours → lower ratio.
-            // Bounded [0,1] by construction (area ≤ hull area).
-            using var hullPoints = new VectorOfPoint();
-            CvInvoke.ConvexHull(contour, hullPoints);
-            double hullArea = CvInvoke.ContourArea(hullPoints);
-            float confidence = hullArea > 0 ? (float)Math.Clamp(area / hullArea, 0.0, 1.0) : 0f;
+            // Confidence: refined contour area / refined convex-hull area.
+            // Both inputs are the sub-pixel-refined PointF vertices, so the metric
+            // reflects post-CornerSubPix contour quality (which is what the FR-2.5
+            // tiebreaker will see at the consumer once the float result is reachable
+            // through the wire). Convex shapes → ≈ 1.0; jagged/self-intersecting →
+            // toward 0. Bounded [0,1] by construction (contour ⊆ hull).
+            var refinedHull = CvInvoke.ConvexHull(refined, clockwise: false);
+            using var refinedHullVec = new VectorOfPointF(refinedHull);
+            double refinedArea = CvInvoke.ContourArea(refinedVec, oriented: false);
+            double refinedHullArea = CvInvoke.ContourArea(refinedHullVec, oriented: false);
+            float confidence = refinedHullArea > 0
+                ? (float)Math.Clamp(refinedArea / refinedHullArea, 0.0, 1.0)
+                : 0f;
 
             // Round sub-pixel result to int for SDK emission.
             var emitted = new Point[n];
