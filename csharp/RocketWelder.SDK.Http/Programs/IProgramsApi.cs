@@ -34,4 +34,13 @@ public interface IProgramsApi
     /// summary. Null if the program id is unknown.
     /// </summary>
     Task<ProgramStatus?> GetStatusAsync(Guid programId, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>GET /api/programs/active-streams</c> — every program currently emitting
+    /// graphics frames (i.e. has produced at least one frame on the stream). A UI
+    /// subscribing to program-graphics WebSockets uses this to discover which
+    /// channels are live and reconnect after a page refresh. Empty list when no
+    /// program is actively emitting.
+    /// </summary>
+    Task<IReadOnlyList<ActiveProgramStream>> GetActiveStreamsAsync(CancellationToken ct = default);
 }

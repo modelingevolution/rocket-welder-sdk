@@ -41,4 +41,10 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
 
     public Task<ProgramStatus?> GetStatusAsync(Guid programId, CancellationToken ct = default)
         => http.GetFromJsonAsync<ProgramStatus>($"api/programs/{programId}/status", ct);
+
+    public async Task<IReadOnlyList<ActiveProgramStream>> GetActiveStreamsAsync(CancellationToken ct = default)
+    {
+        var list = await http.GetFromJsonAsync<ActiveProgramStream[]>("api/programs/active-streams", ct).ConfigureAwait(false);
+        return list ?? Array.Empty<ActiveProgramStream>();
+    }
 }
