@@ -122,6 +122,12 @@ public sealed class SimulatedRobot : IRobot
         return _teachingPoints.TryGet(name, out pose);
     }
 
+    public int SaveTeachingPoint(string name, Pose3<double> pose)
+    {
+        SetTeachingPoint(name, pose);
+        return 0;
+    }
+
     public Joints6<double> GetJointPositions()
     {
         ThrowIfDisposed();

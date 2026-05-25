@@ -64,6 +64,10 @@ public interface IRobot : IDisposable
     /// <summary>Tries to get a teaching point by name from the robot controller.</summary>
     bool TryGetTeachingPoint(string name, out Pose3<double> pose);
 
+    /// <summary>Persists a named teaching point on the robot controller so it can later be read by <see cref="GetTeachingPoint"/>.</summary>
+    /// <returns>0 on success; vendor error code otherwise.</returns>
+    int SaveTeachingPoint(string name, Pose3<double> pose);
+
     /// <summary>Gets the current joint angles in degrees.</summary>
     Joints6<double> GetJointPositions();
 
