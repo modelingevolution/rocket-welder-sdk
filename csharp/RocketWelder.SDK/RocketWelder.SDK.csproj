@@ -1,4 +1,5 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
 	  <TargetFramework>net10.0</TargetFramework>
@@ -29,15 +30,15 @@
   <ItemGroup>
     <PackageReference Include="Emgu.CV" Version="4.11.0.5746" />
     <PackageReference Include="Emgu.CV.runtime.ubuntu-x64" Version="4.11.0.5746" />
-    <PackageReference Include="MicroPlumberd" Version="1.2.0" />
-    <PackageReference Include="MicroPlumberd.Services" Version="1.2.0" />
-    <PackageReference Include="MicroPlumberd.SourceGenerators" Version="1.2.0" />
+    <PackageReference Include="MicroPlumberd" Version="1.2.0.0" />
+    <PackageReference Include="MicroPlumberd.Services" Version="1.2.0.0" />
+    <PackageReference Include="MicroPlumberd.SourceGenerators" Version="1.2.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.7" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.7" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
     <PackageReference Include="BlazorBlaze" Version="1.1.5" />
     <PackageReference Include="BlazorBlaze.Server" Version="1.1.5" />
-    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.1.68" />
+    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.6.73" />
     <PackageReference Include="ZeroBuffer" Version="1.2.8" />
   </ItemGroup>
 
