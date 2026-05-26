@@ -129,12 +129,6 @@ public sealed class SimulatedRobot : IRobot
         return _teachingPoints.TryGet(name, out pose);
     }
 
-    public int SaveTeachingPoint(string name, Pose3<double> pose)
-    {
-        SetTeachingPoint(name, pose);
-        return 0;
-    }
-
     // === IRobot Teaching (no-op for the simulator — no pendant) ===
 
     public void StartTeaching() { }
