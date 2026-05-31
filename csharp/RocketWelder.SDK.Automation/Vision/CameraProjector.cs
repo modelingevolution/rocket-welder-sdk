@@ -215,5 +215,23 @@ public class CameraProjector : ICameraProjector
     /// <inheritdoc />
     public Pose3d GetTcpForCameraPose(Pose3d cameraPose) => cameraPose * _cameraToGripper.Inverse();
 
+    /// <inheritdoc />
+    public bool TryProjectToPixel(Point3d basePoint, out Pointd pixel)
+    {
+        var gripperToBase = _getCurrentPosition();
+        var cameraToBase = gripperToBase * _cameraToGripper;
+
+        var pointInCamera = cameraToBase.Inverse().TransformPoint(basePoint);
+
+        if (pointInCamera.Z <= 0)
+        {
+            pixel = default;
+            return false;
+        }
+
+        pixel = _intrinsics.PointToPixel(pointInCamera);
+        return true;
+    }
+
     private Vector3d PixelToRay(Pointd pixel) => _intrinsics.PixelToRay(pixel);
 }

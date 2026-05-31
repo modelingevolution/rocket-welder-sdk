@@ -98,4 +98,17 @@ public interface ICameraProjector
     /// <param name="cameraPose">Desired camera pose in robot base frame.</param>
     /// <returns>Robot TCP pose that achieves the desired camera position and orientation.</returns>
     Pose3d GetTcpForCameraPose(Pose3d cameraPose);
+
+    /// <summary>
+    /// Projects a 3D point in robot base frame to a 2D pixel in the current camera image.
+    /// The inverse of <see cref="ProjectPoint(Pointd, Pose3d)"/>: it folds in the current
+    /// gripper pose and hand-eye calibration to place the point in camera frame, then applies
+    /// the pinhole + Brown-Conrady model.
+    /// </summary>
+    /// <param name="basePoint">Point in robot base frame (mm).</param>
+    /// <param name="pixel">The projected pixel when the point is in front of the camera; otherwise <c>default</c>.</param>
+    /// <returns><c>true</c> when the point is in front of the camera (camera-frame Z &gt; 0) and a pixel
+    /// is produced; <c>false</c> when it is on or behind the image plane. Callers must clip the returned
+    /// pixel to the actual viewport bounds — an in-front point can still project outside the image.</returns>
+    bool TryProjectToPixel(Point3d basePoint, out Pointd pixel);
 }
