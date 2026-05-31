@@ -37,6 +37,37 @@ public interface IWeldingMachine : IDevice
     /// </summary>
     ISignal<Amps<float>> TargetCurrent { get; }
 
+    /// <summary>
+    /// Wire feed speed, mm/min. Read-only on the interface — vendors decide whether they also expose
+    /// a writable. <c>HasValue == false</c> when the welder is in a mode where wire feed is
+    /// meaningless (TIG, MMA) or until the first polled value.
+    /// </summary>
+    ISignal<Speed<float>> WireFeedSpeed { get; }
+
+    /// <summary>
+    /// Measured arc voltage, V. Updates while welding; reads zero between arcs.
+    /// Same <see cref="ISignal{T}"/> semantics as <see cref="Current"/>.
+    /// </summary>
+    ISignal<Volts<float>> WeldingVoltage { get; }
+
+    /// <summary>
+    /// Active welding mode. Writable — operators may change mode from our UI. Vendors whose hardware
+    /// does not accept remote mode-write MUST still implement this and either accept the value into a
+    /// local cache then reject on the welder side (the signal converges back on the next read tick)
+    /// OR throw <see cref="System.NotSupportedException"/> from the underlying
+    /// <c>ISignalSink.Set</c>. Drives per-vendor parameter visibility on the UI side and the
+    /// adapter's own decisions about which registers to read/write.
+    /// </summary>
+    WritableSignal<WeldingMode> Mode { get; }
+
+    /// <summary>
+    /// Arc-active state. Writable — set <c>true</c> to start welding, <c>false</c> to stop. Parallel
+    /// to <see cref="ArcOn"/> / <see cref="ArcOff"/> (which remain for ergonomic one-shot use); the
+    /// signal form lets the catalog/oscilloscope pick it up as a boolean trace and lets the UI render
+    /// a toggle bound to the same source of truth.
+    /// </summary>
+    WritableSignal<bool> WeldingStart { get; }
+
     /// <summary>Strike the arc. Returns when the hardware has acknowledged the command.</summary>
     ValueTask ArcOn();
 
