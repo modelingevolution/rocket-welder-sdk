@@ -87,9 +87,34 @@ public interface IWeldingMachine : IDevice
     /// </summary>
     bool WeldingStart { get; set; }
 
+    /// <summary>
+    /// Shielding-gas valve state as a writable signal. Writable — set <c>true</c> to open the gas
+    /// valve (Fronius "Gasprüfung" / gas test), <c>false</c> to close it. Unlike the arc, the valve
+    /// is a held level control, NOT a rising edge, and opening it alone does NOT strike an arc.
+    /// Parallel to <see cref="GasOn"/> / <see cref="GasOff"/> (which remain for ergonomic one-shot
+    /// use); the signal form lets the catalog/oscilloscope pick it up as a boolean trace and lets the
+    /// UI render a toggle bound to the same source of truth. Vendors without a remote gas-valve
+    /// surface MUST still implement this and either no-op or throw
+    /// <see cref="System.NotSupportedException"/> from the underlying <c>ISignalSink.Set</c>.
+    /// </summary>
+    WritableSignal<bool> GasSignal { get; }
+
+    /// <summary>
+    /// Shielding-gas valve state value. Plain ergonomic surface that forwards to
+    /// <see cref="GasSignal"/> (<c>get</c> returns the latched value, <c>set</c> calls
+    /// <c>GasSignal.Set</c>).
+    /// </summary>
+    bool Gas { get; set; }
+
     /// <summary>Strike the arc. Returns when the hardware has acknowledged the command.</summary>
     ValueTask ArcOn();
 
     /// <summary>Extinguish the arc. Returns when the hardware has acknowledged the command.</summary>
     ValueTask ArcOff();
+
+    /// <summary>Open the shielding-gas valve. Returns when the hardware has acknowledged the command.</summary>
+    ValueTask GasOn();
+
+    /// <summary>Close the shielding-gas valve. Returns when the hardware has acknowledged the command.</summary>
+    ValueTask GasOff();
 }
