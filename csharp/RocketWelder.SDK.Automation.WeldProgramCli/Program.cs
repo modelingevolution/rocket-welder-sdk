@@ -52,7 +52,7 @@ static int Canonicalize(string[] args)
     }
 
     var bytes = File.ReadAllBytes(args[1]);
-    var program = WeldProgramSerializerReader.Deserialize(bytes);
+    var program = WeldProgramDeserializer.Deserialize(bytes);
     var canonical = WeldProgramSerializer.SerializeToUtf8Bytes(program);
 
     if (args.Length >= 3)
@@ -76,7 +76,7 @@ static int Resolve(string[] args)
         return 2;
     }
 
-    var program = WeldProgramSerializerReader.Deserialize(File.ReadAllBytes(args[1]));
+    var program = WeldProgramDeserializer.Deserialize(File.ReadAllBytes(args[1]));
     var topology = TopologyJson.Read(File.ReadAllText(args[2]));
     var resolver = new EdgeBindingResolver();
 

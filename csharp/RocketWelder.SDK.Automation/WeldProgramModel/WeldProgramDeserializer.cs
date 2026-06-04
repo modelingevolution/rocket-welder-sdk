@@ -9,7 +9,7 @@ namespace RocketWelder.SDK.Automation.WeldProgramModel;
 /// Round-trips losslessly: <c>Serialize(Deserialize(bytes))</c> is byte-identical to <c>bytes</c>
 /// for any canonically-written file (AT-A4).
 /// </summary>
-public static class WeldProgramSerializerReader
+public static class WeldProgramDeserializer
 {
     /// <summary>Reads a <see cref="WeldProgram"/> from canonical UTF-8 <c>program.json</c> bytes.</summary>
     public static WeldProgram Deserialize(ReadOnlySpan<byte> utf8Json)

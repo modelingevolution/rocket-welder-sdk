@@ -24,7 +24,7 @@ public class WeldProgramSerializerTests
         var program = SampleData.Program();
 
         var bytes = WeldProgramSerializer.SerializeToUtf8Bytes(program);
-        var roundTripped = WeldProgramSerializerReader.Deserialize(bytes);
+        var roundTripped = WeldProgramDeserializer.Deserialize(bytes);
         var bytes2 = WeldProgramSerializer.SerializeToUtf8Bytes(roundTripped);
 
         Assert.Equal(bytes, bytes2);
@@ -139,11 +139,18 @@ public class WeldProgramSerializerTests
     [InlineData(84.32, "84.32")]
     [InlineData(0.123456789, "0.123457")]
     [InlineData(123456.789, "123457")]
-    [InlineData(-0.0, "0")]
     [InlineData(1234567.0, "1234570")]
     public void FormatFloat_SixSignificantDigits_Invariant(double value, string expected)
     {
         Assert.Equal(expected, WeldProgramSerializer.FormatFloat(value));
+    }
+
+    [Fact]
+    public void FormatFloat_NormalizesNegativeZero()
+    {
+        var negativeZero = -0.0;
+        Assert.True(double.IsNegative(negativeZero)); // genuinely -0.0 at runtime
+        Assert.Equal("0", WeldProgramSerializer.FormatFloat(negativeZero));
     }
 
     // ---- helpers -------------------------------------------------------
