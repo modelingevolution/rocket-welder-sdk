@@ -23,8 +23,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RocketWelder.SDK.Abstractions\RocketWelder.SDK.Abstractions.csproj" />
-    <!-- TEMPORARY: removed in IT-3e (video sever) -->
-    <ProjectReference Include="..\RocketWelder.SDK\RocketWelder.SDK.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Hmi\RocketWelder.SDK.Hmi.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Vision\RocketWelder.SDK.Vision.csproj" />
   </ItemGroup>
 
 </Project>

@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using RocketWelder.SDK.Transport;
 using RocketWelder.SDK.Protocols;
+using RocketWelder.SDK.Vision;
 
 // Import DeltaFrame<KeyPoint> for streaming use - uses Protocols.KeyPoint with ushort confidence
 // Use .NormalizedConfidence() extension to get float 0.0-1.0 value
@@ -58,21 +59,6 @@ public interface IKeyPointsWriter : IDisposable, IAsyncDisposable
     /// Append a keypoint to this frame asynchronously.
     /// </summary>
     Task AppendAsync(int keypointId, Point p, float confidence);
-}
-
-/// <summary>
-/// Streaming reader for keypoints via IAsyncEnumerable.
-/// Designed for real-time streaming over TCP/WebSocket/NNG.
-/// Returns DeltaFrame&lt;KeyPoint&gt; which includes IsDelta for streaming context.
-/// </summary>
-public interface IKeyPointsSource : IDisposable, IAsyncDisposable
-{
-    /// <summary>
-    /// Stream frames as they arrive from the transport.
-    /// Supports cancellation and backpressure.
-    /// Returns DeltaFrame with IsDelta indicating master vs delta frame.
-    /// </summary>
-    IAsyncEnumerable<DeltaKeyPointsFrame> ReadFramesAsync(CancellationToken cancellationToken = default);
 }
 
 /// <summary>

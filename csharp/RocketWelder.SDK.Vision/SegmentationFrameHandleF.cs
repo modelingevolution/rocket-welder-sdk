@@ -3,7 +3,7 @@ using System.Buffers;
 using ModelingEvolution.Drawing;
 using RocketWelder.SDK.Protocols;
 
-namespace RocketWelder.SDK;
+namespace RocketWelder.SDK.Vision;
 
 /// <summary>
 /// Handle to a parsed float-precision segmentation frame with pooled buffers.

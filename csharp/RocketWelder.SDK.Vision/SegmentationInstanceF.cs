@@ -2,7 +2,7 @@ using System;
 using ModelingEvolution.Drawing;
 using RocketWelder.SDK.Protocols;
 
-namespace RocketWelder.SDK;
+namespace RocketWelder.SDK.Vision;
 
 /// <summary>
 /// Float-precision segmentation instance with <see cref="Point{T}"/> coordinates

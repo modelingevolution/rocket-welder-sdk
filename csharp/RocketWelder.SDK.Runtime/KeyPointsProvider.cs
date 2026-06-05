@@ -1,5 +1,6 @@
 using System.Buffers;
 using RocketWelder.SDK.Protocols;
+using RocketWelder.SDK.Vision;
 
 namespace RocketWelder.SDK.Runtime;
 

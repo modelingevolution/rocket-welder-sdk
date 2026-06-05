@@ -2,7 +2,7 @@ using System;
 using System.Buffers;
 using RocketWelder.SDK.Protocols;
 
-namespace RocketWelder.SDK;
+namespace RocketWelder.SDK.Vision;
 
 /// <summary>
 /// Handle to a parsed keypoints frame with pooled buffers.

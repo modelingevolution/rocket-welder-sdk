@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace RocketWelder.SDK;
+namespace RocketWelder.SDK.Vision;
 
 /// <summary>
 /// Float-precision segmentation frame containing <see cref="SegmentationInstanceF"/> results.

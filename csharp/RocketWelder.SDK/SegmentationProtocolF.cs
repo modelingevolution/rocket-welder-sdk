@@ -2,6 +2,7 @@ using System;
 using System.Buffers;
 using ModelingEvolution.Drawing;
 using RocketWelder.SDK.Protocols;
+using RocketWelder.SDK.Vision;
 
 namespace RocketWelder.SDK;
 

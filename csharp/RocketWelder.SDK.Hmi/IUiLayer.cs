@@ -2,7 +2,7 @@ using BlazorBlaze.Server;
 using BlazorBlaze.VectorGraphics;
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Graphics;
+namespace RocketWelder.SDK.Hmi;
 
 public enum PointSymbol
 {

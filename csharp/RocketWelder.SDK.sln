@@ -64,6 +64,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Devices.Di
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Runtime", "RocketWelder.SDK.Runtime\RocketWelder.SDK.Runtime.csproj", "{B38C6773-2062-4BE4-B7C3-5636E3A5AE04}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Hmi", "RocketWelder.SDK.Hmi\RocketWelder.SDK.Hmi.csproj", "{8B005D89-293C-4A50-B824-3B3AF70CE3CC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -374,6 +376,18 @@ Global
 		{B38C6773-2062-4BE4-B7C3-5636E3A5AE04}.Release|x64.Build.0 = Release|Any CPU
 		{B38C6773-2062-4BE4-B7C3-5636E3A5AE04}.Release|x86.ActiveCfg = Release|Any CPU
 		{B38C6773-2062-4BE4-B7C3-5636E3A5AE04}.Release|x86.Build.0 = Release|Any CPU
+		{8B005D89-293C-4A50-B824-3B3AF70CE3CC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8B005D89-293C-4A50-B824-3B3AF70CE3CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8B005D89-293C-4A50-B824-3B3AF70CE3CC}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8B005D89-293C-4A50-B824-3B3AF70CE3CC}.Debug|x64.Build.0 = Debug|Any CPU
+		{8B005D89-293C-4A50-B824-3B3AF70CE3CC}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8B005D89-293C-4A50-B824-3B3AF70CE3CC}.Debug|x86.Build.0 = Debug|Any CPU
+		{8B005D89-293C-4A50-B824-3B3AF70CE3CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8B005D89-293C-4A50-B824-3B3AF70CE3CC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8B005D89-293C-4A50-B824-3B3AF70CE3CC}.Release|x64.ActiveCfg = Release|Any CPU
+		{8B005D89-293C-4A50-B824-3B3AF70CE3CC}.Release|x64.Build.0 = Release|Any CPU
+		{8B005D89-293C-4A50-B824-3B3AF70CE3CC}.Release|x86.ActiveCfg = Release|Any CPU
+		{8B005D89-293C-4A50-B824-3B3AF70CE3CC}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

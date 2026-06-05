@@ -1,6 +1,6 @@
 using System;
 
-namespace RocketWelder.SDK.Graphics;
+namespace RocketWelder.SDK.Hmi;
 
 /// <summary>
 /// Per-frame UI writer with multi-layer support.

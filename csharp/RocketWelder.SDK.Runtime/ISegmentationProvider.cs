@@ -1,3 +1,5 @@
+using RocketWelder.SDK.Vision;
+
 namespace RocketWelder.SDK.Runtime;
 
 /// <summary>

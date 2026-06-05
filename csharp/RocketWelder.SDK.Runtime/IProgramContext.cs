@@ -1,6 +1,6 @@
 using RocketWelder.SDK.Abstractions;
 using Microsoft.Extensions.Logging;
-using RocketWelder.SDK.Graphics;
+using RocketWelder.SDK.Hmi;
 
 namespace RocketWelder.SDK.Runtime;
 

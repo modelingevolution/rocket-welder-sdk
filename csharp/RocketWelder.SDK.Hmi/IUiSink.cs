@@ -1,6 +1,6 @@
 using System;
 
-namespace RocketWelder.SDK.Graphics;
+namespace RocketWelder.SDK.Hmi;
 
 /// <summary>
 /// Factory for creating per-frame <see cref="IUi"/> writers.

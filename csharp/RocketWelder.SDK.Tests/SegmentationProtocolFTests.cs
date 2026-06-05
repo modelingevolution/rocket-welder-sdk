@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Drawing;
 using ModelingEvolution.Drawing;
 using RocketWelder.SDK.Protocols;
+using RocketWelder.SDK.Vision;
 using Xunit;
 using Xunit.Abstractions;
 using Point = System.Drawing.Point;

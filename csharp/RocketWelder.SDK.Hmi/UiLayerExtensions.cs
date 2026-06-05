@@ -1,6 +1,6 @@
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Graphics;
+namespace RocketWelder.SDK.Hmi;
 
 /// <summary>
 /// Extension methods for drawing <see cref="ModelingEvolution.Drawing"/> primitives
