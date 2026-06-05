@@ -87,25 +87,6 @@ public interface IProgramContext
     T? GetById<T>(uint id) where T : class;
 
     /// <summary>
-    /// Adaptive-point catalogue scoped to the program's active <see cref="IRobot"/>.
-    /// Surfaced to programs via the <c>ctx.GetAdaptivePoint(name)</c> extension
-    /// (Epic 029, FR-1.1).
-    /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// Thrown by the getter when no <see cref="IRobot"/> is registered — adaptive-points
-    /// are robot-scoped, so the property is only meaningful once a robot is bound.
-    /// Programs that never touch <c>AdaptivePoints</c> run fine in a no-robot context.
-    /// </exception>
-    /// <remarks>
-    /// Default interface implementation throws <see cref="NotImplementedException"/> so that
-    /// implementations authored before this member was introduced fail loudly at the
-    /// access site rather than silently no-op. Hosts must override.
-    /// </remarks>
-    AdaptivePoints.IAdaptivePointService AdaptivePoints =>
-        throw new NotImplementedException(
-            "Host IProgramContext implementation must override AdaptivePoints (Epic 029, FR-1.1).");
-
-    /// <summary>
     /// Reads a value previously stored via <see cref="SetData{T}"/>.
     /// Returns <c>default</c> if the key is absent in the addressed scope, or on type mismatch.
     /// </summary>
