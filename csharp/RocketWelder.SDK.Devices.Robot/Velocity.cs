@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json.Serialization;
 using ModelingEvolution.JsonParsableConverter;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Devices.Robot;
 
 public enum VelocityUnit { Percentage, MmPerSecond, CmPerMinute }
 

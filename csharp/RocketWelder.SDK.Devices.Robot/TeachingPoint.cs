@@ -1,6 +1,6 @@
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Devices.Robot;
 
 /// <summary>
 /// A teach-point recorded on the robot controller: a named TCP pose.

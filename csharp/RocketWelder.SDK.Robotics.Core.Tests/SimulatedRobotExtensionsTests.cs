@@ -1,5 +1,5 @@
 using ModelingEvolution.Drawing;
-using RocketWelder.SDK.Automation;
+using RocketWelder.SDK.Devices.Robot;
 
 namespace RocketWelder.SDK.Robotics.Core.Tests;
 

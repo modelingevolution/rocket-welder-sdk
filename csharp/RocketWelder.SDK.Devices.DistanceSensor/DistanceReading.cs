@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Devices.DistanceSensor;
 
 /// <summary>
 /// Classification of a <see cref="DistanceReading"/>. Default(0) is <see cref="NoReading"/>

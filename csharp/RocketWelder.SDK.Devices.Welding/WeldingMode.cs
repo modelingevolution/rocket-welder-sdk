@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Devices.Welding;
 
 /// <summary>
 /// Welding process mode at the welder. Vendor-agnostic minimum; concrete vendors map their richer

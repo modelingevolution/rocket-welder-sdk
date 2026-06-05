@@ -1,7 +1,7 @@
 using RocketWelder.SDK.Abstractions;
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Devices.Robot;
 
 /// <summary>
 /// Vendor-agnostic interface for robot control.

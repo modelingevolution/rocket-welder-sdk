@@ -3,7 +3,7 @@ using Emgu.CV;
 using Emgu.CV.CvEnum;
 using ModelingEvolution.Mjpeg;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Devices.Camera;
 
 /// <summary>
 /// Zero-copy RAII wrapper: pins pooled <see cref="FrameImage"/> memory and wraps it in a <see cref="Mat"/>.

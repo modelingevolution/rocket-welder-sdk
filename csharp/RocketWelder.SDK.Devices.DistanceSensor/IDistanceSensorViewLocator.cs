@@ -1,12 +1,12 @@
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Devices.DistanceSensor;
 
 /// <summary>
 /// Finds the robot TCP pose that aims the sensor beam at a target surface.
 ///
 /// <para>
-/// Sibling of <see cref="RocketWelder.SDK.Vision.ICameraViewLocator"/> for the 1-D distance sensor.
+/// Sibling of <c>RocketWelder.SDK.Vision.ICameraViewLocator</c> for the 1-D distance sensor.
 /// Bound to its owning <see cref="IDistanceSensor"/> at construction (so the standoff is
 /// derived from <see cref="IDistanceSensor.TargetDistanceMM"/> — no caller-supplied
 /// distance argument); consumers obtain the instance via <see cref="IDistanceSensor.Locator"/>.
@@ -17,7 +17,7 @@ public interface IDistanceSensorViewLocator
     /// <summary>
     /// TCP pose that aims the beam perpendicular to <paramref name="plane"/>, hitting
     /// the plane at <c>plane.Position</c>, at standoff = <see cref="IDistanceSensor.TargetDistanceMM"/>.
-    /// Drive the result with <see cref="IRobot.MoveLin"/>.
+    /// Drive the result with <c>IRobot.MoveLin</c>.
     /// </summary>
     /// <remarks>
     /// <para>

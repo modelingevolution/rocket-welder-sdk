@@ -1,7 +1,7 @@
 using RocketWelder.SDK.Abstractions;
 using RocketWelder.SDK.Vision;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Devices.Camera;
 
 /// <summary>
 /// Camera device abstraction providing access to live image frames.
@@ -40,7 +40,7 @@ public interface ICamera : IDevice
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// Thrown by the getter (or by methods on the returned locator) when no
-    /// <see cref="IRobot"/> is registered, since locator output is a TCP pose.
+    /// <c>IRobot</c> is registered, since locator output is a TCP pose.
     /// </exception>
     ICameraViewLocator Locator { get; }
 }

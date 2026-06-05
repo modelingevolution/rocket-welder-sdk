@@ -1,6 +1,6 @@
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Devices.DistanceSensor;
 
 /// <summary>
 /// Lifts a 1-D distance reading to a 3D point in robot-base frame, composing the
@@ -8,7 +8,7 @@ namespace RocketWelder.SDK.Automation;
 /// the sensor's most recent reading.
 ///
 /// <para>
-/// Mirrors <see cref="RocketWelder.SDK.Vision.ICameraProjector"/>'s role for a 1-D sensor: holds the
+/// Mirrors <c>RocketWelder.SDK.Vision.ICameraProjector</c>'s role for a 1-D sensor: holds the
 /// eye-in-hand calibration internally and returns 3D coordinates in robot-base frame.
 /// Bound to its owning <see cref="IDistanceSensor"/> at construction; consumers obtain
 /// the instance via <see cref="IDistanceSensor.Projector"/>.
@@ -25,7 +25,7 @@ public interface IDistanceSensorProjector
     /// The 3D point, or <c>null</c> if the sensor has no fresh reading.
     /// </returns>
     /// <exception cref="InvalidOperationException">
-    /// No <see cref="IRobot"/> is registered, so there is no TCP pose to compose with.
+    /// No <c>IRobot</c> is registered, so there is no TCP pose to compose with.
     /// </exception>
     Point3<double>? GetPoint();
 }

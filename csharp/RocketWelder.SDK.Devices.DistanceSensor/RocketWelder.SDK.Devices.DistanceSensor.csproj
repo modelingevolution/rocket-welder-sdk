@@ -1,33 +1,27 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <NoWarn>$(NoWarn);CS1591</NoWarn>
-    <PackageId>RocketWelder.SDK.Robotics.Core</PackageId>
+    <IsPackable>true</IsPackable>
+    <PackageId>RocketWelder.SDK.Devices.DistanceSensor</PackageId>
     <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
-    <Description>Headless kinematic simulation engine: DH forward/inverse kinematics, SimulatedRobot (IRobot drop-in replacement), robot presets.</Description>
-    <PackageTags>rocketwelder;robotics;kinematics;simulation;sdk</PackageTags>
+    <Description>Distance-sensor device family for the RocketWelder SDK (IDistanceSensor, DistanceReading, IDistanceSensorProjector, IDistanceSensorViewLocator).</Description>
+    <PackageTags>rocketwelder;devices;distancesensor;sdk</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
-    <InternalsVisibleTo Include="RocketWelder.SDK.Robotics.Core.Tests" />
-  </ItemGroup>
-
-  <ItemGroup>
     <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.8.75" />
-    <PackageReference Include="System.Reactive" Version="6.*" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\RocketWelder.SDK.Abstractions\RocketWelder.SDK.Abstractions.csproj" />
-    <ProjectReference Include="..\RocketWelder.SDK.Devices.Robot\RocketWelder.SDK.Devices.Robot.csproj" />
   </ItemGroup>
 
 </Project>

@@ -2,7 +2,7 @@ using RocketWelder.SDK.Abstractions;
 using ModelingEvolution.Drawing;
 using ModelingEvolution.Signals;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Devices.Welding;
 
 /// <summary>
 /// Welding-machine device surface. Combines two concerns:

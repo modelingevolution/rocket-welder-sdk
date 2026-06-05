@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Devices.Robot;
 
 /// <summary>Base exception for all robot operations.</summary>
 public class RobotException : Exception
