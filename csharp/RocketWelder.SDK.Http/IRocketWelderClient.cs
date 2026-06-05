@@ -1,6 +1,7 @@
 using RocketWelder.SDK.Http.Cameras;
 using RocketWelder.SDK.Http.Devices;
 using RocketWelder.SDK.Http.DistanceSensors;
+using RocketWelder.SDK.Http.GstElements;
 using RocketWelder.SDK.Http.Modbus;
 using RocketWelder.SDK.Http.Pipelines;
 using RocketWelder.SDK.Http.Programs;
@@ -50,4 +51,7 @@ public interface IRocketWelderClient
 
     /// <summary>Operations under <c>/api/skills</c>.</summary>
     ISkillsApi Skills { get; }
+
+    /// <summary>Operations under <c>/api/gst/elements</c> — GStreamer element catalog introspection.</summary>
+    IGstElementsApi GstElements { get; }
 }
