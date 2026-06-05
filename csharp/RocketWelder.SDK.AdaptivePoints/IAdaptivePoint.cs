@@ -1,6 +1,6 @@
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation.AdaptivePoints;
+namespace RocketWelder.SDK.AdaptivePoints;
 
 /// <summary>
 /// Live handle to one captured adaptive-point, bound to the program's active robot + camera.

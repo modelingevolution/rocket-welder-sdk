@@ -1,6 +1,6 @@
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation.AdaptivePoints;
+namespace RocketWelder.SDK.AdaptivePoints;
 
 /// <summary>
 /// Outcome of <see cref="IAdaptivePoint.AdaptAsync"/>. Five exhaustive cases; failure is a

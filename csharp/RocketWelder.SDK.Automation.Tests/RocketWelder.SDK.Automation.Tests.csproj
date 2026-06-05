@@ -19,7 +19,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RocketWelder.SDK.Automation\RocketWelder.SDK.Automation.csproj" />
     <ProjectReference Include="..\RocketWelder.SDK.Operations\RocketWelder.SDK.Operations.csproj" />
     <ProjectReference Include="..\RocketWelder.SDK.Vision\RocketWelder.SDK.Vision.csproj" />
   </ItemGroup>

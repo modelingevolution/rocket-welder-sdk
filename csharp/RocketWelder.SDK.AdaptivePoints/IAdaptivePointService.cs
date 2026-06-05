@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Automation.AdaptivePoints;
+namespace RocketWelder.SDK.AdaptivePoints;
 
 /// <summary>
 /// Read surface for one robot's adaptive-point catalogue, resolved via

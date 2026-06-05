@@ -1,6 +1,6 @@
 using RocketWelder.SDK.Runtime;
 
-namespace RocketWelder.SDK.Automation.AdaptivePoints;
+namespace RocketWelder.SDK.AdaptivePoints;
 
 /// <summary>
 /// Extension methods on <see cref="IProgramContext"/> that surface adaptive-point lookup.

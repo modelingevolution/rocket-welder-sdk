@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Devices.Tracker;
 
 /// <summary>
 /// Tracker interface, used to act as a LaserTracker or a CameraTracker device;
