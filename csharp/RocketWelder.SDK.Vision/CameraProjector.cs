@@ -7,7 +7,7 @@ using Vector3d = ModelingEvolution.Drawing.Vector3<double>;
 using Pointd = ModelingEvolution.Drawing.Point<double>;
 using Triangle3d = ModelingEvolution.Drawing.Triangle3<double>;
 
-namespace RocketWelder.SDK.Automation.Vision;
+namespace RocketWelder.SDK.Vision;
 
 /// <summary>
 /// Projects 2D pixel coordinates to 3D points on a surface using camera intrinsics

@@ -1,10 +1,10 @@
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation.Vision;
+namespace RocketWelder.SDK.Vision;
 
 /// <summary>
 /// Camera-bound view locator: computes the robot TCP pose that puts the owning camera in
-/// a usable view of a target. Obtained via <see cref="ICamera.Locator"/>.
+/// a usable view of a target. Obtained via <c>ICamera.Locator</c>.
 ///
 /// <para>
 /// The interface is intentionally <b>method-generic</b>: a single implementation handles every
@@ -16,8 +16,8 @@ namespace RocketWelder.SDK.Automation.Vision;
 ///
 /// <para>
 /// The returned pose is a <b>robot TCP pose</b>, not a camera pose — the implementation has
-/// already applied the hand-eye conversion (<see cref="Vision.ICameraProjector.GetTcpForCameraPose"/>).
-/// Drive the result directly with <see cref="IRobot.MoveLin"/>.
+/// already applied the hand-eye conversion (<see cref="ICameraProjector.GetTcpForCameraPose"/>).
+/// Drive the result directly with <c>IRobot.MoveLin</c>.
 /// </para>
 ///
 /// <para>
@@ -33,8 +33,8 @@ public interface ICameraViewLocator
     /// </summary>
     /// <typeparam name="TTarget">Type of the target — the implementation dispatches internally.</typeparam>
     /// <param name="target">What to view (e.g. a teach-point <see cref="Pose3{T}"/>).</param>
-    /// <returns>TCP pose ready to feed to <see cref="IRobot.MoveLin"/>.</returns>
+    /// <returns>TCP pose ready to feed to <c>IRobot.MoveLin</c>.</returns>
     /// <exception cref="NotSupportedException">The implementation does not handle <typeparamref name="TTarget"/>.</exception>
-    /// <exception cref="InvalidOperationException">No <see cref="IRobot"/> is registered.</exception>
+    /// <exception cref="InvalidOperationException">No <c>IRobot</c> is registered.</exception>
     Pose3<double> FindTcpViewFor<TTarget>(TTarget target);
 }

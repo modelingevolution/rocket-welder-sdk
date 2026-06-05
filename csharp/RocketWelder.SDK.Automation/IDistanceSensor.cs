@@ -105,7 +105,7 @@ public interface IDistanceSensor : IDevice
     /// <summary>
     /// Projector that lifts the sensor's 1-D reading to a 3D point in robot-base frame,
     /// composing the eye-in-hand offset (<c>sensorToTcp</c>) with the current TCP pose.
-    /// Mirrors <see cref="Vision.ICameraProjector"/>'s role for a 1-D sensor.
+    /// Mirrors <see cref="RocketWelder.SDK.Vision.ICameraProjector"/>'s role for a 1-D sensor.
     /// </summary>
     /// <exception cref="InvalidOperationException">
     /// Thrown by the getter (or by methods on the returned projector) when no

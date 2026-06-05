@@ -8,7 +8,7 @@ namespace RocketWelder.SDK.Automation;
 /// the sensor's most recent reading.
 ///
 /// <para>
-/// Mirrors <see cref="Vision.ICameraProjector"/>'s role for a 1-D sensor: holds the
+/// Mirrors <see cref="RocketWelder.SDK.Vision.ICameraProjector"/>'s role for a 1-D sensor: holds the
 /// eye-in-hand calibration internally and returns 3D coordinates in robot-base frame.
 /// Bound to its owning <see cref="IDistanceSensor"/> at construction; consumers obtain
 /// the instance via <see cref="IDistanceSensor.Projector"/>.

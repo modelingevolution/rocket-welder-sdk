@@ -3,7 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation.Vision;
+namespace RocketWelder.SDK.Vision;
 
 /// <summary>
 /// Distortion coefficients [k1, k2, p1, p2, k3].

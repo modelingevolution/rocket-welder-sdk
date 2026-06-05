@@ -6,7 +6,7 @@ namespace RocketWelder.SDK.Automation;
 /// Finds the robot TCP pose that aims the sensor beam at a target surface.
 ///
 /// <para>
-/// Sibling of <see cref="Vision.ICameraViewLocator"/> for the 1-D distance sensor.
+/// Sibling of <see cref="RocketWelder.SDK.Vision.ICameraViewLocator"/> for the 1-D distance sensor.
 /// Bound to its owning <see cref="IDistanceSensor"/> at construction (so the standoff is
 /// derived from <see cref="IDistanceSensor.TargetDistanceMM"/> — no caller-supplied
 /// distance argument); consumers obtain the instance via <see cref="IDistanceSensor.Locator"/>.
