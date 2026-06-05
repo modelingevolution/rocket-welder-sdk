@@ -7,5 +7,6 @@ public record ProgramMetadata(
     string Name,
     string? Description,
     Workspace? Workspace,
-    bool SupportsDryRun
+    bool SupportsDryRun,
+    string? Thumbnail = null
 );

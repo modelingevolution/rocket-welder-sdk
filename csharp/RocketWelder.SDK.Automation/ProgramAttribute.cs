@@ -26,5 +26,11 @@ public class ProgramAttribute : Attribute
     /// </summary>
     public bool SupportsDryRun { get; init; } = false;
 
+    /// <summary>
+    /// Optional path to a JPEG/PNG preview image, relative to the project (.csproj) directory,
+    /// shown on the program tile. Null = no image (a heuristic icon is shown instead).
+    /// </summary>
+    public string? Thumbnail { get; init; }
+
     public ProgramAttribute(string name) => Name = name ?? throw new ArgumentNullException(nameof(name));
 }
