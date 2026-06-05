@@ -1,7 +1,7 @@
 using System.Buffers;
 using RocketWelder.SDK.Protocols;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Runtime;
 
 /// <summary>
 /// Wraps an <see cref="IKeyPointsSource"/> (push/streaming) into an

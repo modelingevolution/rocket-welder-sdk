@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Runtime;
 
 /// <summary>
 /// Stores program actions (decisions, commands) in EventStore

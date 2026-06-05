@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Runtime;
 
 /// <summary>
 /// Marks a class as a program that can be discovered and executed by the automation system.

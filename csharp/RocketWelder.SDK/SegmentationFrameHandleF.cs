@@ -99,7 +99,7 @@ public sealed class SegmentationFrameHandleF : IDisposable
     /// <summary>
     /// Creates a pooled copy of this handle. The caller owns the returned handle
     /// and must dispose it independently.
-    /// This is the copy-on-read path for <see cref="Automation.IDataProvider{T}.GetLatest"/>.
+    /// This is the copy-on-read path for <c>RocketWelder.SDK.Runtime.IDataProvider{T}.GetLatest</c>.
     /// </summary>
     public SegmentationFrameHandleF Copy()
     {

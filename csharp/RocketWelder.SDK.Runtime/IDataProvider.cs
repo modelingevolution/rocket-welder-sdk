@@ -1,6 +1,6 @@
 using System;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Runtime;
 
 /// <summary>
 /// Provides "get latest" access to streaming data with copy-on-read semantics.

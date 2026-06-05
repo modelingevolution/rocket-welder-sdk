@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Runtime;
 
 /// <summary>
 /// Provides "get latest" access to keypoints detection results.

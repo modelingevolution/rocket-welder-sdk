@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Runtime;
 
 /// <summary>
 /// Represents a program that can be executed by the automation system.

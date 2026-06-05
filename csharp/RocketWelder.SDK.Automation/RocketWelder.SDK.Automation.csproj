@@ -10,27 +10,18 @@
     <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
-    <Description>Abstractions for RocketWelder automation programs (IProgram, IProgramContext, etc.)</Description>
+    <Description>Adaptive-points host extensions for RocketWelder automation programs.</Description>
     <PackageTags>rocketwelder;automation;sdk</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Emgu.CV" Version="4.11.0.5746" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
     <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.8.75" />
-    <PackageReference Include="ModelingEvolution.JsonParsableConverter" Version="1.0.1" />
-    <PackageReference Include="ModelingEvolution.Signals" Version="1.0.2.2" />
-    <PackageReference Include="ModelingEvolution.Mjpeg" Version="1.4.0" />
-    <PackageReference Include="System.Reactive" Version="6.*" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RocketWelder.SDK\RocketWelder.SDK.csproj" />
-    <ProjectReference Include="..\RocketWelder.SDK.Abstractions\RocketWelder.SDK.Abstractions.csproj" />
-    <ProjectReference Include="..\RocketWelder.SDK.Operations\RocketWelder.SDK.Operations.csproj" />
-    <ProjectReference Include="..\RocketWelder.SDK.Vision\RocketWelder.SDK.Vision.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Runtime\RocketWelder.SDK.Runtime.csproj" />
   </ItemGroup>
 
 </Project>

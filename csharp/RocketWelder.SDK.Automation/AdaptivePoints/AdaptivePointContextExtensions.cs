@@ -1,3 +1,5 @@
+using RocketWelder.SDK.Runtime;
+
 namespace RocketWelder.SDK.Automation.AdaptivePoints;
 
 /// <summary>

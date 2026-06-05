@@ -2,7 +2,7 @@ using RocketWelder.SDK.Abstractions;
 using Microsoft.Extensions.Logging;
 using RocketWelder.SDK.Graphics;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Runtime;
 
 /// <summary>
 /// Context provided to programs during execution.

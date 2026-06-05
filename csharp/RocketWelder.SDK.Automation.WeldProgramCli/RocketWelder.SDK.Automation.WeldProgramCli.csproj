@@ -11,7 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RocketWelder.SDK.Automation\RocketWelder.SDK.Automation.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Operations\RocketWelder.SDK.Operations.csproj" />
   </ItemGroup>
 
 </Project>
