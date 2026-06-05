@@ -1,6 +1,6 @@
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation.AdaptivePoints;
+namespace RocketWelder.SDK.Automation.Vision;
 
 /// <summary>
 /// Camera-bound view locator: computes the robot TCP pose that puts the owning camera in

@@ -1,4 +1,3 @@
-using RocketWelder.SDK.Automation.AdaptivePoints;
 using RocketWelder.SDK.Automation.Vision;
 
 namespace RocketWelder.SDK.Automation;
