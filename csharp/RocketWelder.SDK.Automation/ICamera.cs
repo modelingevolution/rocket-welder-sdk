@@ -1,3 +1,4 @@
+using RocketWelder.SDK.Abstractions;
 using RocketWelder.SDK.Automation.Vision;
 
 namespace RocketWelder.SDK.Automation;

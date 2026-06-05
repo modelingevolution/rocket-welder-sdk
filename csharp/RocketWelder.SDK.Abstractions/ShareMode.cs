@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Abstractions;
 
 /// <summary>
 /// Visibility of a <see cref="IProgramContext.GetData{T}"/> / <see cref="IProgramContext.SetData{T}"/>

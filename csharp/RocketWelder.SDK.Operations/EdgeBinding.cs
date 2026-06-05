@@ -1,6 +1,6 @@
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation.WeldProgramModel;
+namespace RocketWelder.SDK.Operations;
 
 /// <summary>
 /// Durable geometric fingerprint of a CAD edge (NOT an OCCT ordinal). Per

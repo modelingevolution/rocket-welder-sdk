@@ -4,7 +4,7 @@ using System.Text;
 using System.Text.Json;
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation.WeldProgramModel;
+namespace RocketWelder.SDK.Operations;
 
 /// <summary>
 /// The single canonical (de)serializer for <c>program.json</c> (per <c>data-model.md</c> §2).

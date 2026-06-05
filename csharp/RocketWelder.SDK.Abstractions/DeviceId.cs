@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using ModelingEvolution.JsonParsableConverter;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Abstractions;
 
 /// <summary>
 /// Stable identity of one host-registered device, opaque to the SDK. Host applications

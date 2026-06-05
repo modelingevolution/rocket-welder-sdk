@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Abstractions;
 
 /// <summary>
 /// Common base for every host-registered device. Carries the stable identity

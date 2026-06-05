@@ -1,6 +1,6 @@
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation.WeldProgramModel;
+namespace RocketWelder.SDK.Operations;
 
 /// <summary>
 /// SDK-side mirror of the geometry service's per-edge topology (the subset the binding needs;

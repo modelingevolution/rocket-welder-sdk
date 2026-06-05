@@ -1,6 +1,6 @@
 using System.Text.Json;
 using ModelingEvolution.Drawing;
-using RocketWelder.SDK.Automation.WeldProgramModel;
+using RocketWelder.SDK.Operations;
 
 // Headless CLI for IT-1 tester verification (bash + diff/git diff). No source access required.
 // Run `weldprogram --help` (or any command with --help) for usage and the topology schema.

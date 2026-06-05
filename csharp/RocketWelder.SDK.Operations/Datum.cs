@@ -1,6 +1,6 @@
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation.WeldProgramModel;
+namespace RocketWelder.SDK.Operations;
 
 /// <summary>
 /// Program-level registration reference (per <c>data-model.md</c> §1/§2): a part is registered

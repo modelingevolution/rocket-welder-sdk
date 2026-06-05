@@ -1,5 +1,5 @@
 using System.Text;
-using RocketWelder.SDK.Automation.WeldProgramModel;
+using RocketWelder.SDK.Operations;
 
 namespace RocketWelder.SDK.Automation.Tests.WeldProgramModel;
 

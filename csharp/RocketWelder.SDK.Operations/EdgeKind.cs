@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Automation.WeldProgramModel;
+namespace RocketWelder.SDK.Operations;
 
 /// <summary>
 /// Topological curve kind of a CAD edge, as classified by the geometry service.

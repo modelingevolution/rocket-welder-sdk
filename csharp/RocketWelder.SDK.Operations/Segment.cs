@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace RocketWelder.SDK.Automation.WeldProgramModel;
+namespace RocketWelder.SDK.Operations;
 
 /// <summary>
 /// One weld along one bound edge — the weld specialization of the shared FeaturePlan concept

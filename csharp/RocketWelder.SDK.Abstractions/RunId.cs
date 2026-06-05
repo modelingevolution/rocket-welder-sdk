@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using ModelingEvolution.JsonParsableConverter;
 
-namespace RocketWelder.SDK.Automation;
+namespace RocketWelder.SDK.Abstractions;
 
 /// <summary>
 /// Identifier of a single program execution (run). Freshly minted when a program starts;

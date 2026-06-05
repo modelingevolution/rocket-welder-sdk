@@ -1,5 +1,5 @@
 using ModelingEvolution.Drawing;
-using RocketWelder.SDK.Automation.WeldProgramModel;
+using RocketWelder.SDK.Operations;
 
 namespace RocketWelder.SDK.Automation.Tests.WeldProgramModel;
 

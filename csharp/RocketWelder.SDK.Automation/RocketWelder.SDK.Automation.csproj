@@ -28,6 +28,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RocketWelder.SDK\RocketWelder.SDK.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Abstractions\RocketWelder.SDK.Abstractions.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Operations\RocketWelder.SDK.Operations.csproj" />
   </ItemGroup>
 
 </Project>

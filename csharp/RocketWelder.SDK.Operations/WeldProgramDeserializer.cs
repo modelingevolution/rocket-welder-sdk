@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text.Json;
 using ModelingEvolution.Drawing;
 
-namespace RocketWelder.SDK.Automation.WeldProgramModel;
+namespace RocketWelder.SDK.Operations;
 
 /// <summary>
 /// The canonical reader for <c>program.json</c> (the inverse of <see cref="WeldProgramSerializer"/>).

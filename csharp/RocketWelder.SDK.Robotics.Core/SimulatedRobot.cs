@@ -1,6 +1,7 @@
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using ModelingEvolution.Drawing;
+using RocketWelder.SDK.Abstractions;
 using RocketWelder.SDK.Automation;
 
 namespace RocketWelder.SDK.Robotics.Core;

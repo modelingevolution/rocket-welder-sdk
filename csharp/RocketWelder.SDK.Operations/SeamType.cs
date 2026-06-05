@@ -1,7 +1,7 @@
 using System.Text.Json.Serialization;
 using ModelingEvolution.JsonParsableConverter;
 
-namespace RocketWelder.SDK.Automation.WeldProgramModel;
+namespace RocketWelder.SDK.Operations;
 
 /// <summary>
 /// Identifies a seam type (e.g. "A4"). Resolves welding parameters — current, voltage,

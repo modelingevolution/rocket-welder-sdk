@@ -1,4 +1,4 @@
-namespace RocketWelder.SDK.Automation.WeldProgramModel;
+namespace RocketWelder.SDK.Operations;
 
 /// <summary>
 /// The git-stored weld program artifact — one file per part type (per <c>data-model.md</c> §1/§2).
