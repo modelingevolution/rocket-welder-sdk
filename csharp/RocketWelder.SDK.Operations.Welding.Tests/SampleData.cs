@@ -1,19 +1,21 @@
-using System.Text.Json;
 using ModelingEvolution.Drawing;
 using RocketWelder.SDK.Operations;
 
-namespace RocketWelder.SDK.Automation.Tests.WeldProgramModel;
+namespace RocketWelder.SDK.Operations.Welding.Tests;
 
 /// <summary>
-/// Builders for a representative <see cref="WeldProgram"/> and a matching <see cref="Topology"/>,
-/// shared across the IT-1 tests. Geometry is a simple rectangular plate so the edges are
-/// distinguishable yet some are deliberately near-equivalent (for the ambiguity test).
+/// Builders for a representative <c>rw.weldprogram/2</c> <see cref="WeldProgram"/> and a matching
+/// <see cref="Topology"/>, shared across the tests. Geometry is a simple rectangular plate so the edges
+/// are distinguishable yet some are deliberately near-equivalent (for the ambiguity test).
 /// </summary>
 internal static class SampleData
 {
     public static readonly Guid ProgramId = Guid.Parse("f3b1c0de-1111-2222-3333-444455556666");
 
-    /// <summary>A two-segment weld program bound to edges E0 and E2 of <see cref="PlateTopology"/>.</summary>
+    /// <summary>
+    /// A two-segment /2 weld program bound to edges E0 and E2 of <see cref="PlateTopology"/>.
+    /// s0 is a multi-pass fillet (root + cap, the cap weaves); s1 is a single-pass butt (v1 happy path).
+    /// </summary>
     public static WeldProgram Program()
     {
         var resolver = new EdgeBindingResolver();
@@ -22,24 +24,45 @@ internal static class SampleData
         var bindingE0 = resolver.Fingerprint(topo.Get("E0")!);
         var bindingE2 = resolver.Fingerprint(topo.Get("E2")!);
 
-        var emptyParams = (IReadOnlyDictionary<string, JsonElement>)new Dictionary<string, JsonElement>();
-        var jobParams = ParseParams("""{"wire":1.2,"gas":"82/18"}""");
-
         var s0 = new Segment(
             Id: "s0",
             Binding: bindingE0,
             SubRange: new SubRange(0.0, 1.0),
-            Process: new WeldProcess("fillet", new WeldJob(17, jobParams), 6.5),
-            TorchFrame: new TorchFrame(12.0, 45.0, 10.0, "drag"),
-            Resolver: new SegmentResolver("metrology", "E7"));
+            SeamType: SeamType.Fillet,
+            Position: WeldPosition.PB,
+            WeldSize: new WeldSize(new FilletSize(LegMm: 8.0, ThroatMm: null), Butt: null),
+            Gas: new Gas("80/20 Ar/CO2", 14.0),
+            Polarity: Polarity.DCEP,
+            Passes: new[]
+            {
+                new Pass("p0", PassRole.Root, new JobRef(17),
+                    new ToolFrame(12.0, 45.0, 10.0, Technique.Drag),
+                    new MotionProfile(6.5, null)),
+                new Pass("p1", PassRole.Cap, new JobRef(18),
+                    new ToolFrame(11.0, 45.0, 8.0, Technique.Drag),
+                    new MotionProfile(5.5, new Weave(2.0, 1.5, 120.0, "triangle"))),
+            },
+            Resolver: new SegmentResolver(ResolverMode.Metrology, "E7",
+                new Tracking(TrackingMode.Tast, GapFill: true)),
+            ExternalAxis: new ExternalAxis(JointId: 1, AngleDeg: 30.0));
 
         var s1 = new Segment(
             Id: "s1",
             Binding: bindingE2,
             SubRange: new SubRange(0.0, 0.75),
-            Process: new WeldProcess("butt", new WeldJob(4, emptyParams), 8.25),
-            TorchFrame: new TorchFrame(10.0, 90.0, 0.0, "perpendicular"),
-            Resolver: null);
+            SeamType: SeamType.Butt,
+            Position: WeldPosition.PA,
+            WeldSize: new WeldSize(Fillet: null, new ButtSize(60.0, 2.0, 1.5, "single-V")),
+            Gas: new Gas("100 Ar", 12.0),
+            Polarity: Polarity.DCEP,
+            Passes: new[]
+            {
+                new Pass("p0", PassRole.Cap, new JobRef(4),
+                    new ToolFrame(10.0, 90.0, 0.0, Technique.Perpendicular),
+                    new MotionProfile(8.25, null)),
+            },
+            Resolver: null,
+            ExternalAxis: null);
 
         return new WeldProgram(
             Id: ProgramId,
@@ -61,25 +84,10 @@ internal static class SampleData
                 "rw2 1.2.3"));
     }
 
-    private static IReadOnlyDictionary<string, JsonElement> ParseParams(string json)
-    {
-        using var doc = JsonDocument.Parse(json);
-        var dict = new Dictionary<string, JsonElement>();
-        foreach (var p in doc.RootElement.EnumerateObject())
-            dict[p.Name] = p.Value.Clone();
-        return dict;
-    }
-
-    /// <summary>
-    /// A rectangular plate 100×50 in the z=0 plane. Four line edges E0..E3 (the four sides) plus
-    /// one extra interior line E4 used to make a near-duplicate of E0 for the ambiguity test —
-    /// disambiguated by its different adjacent-face normals.
-    /// </summary>
+    /// <summary>A rectangular plate 100×50 in the z=0 plane with four line edges E0..E3.</summary>
     public static Topology PlateTopology()
     {
-        // outward normals chosen to give each side a distinct dihedral context.
         var nUp = new Vector3<double>(0, 0, 1);
-        var nDown = new Vector3<double>(0, 0, -1);
         var nLeft = new Vector3<double>(-1, 0, 0);
         var nRight = new Vector3<double>(1, 0, 0);
         var nFront = new Vector3<double>(0, -1, 0);
@@ -87,36 +95,27 @@ internal static class SampleData
 
         var edges = new List<EdgeTopology>
         {
-            // E0: bottom edge y=0, from (0,0,0)->(100,0,0); faces: top plate + front wall
             Line("E0", (0, 0, 0), (100, 0, 0), nUp, nFront),
-            // E1: right edge x=100, (100,0,0)->(100,50,0); faces: top + right wall
             Line("E1", (100, 0, 0), (100, 50, 0), nUp, nRight),
-            // E2: top edge y=50, (100,50,0)->(0,50,0); faces: top + back wall
             Line("E2", (100, 50, 0), (0, 50, 0), nUp, nBack),
-            // E3: left edge x=0, (0,50,0)->(0,0,0); faces: top + left wall
             Line("E3", (0, 50, 0), (0, 0, 0), nUp, nLeft),
         };
 
         return new Topology(edges);
     }
 
-    /// <summary>
-    /// The same plate after a STEP revision: ids re-labelled (shifted ordinals) and geometry
-    /// perturbed slightly (within tolerance). E0 -> "EDGE_7", etc.
-    /// </summary>
+    /// <summary>The same plate after a STEP revision: ids re-labelled and geometry perturbed within tolerance.</summary>
     public static Topology RevisedPlateTopology()
     {
         var nUp = new Vector3<double>(0, 0, 1);
-        var nDown = new Vector3<double>(0, 0, -1);
         var nLeft = new Vector3<double>(-1, 0, 0);
         var nRight = new Vector3<double>(1, 0, 0);
         var nFront = new Vector3<double>(0, -1, 0);
         var nBack = new Vector3<double>(0, 1, 0);
 
-        const double e = 0.01; // tiny perturbation, well within tolerance after normalization
+        const double e = 0.01;
         var edges = new List<EdgeTopology>
         {
-            // ids shifted, order shuffled, geometry perturbed by ~0.01mm
             Line("EDGE_42", (100, 50 + e, 0), (0 + e, 50, 0), nUp, nBack),   // was E2
             Line("EDGE_7",  (0, 0, 0), (100 + e, 0, 0), nUp, nFront),         // was E0
             Line("EDGE_9",  (0, 50, 0), (0, 0 - e, 0), nUp, nLeft),           // was E3
@@ -126,9 +125,8 @@ internal static class SampleData
     }
 
     /// <summary>
-    /// An ambiguous topology: contains TWO edges geometrically equivalent to the binding for E0
-    /// (same length, midpoint, tangent AND same adjacent-face normals) so the resolver cannot
-    /// safely choose — it must return UNRESOLVED, never a wrong bind.
+    /// An ambiguous topology with two edges geometrically equivalent to the binding for E0, so the
+    /// resolver must return UNRESOLVED, never a wrong bind.
     /// </summary>
     public static Topology AmbiguousTopology()
     {
@@ -138,10 +136,8 @@ internal static class SampleData
 
         var edges = new List<EdgeTopology>
         {
-            // Two near-identical copies of E0 (bottom edge), with identical fingerprints.
             Line("A", (0, 0, 0), (100, 0, 0), nUp, nFront),
             Line("B", (0, 0, 0), (100, 0, 0), nUp, nFront),
-            // an unrelated edge of the same kind, far away
             Line("C", (0, 200, 0), (100, 200, 0), nUp, nBack),
         };
         return new Topology(edges);

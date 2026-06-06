@@ -17,6 +17,8 @@ try
     {
         case "canonicalize":
             return Canonicalize(args);
+        case "migrate":
+            return Migrate(args);
         case "resolve":
             return Resolve(args);
         case "sample":
@@ -70,6 +72,35 @@ static int Canonicalize(string[] args)
         stdout.Write(canonical, 0, canonical.Length);
     }
 
+    return 0;
+}
+
+static int Migrate(string[] args)
+{
+    if (WantsHelp(args) || args.Length < 2)
+    {
+        Console.Error.WriteLine(
+            "usage: weldprogram migrate <program-v1.json> [out.json]\n" +
+            "  Read a rw.weldprogram/1 program.json, migrate it to /2 (the Pass[] wrap,\n" +
+            "  data-model.md §4) and re-serialize it canonically. With no out file, writes to\n" +
+            "  stdout. The single /1 run becomes passes[0] (role 'cap'); weldJob.id -> jobRef.id;\n" +
+            "  position/weldSize/gas/polarity stay null (never invented). Identical to running\n" +
+            "  `canonicalize` on a /1 file — the deserializer auto-migrates /1 on read.");
+        return WantsHelp(args) ? 0 : 2;
+    }
+
+    var program = WeldProgramDeserializer.Deserialize(File.ReadAllBytes(args[1]));
+    var canonical = WeldProgramSerializer.SerializeToUtf8Bytes(program);
+
+    if (args.Length >= 3)
+    {
+        File.WriteAllBytes(args[2], canonical);
+    }
+    else
+    {
+        using var stdout = Console.OpenStandardOutput();
+        stdout.Write(canonical, 0, canonical.Length);
+    }
     return 0;
 }
 
@@ -154,6 +185,7 @@ static void PrintTopLevelHelp()
         "weldprogram — headless IT-1 weld-program model CLI\n\n" +
         "commands:\n" +
         "  canonicalize <program.json> [out.json]   re-serialize a program canonically (AT-A4/E3)\n" +
+        "  migrate <program-v1.json> [out.json]     migrate a rw.weldprogram/1 file to /2 (§4)\n" +
         "  resolve <program.json> <topology.json>   re-bind every segment's edge (AT-E1/E2)\n" +
         "  sample [out.json]                        emit a built-in sample program.json\n" +
         "  sample-topology [out.json]               emit a matching example topology.json\n\n" +
@@ -173,16 +205,39 @@ internal static class SampleProgram
         var b0 = resolver.Fingerprint(topo.Get("E0")!);
         var b2 = resolver.Fingerprint(topo.Get("E2")!);
 
-        var jobParams = (IReadOnlyDictionary<string, JsonElement>)new Dictionary<string, JsonElement>();
-
+        // s0: a multi-pass fillet (root + cap) — exercises the /2 Pass[] model.
         var s0 = new Segment("s0", b0, new SubRange(0.0, 1.0),
-            new WeldProcess("fillet", new WeldJob(17, jobParams), 6.5),
-            new TorchFrame(12.0, 45.0, 10.0, "drag"),
-            new SegmentResolver("metrology", "E7"));
+            SeamType.Fillet,
+            WeldPosition.PB,
+            new WeldSize(new FilletSize(LegMm: 8.0, ThroatMm: null), Butt: null),
+            new Gas("80/20 Ar/CO2", 14.0),
+            Polarity.DCEP,
+            new[]
+            {
+                new Pass("p0", PassRole.Root, new JobRef(17),
+                    new ToolFrame(12.0, 45.0, 10.0, Technique.Drag),
+                    new MotionProfile(6.5, null)),
+                new Pass("p1", PassRole.Cap, new JobRef(18),
+                    new ToolFrame(11.0, 45.0, 8.0, Technique.Drag),
+                    new MotionProfile(5.5, new Weave(2.0, 1.5, 120.0, "triangle"))),
+            },
+            new SegmentResolver(ResolverMode.Metrology, "E7", null),
+            null);
 
+        // s1: a single-pass butt (the v1 happy path: Pass[] of length 1).
         var s1 = new Segment("s1", b2, new SubRange(0.0, 0.75),
-            new WeldProcess("butt", new WeldJob(4, jobParams), 8.25),
-            new TorchFrame(10.0, 90.0, 0.0, "perpendicular"),
+            SeamType.Butt,
+            WeldPosition.PA,
+            new WeldSize(Fillet: null, new ButtSize(60.0, 2.0, 1.5, "single-V")),
+            new Gas("100 Ar", 12.0),
+            Polarity.DCEP,
+            new[]
+            {
+                new Pass("p0", PassRole.Cap, new JobRef(4),
+                    new ToolFrame(10.0, 90.0, 0.0, Technique.Perpendicular),
+                    new MotionProfile(8.25, null)),
+            },
+            null,
             null);
 
         return new WeldProgram(

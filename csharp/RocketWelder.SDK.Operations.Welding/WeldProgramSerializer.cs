@@ -7,12 +7,14 @@ using ModelingEvolution.Drawing;
 namespace RocketWelder.SDK.Operations;
 
 /// <summary>
-/// The single canonical (de)serializer for <c>program.json</c> (per <c>data-model.md</c> §2).
-/// Nothing else writes <c>program.json</c>. Guarantees byte-identical re-serialization of an
-/// unchanged in-memory program (AT-A4) by enforcing:
+/// The single canonical serializer for <c>program.json</c> (schema <c>rw.weldprogram/2</c>, per
+/// <c>data-model.md</c> §2). Nothing else writes <c>program.json</c> (ADR-012). Guarantees
+/// byte-identical re-serialization of an unchanged in-memory program (AT-A4) by enforcing the §2
+/// canonical-serialization rules:
 /// <list type="number">
 /// <item>fixed schema key order (never alphabetical-by-runtime);</item>
-/// <item>segments serialized positionally in weld order, datum.points in touch order (never re-sorted);</item>
+/// <item>segments serialized positionally in weld order, passes positionally in deposition order,
+///   datum.points in touch order (never re-sorted);</item>
 /// <item>floats to 6 significant digits, '.' decimal, invariant culture, no trailing-zero variance;</item>
 /// <item>UTF-8, LF line endings, 2-space indent, trailing newline, no BOM;</item>
 /// <item>re-serializing an unchanged program is byte-identical.</item>
@@ -21,7 +23,7 @@ namespace RocketWelder.SDK.Operations;
 public static class WeldProgramSerializer
 {
     /// <summary>Schema id + major version emitted as the first key (per §2).</summary>
-    public const string Schema = "rw.weldprogram/1";
+    public const string Schema = "rw.weldprogram/2";
 
     private static readonly JsonWriterOptions WriterOptions = new()
     {
@@ -84,7 +86,7 @@ public static class WeldProgramSerializer
 
         w.WritePropertyName("segments");
         w.WriteStartArray();
-        foreach (var segment in p.Segments) // positional — weld order, never re-sorted
+        foreach (var segment in p.Segments) // positional — weld order, never re-sorted (§2 rule 2)
             WriteSegment(w, segment);
         w.WriteEndArray();
 
@@ -127,36 +129,167 @@ public static class WeldProgramSerializer
             string.Concat("[", FormatFloat(s.SubRange.T0), ", ", FormatFloat(s.SubRange.T1), "]"),
             skipInputValidation: true);
 
-        w.WritePropertyName("process");
-        w.WriteStartObject();
-        w.WriteString("seamType", s.Process.SeamType);
-        w.WritePropertyName("weldJob");
-        w.WriteStartObject();
-        w.WriteNumber("id", s.Process.WeldJob.Id);
-        w.WritePropertyName("params");
-        WriteParams(w, s.Process.WeldJob.Params);
-        w.WriteEndObject();
-        WriteFloatProperty(w, "travelSpeedMmPerS", s.Process.TravelSpeedMmPerS);
-        w.WriteEndObject();
+        // ── segment-level welding facts (overlay) ──
+        w.WriteString("seamType", SeamTypeToString(s.SeamType));
+        if (s.Position is { } position)
+            w.WriteString("position", PositionToString(position));
+        else
+            w.WriteNull("position");
+        WriteWeldSize(w, s.WeldSize);
+        WriteGas(w, s.Gas);
+        if (s.Polarity is { } polarity)
+            w.WriteString("polarity", PolarityToString(polarity));
+        else
+            w.WriteNull("polarity");
 
-        w.WritePropertyName("torchFrame");
-        w.WriteStartObject();
-        WriteFloatProperty(w, "standoffMm", s.TorchFrame.StandoffMm);
-        WriteFloatProperty(w, "workAngleDeg", s.TorchFrame.WorkAngleDeg);
-        WriteFloatProperty(w, "travelAngleDeg", s.TorchFrame.TravelAngleDeg);
-        w.WriteString("technique", s.TorchFrame.Technique);
-        w.WriteEndObject();
+        // ── ordered pass list (positional; §2 rule 2) ──
+        w.WritePropertyName("passes");
+        w.WriteStartArray();
+        foreach (var pass in s.Passes) // deposition order, never re-sorted
+            WritePass(w, pass);
+        w.WriteEndArray();
 
-        w.WritePropertyName("resolver");
-        if (s.Resolver is null)
+        WriteResolver(w, s.Resolver);
+
+        w.WritePropertyName("externalAxis");
+        if (s.ExternalAxis is null)
         {
             w.WriteNullValue();
         }
         else
         {
             w.WriteStartObject();
-            w.WriteString("mode", s.Resolver.Mode);
-            WriteNullableString(w, "featureRef", s.Resolver.FeatureRef);
+            w.WriteNumber("jointId", s.ExternalAxis.JointId);
+            WriteFloatProperty(w, "angleDeg", s.ExternalAxis.AngleDeg);
+            w.WriteEndObject();
+        }
+
+        w.WriteEndObject();
+    }
+
+    private static void WriteWeldSize(Utf8JsonWriter w, WeldSize? size)
+    {
+        w.WritePropertyName("weldSize");
+        if (size is null)
+        {
+            w.WriteNullValue();
+            return;
+        }
+
+        w.WriteStartObject();
+
+        w.WritePropertyName("fillet");
+        if (size.Fillet is null)
+        {
+            w.WriteNullValue();
+        }
+        else
+        {
+            w.WriteStartObject();
+            // exactly one of leg/throat is set per §2; emit only the present one (absent stays absent)
+            if (size.Fillet.LegMm is { } leg)
+                WriteFloatProperty(w, "legMm", leg);
+            if (size.Fillet.ThroatMm is { } throat)
+                WriteFloatProperty(w, "throatMm", throat);
+            w.WriteEndObject();
+        }
+
+        w.WritePropertyName("butt");
+        if (size.Butt is null)
+        {
+            w.WriteNullValue();
+        }
+        else
+        {
+            w.WriteStartObject();
+            WriteFloatProperty(w, "grooveAngleDeg", size.Butt.GrooveAngleDeg);
+            WriteFloatProperty(w, "rootGapMm", size.Butt.RootGapMm);
+            WriteFloatProperty(w, "rootFaceMm", size.Butt.RootFaceMm);
+            w.WriteString("prep", size.Butt.Prep);
+            w.WriteEndObject();
+        }
+
+        w.WriteEndObject();
+    }
+
+    private static void WriteGas(Utf8JsonWriter w, Gas? gas)
+    {
+        w.WritePropertyName("gas");
+        if (gas is null)
+        {
+            w.WriteNullValue();
+            return;
+        }
+        w.WriteStartObject();
+        w.WriteString("mix", gas.Mix);
+        WriteFloatProperty(w, "flowLpm", gas.FlowLpm);
+        w.WriteEndObject();
+    }
+
+    private static void WritePass(Utf8JsonWriter w, Pass pass)
+    {
+        w.WriteStartObject();
+        w.WriteString("id", pass.Id);
+        w.WriteString("role", RoleToString(pass.Role));
+
+        w.WritePropertyName("jobRef");
+        w.WriteStartObject();
+        w.WriteNumber("id", pass.JobRef.Id);
+        w.WriteEndObject();
+
+        w.WritePropertyName("toolFrame");
+        w.WriteStartObject();
+        WriteFloatProperty(w, "standoffMm", pass.ToolFrame.StandoffMm);
+        WriteFloatProperty(w, "workAngleDeg", pass.ToolFrame.WorkAngleDeg);
+        WriteFloatProperty(w, "travelAngleDeg", pass.ToolFrame.TravelAngleDeg);
+        w.WriteString("technique", TechniqueToString(pass.ToolFrame.Technique));
+        w.WriteEndObject();
+
+        w.WritePropertyName("motion");
+        w.WriteStartObject();
+        WriteFloatProperty(w, "travelSpeedMmPerS", pass.Motion.TravelSpeedMmPerS);
+        w.WritePropertyName("weave");
+        if (pass.Motion.Weave is null)
+        {
+            w.WriteNullValue();
+        }
+        else
+        {
+            w.WriteStartObject();
+            WriteFloatProperty(w, "amplitudeMm", pass.Motion.Weave.AmplitudeMm);
+            WriteFloatProperty(w, "frequencyHz", pass.Motion.Weave.FrequencyHz);
+            WriteFloatProperty(w, "edgeDwellMs", pass.Motion.Weave.EdgeDwellMs);
+            w.WriteString("pattern", pass.Motion.Weave.Pattern);
+            w.WriteEndObject();
+        }
+        w.WriteEndObject();
+
+        w.WriteEndObject();
+    }
+
+    private static void WriteResolver(Utf8JsonWriter w, SegmentResolver? resolver)
+    {
+        w.WritePropertyName("resolver");
+        if (resolver is null)
+        {
+            w.WriteNullValue();
+            return;
+        }
+
+        w.WriteStartObject();
+        w.WriteString("mode", ResolverModeToString(resolver.Mode));
+        WriteNullableString(w, "featureRef", resolver.FeatureRef);
+
+        w.WritePropertyName("tracking");
+        if (resolver.Tracking is null)
+        {
+            w.WriteNullValue();
+        }
+        else
+        {
+            w.WriteStartObject();
+            w.WriteString("mode", TrackingModeToString(resolver.Tracking.Mode));
+            w.WriteBoolean("gapFill", resolver.Tracking.GapFill);
             w.WriteEndObject();
         }
 
@@ -200,17 +333,6 @@ public static class WeldProgramSerializer
         w.WriteEndObject();
     }
 
-    private static void WriteParams(Utf8JsonWriter w, IReadOnlyDictionary<string, JsonElement> p)
-    {
-        w.WriteStartObject();
-        foreach (var kv in p) // preserve authored order
-        {
-            w.WritePropertyName(kv.Key);
-            kv.Value.WriteTo(w);
-        }
-        w.WriteEndObject();
-    }
-
     // --- value writers ---------------------------------------------------
 
     private static void WriteVecProperty(Utf8JsonWriter w, string name, Vector3<double> v)
@@ -244,6 +366,8 @@ public static class WeldProgramSerializer
             w.WriteString(name, value);
     }
 
+    // --- enum <-> canonical string maps (§2 vocabularies) ---------------
+
     private static string KindToString(EdgeKind kind) => kind switch
     {
         EdgeKind.Line => "line",
@@ -251,6 +375,72 @@ public static class WeldProgramSerializer
         EdgeKind.Circle => "circle",
         EdgeKind.Spline => "spline",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown EdgeKind")
+    };
+
+    private static string SeamTypeToString(SeamType seam) => seam switch
+    {
+        SeamType.Fillet => "fillet",
+        SeamType.Butt => "butt",
+        SeamType.Edge => "edge",
+        SeamType.Lap => "lap",
+        SeamType.Corner => "corner",
+        SeamType.Circumferential => "circumferential",
+        _ => throw new ArgumentOutOfRangeException(nameof(seam), seam, "Unknown SeamType")
+    };
+
+    private static string PositionToString(WeldPosition position) => position switch
+    {
+        WeldPosition.PA => "PA",
+        WeldPosition.PB => "PB",
+        WeldPosition.PC => "PC",
+        WeldPosition.PD => "PD",
+        WeldPosition.PE => "PE",
+        WeldPosition.PF => "PF",
+        WeldPosition.PG => "PG",
+        _ => throw new ArgumentOutOfRangeException(nameof(position), position, "Unknown WeldPosition")
+    };
+
+    private static string RoleToString(PassRole role) => role switch
+    {
+        PassRole.Root => "root",
+        PassRole.Hot => "hot",
+        PassRole.Fill => "fill",
+        PassRole.Cap => "cap",
+        _ => throw new ArgumentOutOfRangeException(nameof(role), role, "Unknown PassRole")
+    };
+
+    private static string TechniqueToString(Technique technique) => technique switch
+    {
+        Technique.Push => "push",
+        Technique.Drag => "drag",
+        Technique.Perpendicular => "perpendicular",
+        _ => throw new ArgumentOutOfRangeException(nameof(technique), technique, "Unknown Technique")
+    };
+
+    private static string PolarityToString(Polarity polarity) => polarity switch
+    {
+        Polarity.DCEP => "DCEP",
+        Polarity.DCEN => "DCEN",
+        Polarity.AC => "AC",
+        _ => throw new ArgumentOutOfRangeException(nameof(polarity), polarity, "Unknown Polarity")
+    };
+
+    private static string ResolverModeToString(ResolverMode mode) => mode switch
+    {
+        ResolverMode.Metrology => "metrology",
+        ResolverMode.AdjacentFeature => "adjacent-feature",
+        ResolverMode.LaserProfile => "laser-profile",
+        ResolverMode.TouchOnly => "touch-only",
+        ResolverMode.SeamTracking => "seam-tracking",
+        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown ResolverMode")
+    };
+
+    private static string TrackingModeToString(TrackingMode mode) => mode switch
+    {
+        TrackingMode.Tast => "tast",
+        TrackingMode.Laser => "laser",
+        TrackingMode.Touch => "touch",
+        _ => throw new ArgumentOutOfRangeException(nameof(mode), mode, "Unknown TrackingMode")
     };
 
     /// <summary>
