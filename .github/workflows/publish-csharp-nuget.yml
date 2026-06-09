@@ -50,98 +50,14 @@ jobs:
       working-directory: ./csharp
       run: dotnet build --configuration Release --no-restore /p:Version=${{ steps.version.outputs.version }}
     
-    - name: Pack SDK.Automation
+    - name: Pack all packable packages
       working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK.Automation/RocketWelder.SDK.Automation.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
+      run: dotnet pack RocketWelder.SDK.sln --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
 
-    - name: Push SDK.Automation to NuGet
+    - name: Push all packages to NuGet
       working-directory: ./csharp
       run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.Automation.*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-
-    - name: Pack SDK.Types
-      working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK.Types/RocketWelder.SDK.Types.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
-
-    - name: Push SDK.Types to NuGet
-      working-directory: ./csharp
-      run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.Types.*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-
-    - name: Pack SDK.Protocols
-      working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK.Protocols/RocketWelder.SDK.Protocols.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
-
-    - name: Push SDK.Protocols to NuGet
-      working-directory: ./csharp
-      run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.Protocols.*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-
-    - name: Pack SDK
-      working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK/RocketWelder.SDK.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
-
-    - name: Push SDK to NuGet
-      working-directory: ./csharp
-      run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-
-    - name: Pack SDK.Blazor
-      working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK.Blazor/RocketWelder.SDK.Blazor.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
-
-    - name: Push SDK.Blazor to NuGet
-      working-directory: ./csharp
-      run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.Blazor.*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-
-    - name: Pack SDK.Robotics.Core
-      working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK.Robotics.Core/RocketWelder.SDK.Robotics.Core.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
-
-    - name: Push SDK.Robotics.Core to NuGet
-      working-directory: ./csharp
-      run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.Robotics.Core.*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-
-    - name: Pack SDK.Http
-      working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK.Http/RocketWelder.SDK.Http.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
-
-    - name: Push SDK.Http to NuGet
-      working-directory: ./csharp
-      run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.Http.*.nupkg \
+        dotnet nuget push "./nupkg/*.nupkg" \
           --api-key ${{ secrets.NUGET_API_KEY }} \
           --source https://api.nuget.org/v3/index.json \
           --skip-duplicate
@@ -158,49 +74,21 @@ jobs:
       continue-on-error: true
 
     - name: Summary
+      working-directory: ./csharp
       run: |
         echo "## C# Packages Published to NuGet" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### RocketWelder.SDK.Automation" >> $GITHUB_STEP_SUMMARY
-        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Automation" >> $GITHUB_STEP_SUMMARY
-        echo '```bash' >> $GITHUB_STEP_SUMMARY
-        echo 'dotnet add package RocketWelder.SDK.Automation --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### RocketWelder.SDK.Types" >> $GITHUB_STEP_SUMMARY
-        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Types" >> $GITHUB_STEP_SUMMARY
-        echo '```bash' >> $GITHUB_STEP_SUMMARY
-        echo 'dotnet add package RocketWelder.SDK.Types --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### RocketWelder.SDK.Protocols" >> $GITHUB_STEP_SUMMARY
-        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Protocols" >> $GITHUB_STEP_SUMMARY
-        echo '```bash' >> $GITHUB_STEP_SUMMARY
-        echo 'dotnet add package RocketWelder.SDK.Protocols --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### RocketWelder.SDK" >> $GITHUB_STEP_SUMMARY
-        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK" >> $GITHUB_STEP_SUMMARY
-        echo '```bash' >> $GITHUB_STEP_SUMMARY
-        echo 'dotnet add package RocketWelder.SDK --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### RocketWelder.SDK.Blazor" >> $GITHUB_STEP_SUMMARY
-        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Blazor" >> $GITHUB_STEP_SUMMARY
-        echo '```bash' >> $GITHUB_STEP_SUMMARY
-        echo 'dotnet add package RocketWelder.SDK.Blazor --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### RocketWelder.SDK.Robotics.Core" >> $GITHUB_STEP_SUMMARY
-        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Robotics.Core" >> $GITHUB_STEP_SUMMARY
-        echo '```bash' >> $GITHUB_STEP_SUMMARY
-        echo 'dotnet add package RocketWelder.SDK.Robotics.Core --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### RocketWelder.SDK.Http" >> $GITHUB_STEP_SUMMARY
-        echo "- **NuGet**: https://www.nuget.org/packages/RocketWelder.SDK.Http" >> $GITHUB_STEP_SUMMARY
-        echo '```bash' >> $GITHUB_STEP_SUMMARY
-        echo 'dotnet add package RocketWelder.SDK.Http --version ${{ steps.version.outputs.version }}' >> $GITHUB_STEP_SUMMARY
-        echo '```' >> $GITHUB_STEP_SUMMARY
+        VERSION="${{ steps.version.outputs.version }}"
+        for PKG_FILE in ./nupkg/*.nupkg; do
+          PKG_NAME=$(basename "$PKG_FILE")
+          # Strip version + .nupkg suffix to recover the package id
+          PKG_ID="${PKG_NAME%.${VERSION}.nupkg}"
+          echo "### ${PKG_ID}" >> $GITHUB_STEP_SUMMARY
+          echo "- **NuGet**: https://www.nuget.org/packages/${PKG_ID}" >> $GITHUB_STEP_SUMMARY
+          echo '```bash' >> $GITHUB_STEP_SUMMARY
+          echo "dotnet add package ${PKG_ID} --version ${VERSION}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        done

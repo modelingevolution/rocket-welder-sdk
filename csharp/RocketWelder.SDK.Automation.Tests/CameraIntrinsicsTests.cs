@@ -1,6 +1,6 @@
 using System.Text.Json;
 using ModelingEvolution.Drawing;
-using RocketWelder.SDK.Automation.Vision;
+using RocketWelder.SDK.Vision;
 
 namespace RocketWelder.SDK.Automation.Tests;
 

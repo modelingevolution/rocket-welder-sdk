@@ -91,84 +91,14 @@ jobs:
       working-directory: ./csharp
       run: dotnet build --configuration Release --no-restore /p:Version=${{ needs.preview-version.outputs.version }}
 
-    - name: Pack SDK.Automation
+    - name: Pack all packable packages
       working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK.Automation/RocketWelder.SDK.Automation.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ needs.preview-version.outputs.version }}
+      run: dotnet pack RocketWelder.SDK.sln --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ needs.preview-version.outputs.version }}
 
-    - name: Push SDK.Automation to NuGet
+    - name: Push all packages to NuGet
       working-directory: ./csharp
       run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.Automation.*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-
-    - name: Pack SDK.Types
-      working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK.Types/RocketWelder.SDK.Types.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ needs.preview-version.outputs.version }}
-
-    - name: Push SDK.Types to NuGet
-      working-directory: ./csharp
-      run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.Types.*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-
-    - name: Pack SDK.Protocols
-      working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK.Protocols/RocketWelder.SDK.Protocols.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ needs.preview-version.outputs.version }}
-
-    - name: Push SDK.Protocols to NuGet
-      working-directory: ./csharp
-      run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.Protocols.*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-
-    - name: Pack SDK
-      working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK/RocketWelder.SDK.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ needs.preview-version.outputs.version }}
-
-    - name: Push SDK to NuGet
-      working-directory: ./csharp
-      run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-
-    - name: Pack SDK.Blazor
-      working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK.Blazor/RocketWelder.SDK.Blazor.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ needs.preview-version.outputs.version }}
-
-    - name: Push SDK.Blazor to NuGet
-      working-directory: ./csharp
-      run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.Blazor.*.nupkg \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
-
-    - name: Pack SDK.Robotics.Core
-      working-directory: ./csharp
-      run: dotnet pack RocketWelder.SDK.Robotics.Core/RocketWelder.SDK.Robotics.Core.csproj --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ needs.preview-version.outputs.version }}
-
-    - name: Push SDK.Robotics.Core to NuGet
-      working-directory: ./csharp
-      run: |
-        dotnet nuget push ./nupkg/RocketWelder.SDK.Robotics.Core.*.nupkg \
+        dotnet nuget push "./nupkg/*.nupkg" \
           --api-key ${{ secrets.NUGET_API_KEY }} \
           --source https://api.nuget.org/v3/index.json \
           --skip-duplicate
@@ -185,15 +115,20 @@ jobs:
       continue-on-error: true
 
     - name: Summary
+      working-directory: ./csharp
       run: |
         echo "## C# Packages Preview Published to NuGet" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "- **Version**: ${{ needs.preview-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        for PKG in SDK.Automation SDK.Types SDK.Protocols SDK SDK.Blazor SDK.Robotics.Core; do
-          echo "### RocketWelder.$PKG" >> $GITHUB_STEP_SUMMARY
+        VERSION="${{ needs.preview-version.outputs.version }}"
+        for PKG_FILE in ./nupkg/*.nupkg; do
+          PKG_NAME=$(basename "$PKG_FILE")
+          # Strip version + .nupkg suffix to recover the package id
+          PKG_ID="${PKG_NAME%.${VERSION}.nupkg}"
+          echo "### ${PKG_ID}" >> $GITHUB_STEP_SUMMARY
           echo '```bash' >> $GITHUB_STEP_SUMMARY
-          echo "dotnet add package RocketWelder.$PKG --version ${{ needs.preview-version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "dotnet add package ${PKG_ID} --version ${VERSION}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
         done

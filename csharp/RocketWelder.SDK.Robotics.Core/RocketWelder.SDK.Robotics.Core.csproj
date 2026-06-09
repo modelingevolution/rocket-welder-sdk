@@ -26,7 +26,8 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RocketWelder.SDK.Automation\RocketWelder.SDK.Automation.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Abstractions\RocketWelder.SDK.Abstractions.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Devices.Robot\RocketWelder.SDK.Devices.Robot.csproj" />
   </ItemGroup>
 
 </Project>

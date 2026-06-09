@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageId>RocketWelder.SDK.Runtime</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>ModelingEvolution</Authors>
+    <Company>ModelingEvolution</Company>
+    <Description>Program-host abstractions for the RocketWelder SDK (IProgram, IProgramContext, ProgramAttribute, Workspace, IDataProvider, perception providers, IActionsStore).</Description>
+    <PackageTags>rocketwelder;runtime;program;sdk</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
+    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.8.75" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RocketWelder.SDK.Abstractions\RocketWelder.SDK.Abstractions.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Hmi\RocketWelder.SDK.Hmi.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Vision\RocketWelder.SDK.Vision.csproj" />
+  </ItemGroup>
+
+</Project>
