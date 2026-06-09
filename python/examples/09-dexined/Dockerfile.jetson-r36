@@ -1,0 +1,50 @@
+# DexiNed contour detection — NVIDIA Jetson Orin, JetPack 6.2 (L4T r36.4 / CUDA 12.6)
+#
+# The SDK's stock examples/09-dexined/Dockerfile.jetson targets L4T r35 (JetPack 5.x)
+# which does NOT run on this device (r36.4.3). This variant uses an r36 PyTorch base
+# that ships torch+torchvision+OpenCV built against CUDA 12.6.
+#
+# Build context = this directory (a trimmed copy of rocket-welder-sdk/python):
+#   docker build -f Dockerfile.jetson-r36 -t rw-dexined:jetson .
+FROM dustynv/l4t-pytorch:r36.4.0
+
+WORKDIR /app
+
+# The base image points pip at a Jetson-only index (jetson.webredirect.org) that is
+# not resolvable here. Override for the whole build so every pip step (incl. PEP517
+# isolated builds) uses the real PyPI.
+ENV PIP_INDEX_URL=https://pypi.org/simple \
+    PIP_EXTRA_INDEX_URL=https://pypi.ngc.nvidia.com \
+    PIP_TRUSTED_HOST=pypi.ngc.nvidia.com
+
+# Runtime libs for OpenCV (base already has most; keep parity with stock Dockerfile)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgomp1 \
+    libglib2.0-0 \
+    libgl1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# SDK runtime deps. torch / torchvision / opencv-python / numpy already ship in the
+# L4T base image, so we install ONLY the packages the base is missing and never touch
+# the CUDA-built torch/opencv/numpy. The base image's pip is pointed at a Jetson index
+# (jetson.webredirect.org) that is unreachable here, so force the real PyPI explicitly.
+RUN pip install --no-cache-dir \
+      "posix-ipc>=1.0.0" \
+      "zerobuffer-ipc>=1.2.4" \
+      "pydantic>=2.5.0" \
+      "py-micro-plumberd>=0.1.9" \
+      "typing-extensions>=4.0.0"
+
+# Install the RocketWelder SDK itself (deps already satisfied above; --no-deps avoids
+# re-pulling opencv-python/numpy and shadowing the CUDA build).
+COPY rocket_welder_sdk/ /app/rocket_welder_sdk/
+COPY setup.py pyproject.toml MANIFEST.in README.md VERSION ./
+RUN pip install --no-cache-dir --no-deps --no-build-isolation .
+
+# App + DexiNed network definition + baked BIPED checkpoint (~141 MB)
+COPY examples/09-dexined/main.py .
+COPY examples/09-dexined/model.py .
+COPY examples/09-dexined/checkpoints/ /app/checkpoints/
+
+ENV ROCKET_WELDER_LOG_LEVEL=INFO
+ENTRYPOINT ["python3", "main.py"]

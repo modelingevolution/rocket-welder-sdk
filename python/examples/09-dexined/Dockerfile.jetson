@@ -1,0 +1,38 @@
+# Dockerfile for NVIDIA Jetson (L4T) - DexiNed contour detection
+# Uses L4T PyTorch base image with CUDA pre-installed.
+# Build context = python/ ; build from SDK root:
+#   docker build -f examples/09-dexined/Dockerfile.jetson -t rw-dexined:jetson .
+#
+# For Jetson devices (Orin, Xavier, Nano) running JetPack 5.x or 6.x.
+FROM nvcr.io/nvidia/l4t-pytorch:r35.2.1-pth2.0-py3
+
+WORKDIR /app
+
+# Runtime dependencies for OpenCV
+RUN apt-get update && apt-get install -y \
+    libgomp1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgl1 \
+    libx11-6 \
+    libxcb1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python deps (torch already in the L4T base image)
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# SDK
+COPY rocket_welder_sdk/ /app/rocket_welder_sdk/
+COPY setup.py pyproject.toml MANIFEST.in README.md ./
+RUN pip install --no-cache-dir .
+
+# App + DexiNed network definition + baked BIPED checkpoint (~141 MB)
+COPY examples/09-dexined/main.py .
+COPY examples/09-dexined/model.py .
+COPY examples/09-dexined/checkpoints/ /app/checkpoints/
+
+ENV ROCKET_WELDER_LOG_LEVEL=INFO
+ENTRYPOINT ["python", "main.py"]

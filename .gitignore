@@ -128,3 +128,8 @@ local_settings.*
 
 # Tooling caches
 .nuget-help.db
+
+# Model weights are baked into the Docker image at build time, not stored in git
+# (the BIPED checkpoint is ~141 MB, over GitHub's 100 MB limit).
+/python/examples/09-dexined/checkpoints/
+*.pth
