@@ -107,6 +107,27 @@ public interface IWeldingMachine : IDevice
     /// </summary>
     bool Gas { get; set; }
 
+    /// <summary>
+    /// Selected job (program) number as a writable signal. Writable — set the job to activate while the
+    /// welder is in <see cref="WeldingMode.Job"/> (Fronius "Jobbetrieb"). This only SELECTS which stored
+    /// job is active; the welding machine remains the source of truth for the job's parameters (it does
+    /// not read or write the job's parameter set). A typical program sets <c>Mode = WeldingMode.Job</c>
+    /// then <c>JobNumber = n</c> <b>before</b> <see cref="ArcOn"/>. Confirmed over CANopen on the Fronius
+    /// TPS 4000 (RxPDO1 byte2 / <c>0x6200:03</c>, job 1–99) and over Modbus on the TPS 5000 (<c>0xF009</c>).
+    /// Vendors without a job surface MUST still implement this and either no-op or throw
+    /// <see cref="System.NotSupportedException"/> from the underlying <c>ISignalSink.Set</c>;
+    /// <c>HasValue == false</c> until a job has been selected.
+    /// </summary>
+    WritableSignal<int> JobNumberSignal { get; }
+
+    /// <summary>
+    /// Selected job (program) number value. Plain ergonomic surface that forwards to
+    /// <see cref="JobNumberSignal"/> (<c>get</c> returns the latched value, <c>set</c> calls
+    /// <c>JobNumberSignal.Set</c>). Only takes effect while <see cref="Mode"/> is
+    /// <see cref="WeldingMode.Job"/>.
+    /// </summary>
+    int JobNumber { get; set; }
+
     /// <summary>Strike the arc. Returns when the hardware has acknowledged the command.</summary>
     ValueTask ArcOn();
 
