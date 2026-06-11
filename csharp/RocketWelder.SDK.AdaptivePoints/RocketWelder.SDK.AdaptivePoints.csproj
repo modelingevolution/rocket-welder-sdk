@@ -7,7 +7,6 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>true</IsPackable>
     <PackageId>RocketWelder.SDK.AdaptivePoints</PackageId>
-    <Version>1.1.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
     <Description>Adaptive-points and adaptive-path host extensions for RocketWelder programs (IAdaptivePoint, IAdaptivePointService, AdaptResult, IAdaptivePath, IAdaptivePathService, TraverseReport, OffsetState, context extensions).</Description>
