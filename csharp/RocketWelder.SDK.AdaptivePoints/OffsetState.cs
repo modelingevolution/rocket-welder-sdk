@@ -6,7 +6,7 @@ namespace RocketWelder.SDK.AdaptivePoints;
 /// State of one endpoint's offset at traversal time: either a correction read from a prior
 /// adaptation, or zero when that endpoint had no current resolution. The two cases are distinct
 /// even when the numeric offset is zero — the operator reads them as full / partial / no
-/// correction (FR-2.5). Failure is never expressed here; see <see cref="TraverseReport"/>.
+/// correction. Failure is never expressed here; see <see cref="TraverseReport"/>.
 /// </summary>
 public abstract record OffsetState
 {
