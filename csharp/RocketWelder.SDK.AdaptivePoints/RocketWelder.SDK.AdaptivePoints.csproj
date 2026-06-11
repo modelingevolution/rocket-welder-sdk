@@ -7,10 +7,9 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>true</IsPackable>
     <PackageId>RocketWelder.SDK.AdaptivePoints</PackageId>
-    <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
-    <Description>Adaptive-points host extensions for RocketWelder programs (IAdaptivePoint, IAdaptivePointService, AdaptResult, AdaptivePointContextExtensions).</Description>
+    <Description>Adaptive-points and adaptive-path host extensions for RocketWelder programs (IAdaptivePoint, IAdaptivePointService, AdaptResult, IAdaptivePath, IAdaptivePathService, TraverseReport, OffsetState, context extensions).</Description>
     <PackageTags>rocketwelder;adaptivepoints;sdk</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
@@ -22,6 +21,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RocketWelder.SDK.Runtime\RocketWelder.SDK.Runtime.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Devices.Robot\RocketWelder.SDK.Devices.Robot.csproj" />
   </ItemGroup>
 
 </Project>
