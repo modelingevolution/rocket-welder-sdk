@@ -39,6 +39,7 @@ public static class AdaptContextExtensions
     public static async ValueTask<Pose3<double>> AdaptAsync(
         this IProgramContext ctx, string name, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(ctx);
         var point = ctx.GetAdaptivePoint(name);
         var result = await point.AdaptAsync(ct).ConfigureAwait(false);
         if (result is AdaptResult.Ok ok)
@@ -65,6 +66,7 @@ public static class AdaptContextExtensions
     public static async ValueTask<Vector3<double>> AdaptOffsetAsync(
         this IProgramContext ctx, string datumName, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(ctx);
         var point = ctx.GetAdaptivePoint(datumName);
         var result = await point.AdaptAsync(ct).ConfigureAwait(false);
         if (result is AdaptResult.Ok ok)

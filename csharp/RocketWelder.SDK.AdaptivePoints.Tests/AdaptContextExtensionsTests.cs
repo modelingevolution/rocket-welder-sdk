@@ -218,6 +218,32 @@ public class AdaptContextExtensionsTests
     }
 
     [Fact]
+    public async Task AdaptAsync_Should_Throw_On_Null_Context()
+    {
+        // Arrange
+        IProgramContext ctx = null!;
+
+        // Act
+        var act = async () => await ctx.AdaptAsync(PointName, default);
+
+        // Assert
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
+    public async Task AdaptOffsetAsync_Should_Throw_On_Null_Context()
+    {
+        // Arrange
+        IProgramContext ctx = null!;
+
+        // Act
+        var act = async () => await ctx.AdaptOffsetAsync(PointName, default);
+
+        // Assert
+        await act.Should().ThrowAsync<ArgumentNullException>();
+    }
+
+    [Fact]
     public void UseAdaptFailurePolicy_Should_Throw_On_Null_Context()
     {
         // Arrange
