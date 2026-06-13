@@ -39,6 +39,26 @@ public static class RobotMotionExtensions
     {
         ArgumentNullException.ThrowIfNull(robot);
 
+        var fillet = ComputeFillet(prev, vertex, next, radiusMm);
+        if (fillet is not { } f)
+        {
+            robot.MoveLin(vertex, travel);
+            return;
+        }
+
+        robot.MoveLin(f.Entry, travel);
+        robot.MoveCircular(f.Via, f.Exit, turn);
+    }
+
+    /// <summary>
+    /// Pure single-corner fillet over <see cref="ModelingEvolution.Drawing"/> primitives, matching Feature
+    /// 001's <c>RoundedSeamPlanner</c> geometry. Returns the entry tangent, arc via, and exit tangent, or
+    /// null when the corner does not round (radius ≤ 0, sharp, or near-collinear) and must pass straight
+    /// through the vertex.
+    /// </summary>
+    private static (Pose3<double> Entry, Pose3<double> Via, Pose3<double> Exit)? ComputeFillet(
+        Pose3<double> prev, Pose3<double> vertex, Pose3<double> next, double radiusMm)
+    {
         var uVec = prev.Position - vertex.Position;
         var wVec = next.Position - vertex.Position;
         var edgeIn = uVec.Length;
@@ -50,12 +70,9 @@ public static class RobotMotionExtensions
         var wHat = wVec / edgeOut;
         var dot = Math.Clamp(Vector3<double>.Dot(uHat, wHat), -1.0, 1.0);
 
-        // Sharp, zero-radius, or near-collinear corners don't round: pass straight through the vertex.
+        // Sharp, zero-radius, or near-collinear corners don't round.
         if (!(radiusMm > 0 && dot > StraightThroughCos + GateTolerance))
-        {
-            robot.MoveLin(vertex, travel);
-            return;
-        }
+            return null;
 
         var halfAngle = Math.Acos(dot) / 2.0;
         var setback = radiusMm / Math.Tan(halfAngle);
@@ -78,7 +95,8 @@ public static class RobotMotionExtensions
         var exitRotation = Rotation3<double>.Slerp(vertex.Rotation, next.Rotation, setback / edgeOut);
         var viaRotation = Rotation3<double>.Slerp(entryRotation, exitRotation, 0.5);
 
-        robot.MoveLin(new Pose3<double>(entryTangent, entryRotation), travel);
-        robot.MoveCircular(new Pose3<double>(via, viaRotation), new Pose3<double>(exitTangent, exitRotation), turn);
+        return (new Pose3<double>(entryTangent, entryRotation),
+                new Pose3<double>(via, viaRotation),
+                new Pose3<double>(exitTangent, exitRotation));
     }
 }

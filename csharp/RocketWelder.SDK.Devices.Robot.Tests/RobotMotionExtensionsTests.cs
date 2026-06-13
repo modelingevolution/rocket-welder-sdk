@@ -71,6 +71,62 @@ public class RobotMotionExtensionsTests
         Point3<double>.Distance(centre, via!.Value.Position).Should().BeApproximately(radius, 1e-6);
     }
 
+    // === Parity with Feature 001 RoundedSeamPlanner golden fixtures (S-14/S-15/S-16) ===
+    // The SDK cannot reference the app's RoundedSeamPlanner, so these pin MoveCorner's self-contained fillet
+    // to F1's exact input→expected oracles (rocket-welder2 RoundedSeamPlannerTests S-14/15/16). MoveCorner
+    // emits the corner's per-corner moves: MoveLin(entry=T1) then MoveCircular(via=M, exit=T2).
+
+    [Fact]
+    public void MoveCorner_Should_Match_F1_Golden_S14_RightAngle_XYPlane()
+    {
+        // S-14: prev=(100,0,0) vertex=(0,0,0) next=(0,100,0) r=10 → T1=(10,0,0) M=(2.928932,2.928932,0) T2=(0,10,0)
+        var (entry, via, exit) = CaptureCorner(At(100, 0, 0), At(0, 0, 0), At(0, 100, 0), 10);
+
+        Near(entry, 10, 0, 0).Should().BeTrue();
+        Near(via, 2.928932, 2.928932, 0).Should().BeTrue();
+        Near(exit, 0, 10, 0).Should().BeTrue();
+    }
+
+    [Fact]
+    public void MoveCorner_Should_Match_F1_Golden_S15_SixtyDegrees_InPlane()
+    {
+        // S-15: prev=(86.602540,50,0) vertex=(0,0,0) next=(86.602540,-50,0) r=10
+        //       → T1=(15,8.660254,0) M=(10,0,0) T2=(15,-8.660254,0)
+        var (entry, via, exit) = CaptureCorner(At(86.602540, 50, 0), At(0, 0, 0), At(86.602540, -50, 0), 10);
+
+        Near(entry, 15, 8.660254, 0).Should().BeTrue();
+        Near(via, 10, 0, 0).Should().BeTrue();
+        Near(exit, 15, -8.660254, 0).Should().BeTrue();
+    }
+
+    [Fact]
+    public void MoveCorner_Should_Match_F1_Golden_S16_RightAngle_TiltedPlane()
+    {
+        // S-16: prev=(60,80,0) vertex=(0,0,0) next=(-48,36,80) r=10
+        //       → T1=(6,8,0) M=(0.351472,3.397562,2.343146) T2=(-4.8,3.6,8)
+        var (entry, via, exit) = CaptureCorner(At(60, 80, 0), At(0, 0, 0), At(-48, 36, 80), 10);
+
+        Near(entry, 6, 8, 0).Should().BeTrue();
+        Near(via, 0.351472, 3.397562, 2.343146).Should().BeTrue();
+        Near(exit, -4.8, 3.6, 8).Should().BeTrue();
+    }
+
+    private static (Point3<double> Entry, Point3<double> Via, Point3<double> Exit) CaptureCorner(
+        Pose3<double> prev, Pose3<double> vertex, Pose3<double> next, double radiusMm)
+    {
+        var robot = Substitute.For<IRobot>();
+        Pose3<double>? entry = null, via = null, exit = null;
+        robot.MoveLin(Arg.Do<Pose3<double>>(p => entry = p), Arg.Any<Velocity>());
+        robot.MoveCircular(Arg.Do<Pose3<double>>(p => via = p), Arg.Do<Pose3<double>>(p => exit = p), Arg.Any<Velocity>());
+
+        robot.MoveCorner(prev, vertex, next, radiusMm, Turn, Travel);
+
+        entry.Should().NotBeNull();
+        via.Should().NotBeNull();
+        exit.Should().NotBeNull();
+        return (entry!.Value.Position, via!.Value.Position, exit!.Value.Position);
+    }
+
     [Fact]
     public void MoveCorner_Should_Pass_Straight_Through_When_NearCollinear()
     {
