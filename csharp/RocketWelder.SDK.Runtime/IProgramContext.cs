@@ -63,6 +63,21 @@ public interface IProgramContext
     RunId RunId => default;
 
     /// <summary>
+    /// Absolute path to the running program's self-contained repository directory, or <c>null</c> when the
+    /// program is not repository-backed. A repository-backed program persists its points, adaptive offsets,
+    /// captured frames, and capture-poses under this directory, so the runtime can resolve adaptation data
+    /// from the repository instead of the robot-global event-store catalogue. Copying the directory yields a
+    /// complete, runnable program.
+    /// </summary>
+    /// <remarks>
+    /// Default interface implementation returns <c>null</c> so that implementations authored before this
+    /// member was introduced remain source-compatible. Hosts that run repository-backed programs override
+    /// this to expose the program's repository directory; legacy catalogue-backed programs leave it
+    /// <c>null</c>.
+    /// </remarks>
+    string? ProgramDirectory => null;
+
+    /// <summary>
     /// Gets a registered device by type and optional name.
     /// Returns null if device not found.
     /// </summary>
