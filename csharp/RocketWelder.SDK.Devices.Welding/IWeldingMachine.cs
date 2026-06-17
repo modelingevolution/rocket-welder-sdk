@@ -27,6 +27,16 @@ namespace RocketWelder.SDK.Devices.Welding;
 public interface IWeldingMachine : IDevice
 {
     /// <summary>
+    /// True when the adapter currently holds a live link to the welder hardware — for TCP/Modbus
+    /// vendors the socket is open, for CANopen the bus is up and the welder node is exchanging PDOs.
+    /// Polled by the host's peripheral-device status service to drive the Connected/Disconnected
+    /// indicator on the Automations dashboard. Implementations MUST make this a cheap, non-blocking
+    /// read of a cached flag (never an on-demand probe) that is safe to read from a thread other than
+    /// the adapter's own poll/lifecycle thread.
+    /// </summary>
+    bool IsConnected { get; }
+
+    /// <summary>
     /// Live (measured) welding current as a signal. Consumers gate on
     /// <see cref="ISignal{T}.HasValue"/> before reading <see cref="ISignal{T}.Value"/>
     /// (<c>HasValue == false</c> when the device is unmapped or no read has succeeded yet),
