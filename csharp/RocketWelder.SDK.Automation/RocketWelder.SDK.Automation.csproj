@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageId>RocketWelder.SDK.Automation</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>ModelingEvolution</Authors>
+    <Company>ModelingEvolution</Company>
+    <Description>Device-lifecycle engine for the RocketWelder SDK: generic PeripheralDeviceConfigAggregate, PeripheralDevice* events/commands, command handler, read model, IDeviceSignalPublisher port, and plugin loader. Host-only dependency — plugins reference only RocketWelder.SDK.Automation.Abstractions.</Description>
+    <PackageTags>rocketwelder;automation;eventsourcing;sdk;microplumberd</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RocketWelder.SDK.Automation.Abstractions\RocketWelder.SDK.Automation.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MicroPlumberd" Version="1.2.0.0" />
+    <PackageReference Include="MicroPlumberd.Services" Version="1.2.0.0" />
+    <PackageReference Include="MicroPlumberd.SourceGenerators" Version="1.2.0.0" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.7" />
+  </ItemGroup>
+
+</Project>
