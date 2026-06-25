@@ -14,7 +14,13 @@ public class ConfigSet : IEnumerable<(string Name, IConfigPropertyInstance Value
 {
     private readonly ConcurrentDictionary<string, IConfigPropertyInstance> _items = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>An empty config set (singleton, do not mutate).</summary>
+    /// <summary>
+    /// An empty config set (shared singleton). <b>Do NOT call <see cref="Add"/> on this instance</b>
+    /// — <c>ConfigSet</c> is mutable (backed by <c>ConcurrentDictionary</c>) and mutations would
+    /// corrupt the singleton for all callers. Use <c>new ConfigSet()</c> for a fresh empty set,
+    /// or <c>new ConfigSet(items...)</c> for a pre-populated one. <c>Empty</c> is provided only as
+    /// a low-allocation default for aggregate state initialization (see <c>Given(DeviceState, PeripheralDeviceCreated)</c>).
+    /// </summary>
     public static readonly ConfigSet Empty = new();
 
     /// <summary>Initializes an empty <see cref="ConfigSet"/>.</summary>

@@ -73,7 +73,12 @@ public partial class PeripheralDeviceConfigAggregate(DeviceId id)
     /// <paramref name="interfaceType"/> is supplied by the command handler from
     /// <c>typeInfo.InterfaceType</c> — it is NOT on <see cref="DeviceId"/>.
     /// </summary>
-    public void Create(string name, int number, ConfigSet properties, string interfaceType, IReadOnlySet<string> validKeys)
+    /// <param name="validKeys">
+    /// <c>null</c> = no schema / accept all keys (dynamic-tag devices);
+    /// empty set = zero-key closed schema / reject all non-tag keys (e.g. Simulator);
+    /// non-empty set = validate against the listed keys.
+    /// </param>
+    public void Create(string name, int number, ConfigSet properties, string interfaceType, IReadOnlySet<string>? validKeys)
     {
         if (State.IsCreated)
             throw new InvalidOperationException("Device already created");
@@ -98,7 +103,12 @@ public partial class PeripheralDeviceConfigAggregate(DeviceId id)
     /// Applies a config patch. Validates the keys in <paramref name="set"/> and
     /// <paramref name="unset"/> against <paramref name="validKeys"/> on the write path.
     /// </summary>
-    public void Configure(ConfigSet set, string[] unset, IReadOnlySet<string> validKeys)
+    /// <param name="validKeys">
+    /// <c>null</c> = no schema / accept all keys (dynamic-tag devices);
+    /// empty set = zero-key closed schema / reject all non-tag keys (e.g. Simulator);
+    /// non-empty set = validate against the listed keys.
+    /// </param>
+    public void Configure(ConfigSet set, string[] unset, IReadOnlySet<string>? validKeys)
     {
         EnsureAlive();
         ValidateProperties(set, validKeys);
@@ -126,9 +136,11 @@ public partial class PeripheralDeviceConfigAggregate(DeviceId id)
             throw new InvalidOperationException("Device already removed");
     }
 
-    private static void ValidateProperties(ConfigSet props, IReadOnlySet<string> validKeys)
+    private static void ValidateProperties(ConfigSet props, IReadOnlySet<string>? validKeys)
     {
-        if (validKeys.Count == 0) return; // no schema = accept all
+        // null = no schema / accept all (dynamic-tag devices such as Modbus).
+        // Empty set = zero-key closed schema / reject all non-tag keys (e.g. Simulator).
+        if (validKeys is null) return;
 
         foreach (var (name, _) in props)
         {
@@ -139,9 +151,10 @@ public partial class PeripheralDeviceConfigAggregate(DeviceId id)
         }
     }
 
-    private static void ValidateUnsetKeys(string[] unset, IReadOnlySet<string> validKeys)
+    private static void ValidateUnsetKeys(string[] unset, IReadOnlySet<string>? validKeys)
     {
-        if (validKeys.Count == 0 || unset.Length == 0) return;
+        // null = no schema / accept all. Empty set = reject all (validated per-key below).
+        if (validKeys is null || unset.Length == 0) return;
 
         foreach (var name in unset)
         {

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FluentAssertions;
 using MicroPlumberd;
 using ModelingEvolution.Ipv4;
@@ -75,14 +76,14 @@ public class PeripheralDeviceReplayTests
         }
     }
 
-    // ── Guardrail 3: Pre-rename stream fixture ────────────────────────────────
+    // ── Guardrail 3: State folding from event records ─────────────────────────
     //
     // Simulates the event stream written by the OLD per-vendor aggregates (e.g.,
     // FroniusWeldingMachineConfigAggregate). The generic aggregate must rebuild the
     // same state from those exact event records and names.
 
     [Fact]
-    public async Task Rehydrate_from_pre_rename_stream_fixture_rebuilds_state()
+    public async Task Rehydrate_folds_state_from_event_records()
     {
         var deviceId = DeviceId.New("FroniusWeldingMachine_TPS5000");
         var agg = PeripheralDeviceConfigAggregate.New(deviceId);
@@ -112,6 +113,67 @@ public class PeripheralDeviceReplayTests
         state.Config.Get<PortProperty, int>().Should().Be(502);
 
         agg.PendingEvents.Should().BeEmpty("replayed events must NOT produce pending events");
+    }
+
+    // ── Guardrail 3b: JSON serialization round-trip ───────────────────────────
+    //
+    // Proves the wire-level compatibility of our event types: serializes to JSON (the
+    // same format MicroPlumberd writes to EventStore) and deserializes back by resolving
+    // the CLR type from the event's simple name — exactly what MicroPlumberd does on read.
+    // This is stronger than Guardrail 3 because it catches property renames and JSON
+    // converter failures that wouldn't show up in a same-assembly in-memory round-trip.
+
+    [Fact]
+    public async Task Rehydrate_survives_JSON_serialization_round_trip()
+    {
+        // ConfigSetJsonConverter uses ConfigPropertyJsonConverter which requires the property
+        // types to be registered (in production this happens at startup via ScanAssembly).
+        // Register the SDK's built-in property types so Port/Ip can be deserialized from JSON.
+        ConfigPropertyJsonConverter.ScanAssembly<IpProperty>();
+
+        // Registry maps event simple name → CLR type, mirroring MicroPlumberd's default
+        // GetEventNameConvention (type.Name). If a type is renamed, this test fails.
+        var typeRegistry = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase)
+        {
+            [nameof(PeripheralDeviceCreated)] = typeof(PeripheralDeviceCreated),
+            [nameof(PeripheralDeviceConfigured)] = typeof(PeripheralDeviceConfigured),
+        };
+
+        var deviceId = DeviceId.New("FroniusWeldingMachine_TPS5000");
+
+        // Simulate what the aggregate writes to EventStore: JSON-serialized events.
+        var config = new ConfigSet(
+            new IpProperty(Ipv4Address.Parse("192.168.1.20", null)),
+            new PortProperty(502));
+
+        var wirePayloads = new (string TypeName, byte[] Json)[]
+        {
+            (nameof(PeripheralDeviceCreated),
+                JsonSerializer.SerializeToUtf8Bytes(
+                    new PeripheralDeviceCreated("FroniusWeldingMachine_TPS5000", "IWeldingMachine", "Welder1", 1)
+                        { Id = Guid.NewGuid() })),
+            (nameof(PeripheralDeviceConfigured),
+                JsonSerializer.SerializeToUtf8Bytes(
+                    new PeripheralDeviceConfigured(config, []) { Id = Guid.NewGuid() })),
+        };
+
+        // Simulate what MicroPlumberd does on read: resolve type by name, deserialize from bytes.
+        var deserialized = wirePayloads
+            .Select(p => JsonSerializer.Deserialize(p.Json, typeRegistry[p.TypeName])!)
+            .ToArray();
+
+        // Replay through the same path as production.
+        var agg = PeripheralDeviceConfigAggregate.New(deviceId);
+        await agg.Rehydrate(AsAsync(deserialized));
+
+        var state = ((IStatefull<PeripheralDeviceConfigAggregate.DeviceState>)agg).State;
+        state.IsCreated.Should().BeTrue();
+        state.Name.Should().Be("Welder1");
+        state.InterfaceType.Should().Be("IWeldingMachine");
+        state.Config.Get<IpProperty, Ipv4Address>().Should().Be(Ipv4Address.Parse("192.168.1.20", null));
+        state.Config.Get<PortProperty, int>().Should().Be(502);
+
+        agg.PendingEvents.Should().BeEmpty("replayed events must not produce pending events");
     }
 
     [Fact]
@@ -204,6 +266,56 @@ public class PeripheralDeviceReplayTests
         var act = () => agg.Create("Plc1", 1, config, "IPlc", validKeys);
 
         act.Should().NotThrow("'tag.*' keys are always allowed regardless of the validKeys schema");
+    }
+
+    // ── Guardrail 6: null vs empty validKeys distinction (MINOR-2) ───────────
+    //
+    // null validKeys  = no schema / accept all (e.g. dynamic Modbus tag devices).
+    // Empty validKeys = zero-key closed schema / reject all non-tag keys (e.g. Simulator).
+    // The two must NOT be collapsed: Simulator must reject spurious config keys even if
+    // it has zero named schema properties.
+
+    [Fact]
+    public void Create_with_null_validKeys_accepts_any_property()
+    {
+        var deviceId = DeviceId.New("DynamicModbus");
+        var agg = PeripheralDeviceConfigAggregate.New(deviceId);
+        // A property with an arbitrary name that is NOT in any schema
+        var config = new ConfigSet(new SerialNumberProperty("SN-001"));
+
+        var act = () => agg.Create("Modbus1", 1, config, "IDynamic", null); // null = no schema = accept all
+
+        act.Should().NotThrow("null validKeys means no schema — all keys are accepted (dynamic-tag device)");
+    }
+
+    [Fact]
+    public void Create_with_empty_validKeys_rejects_any_non_tag_property()
+    {
+        var deviceId = DeviceId.New("Simulator");
+        var agg = PeripheralDeviceConfigAggregate.New(deviceId);
+        var config = new ConfigSet(new SerialNumberProperty("SIM-001")); // non-tag key
+
+        // Empty HashSet = zero-key closed schema (Simulator has no config properties)
+        var emptySchema = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var act = () => agg.Create("Sim1", 1, config, "ISimulator", emptySchema);
+
+        act.Should().Throw<ArgumentException>(
+            "empty schema = closed schema with zero keys — any non-tag property is rejected (Simulator reject-all behaviour)");
+    }
+
+    [Fact]
+    public void Create_with_empty_validKeys_still_allows_tag_keys()
+    {
+        var deviceId = DeviceId.New("Simulator");
+        var agg = PeripheralDeviceConfigAggregate.New(deviceId);
+        var config = new ConfigSet();
+        config.Add("tag.signal_out", new SerialNumberProperty("Q0.0")); // tag.* always allowed
+        var emptySchema = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        var act = () => agg.Create("Sim1", 1, config, "ISimulator", emptySchema);
+
+        act.Should().NotThrow("'tag.*' keys bypass schema validation even on a zero-key closed schema");
     }
 
     // ── Helper ────────────────────────────────────────────────────────────────

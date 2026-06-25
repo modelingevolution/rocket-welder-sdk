@@ -81,7 +81,9 @@ public sealed class PluginLoader
 
     private void LoadPluginAssembly(string dllPath, string probeDirectory, List<IPlugin> plugins)
     {
-        // Register probe path BEFORE loading so the Resolving handler can find private deps
+        // Register probe path BEFORE loading so the Resolving handler can find private deps.
+        // MINOR-4: _probePaths is only mutated here (on the caller thread, which runs Discover()
+        // sequentially); the Resolving handler snapshots it before iterating — see below.
         _probePaths.Add(probeDirectory);
 
         Assembly asm;
@@ -96,7 +98,31 @@ public sealed class PluginLoader
             return;
         }
 
-        foreach (var type in asm.GetExportedTypes())
+        // MINOR-5: GetExportedTypes() can throw ReflectionTypeLoadException when the assembly
+        // references a type from a dependency that failed to load. Catch per-DLL so one bad
+        // assembly doesn't abort the entire discovery pass. Partially-loadable assemblies fall
+        // back to the Types[] that did resolve; fully unloadable assemblies are skipped.
+        Type[] exportedTypes;
+        try
+        {
+            exportedTypes = asm.GetExportedTypes();
+        }
+        catch (ReflectionTypeLoadException rtex)
+        {
+            _logger.LogWarning(rtex,
+                "Could not load all exported types from '{Path}' — partial scan ({Loaded}/{Total} types resolved).",
+                dllPath,
+                rtex.Types.Count(t => t != null),
+                rtex.Types.Length);
+            exportedTypes = rtex.Types.Where(t => t != null).ToArray()!;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not enumerate exported types in '{Path}' — skipping DLL.", dllPath);
+            return;
+        }
+
+        foreach (var type in exportedTypes)
         {
             if (type.IsAbstract || type.IsInterface) continue;
             if (!typeof(IPlugin).IsAssignableFrom(type)) continue;
@@ -118,7 +144,11 @@ public sealed class PluginLoader
 
     // ── Default ALC Resolving handler ─────────────────────────────────────────
 
-    // Probe paths added as each plugin assembly is loaded
+    // Probe paths added as each plugin assembly is loaded.
+    // MINOR-4: Written only on the caller thread (LoadPluginAssembly → Discover); read
+    // by the Resolving handler on arbitrary ALC threads. Thread-safety: take a snapshot
+    // (ToArray) inside the handler before iterating so the handler never races with a
+    // concurrent Add() during a multi-assembly load pass.
     private readonly List<string> _probePaths = [];
 
     private void EnsureResolvingHandlerInstalled()
@@ -135,7 +165,10 @@ public sealed class PluginLoader
                 return already;
 
             // 2. Probe plugin directories for private transitive deps.
-            foreach (var probeDir in _probePaths)
+            //    Snapshot _probePaths so iteration is thread-safe against concurrent Add() calls
+            //    (MINOR-4: Resolving fires on ALC threads; Add fires on the discovery thread).
+            var snapshot = _probePaths.ToArray();
+            foreach (var probeDir in snapshot)
             {
                 var candidate = Path.Combine(probeDir, name.Name + ".dll");
                 if (File.Exists(candidate))
