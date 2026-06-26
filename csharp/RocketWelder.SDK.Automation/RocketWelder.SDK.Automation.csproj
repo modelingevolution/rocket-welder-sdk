@@ -22,6 +22,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleToAttribute">
+      <_Parameter1>RocketWelder.SDK.Automation.Tests</_Parameter1>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="MicroPlumberd" Version="1.2.0.0" />
     <PackageReference Include="MicroPlumberd.Services" Version="1.2.0.0" />
     <PackageReference Include="MicroPlumberd.SourceGenerators" Version="1.2.0.0" />
