@@ -8,7 +8,6 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>true</IsPackable>
     <PackageId>RocketWelder.SDK.Automation</PackageId>
-    <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
     <Description>Plugin loader/bootstrapper for the RocketWelder SDK: discovers and activates [RocketWelderPlugin] IPlugin assemblies into the host's DeviceTypeRegistry. No event-sourcing dependency — the device kernel (aggregate/events/commands) now lives in the host. Plugins reference only RocketWelder.SDK.Automation.Abstractions.</Description>

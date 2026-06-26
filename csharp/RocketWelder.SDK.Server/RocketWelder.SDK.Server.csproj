@@ -8,7 +8,6 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>RocketWelder.SDK.Server</PackageId>
-    <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
     <Copyright>Copyright © ModelingEvolution 2024</Copyright>
@@ -18,9 +17,14 @@
     <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <InternalsVisibleTo>RocketWelder.SDK.Server.Tests</InternalsVisibleTo>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Generated into the assembly by the SDK (GenerateAssemblyInfo, now enabled). The deleted
+         AssemblyInfo.cs hardcoded AssemblyVersion 1.0.0.0 alongside GenerateAssemblyInfo=false,
+         which pinned this dll at 1.0.0.0 regardless of the release version. -->
+    <InternalsVisibleTo Include="RocketWelder.SDK.Server.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\RocketWelder.SDK\RocketWelder.SDK.csproj" />

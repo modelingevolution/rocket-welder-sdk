@@ -7,7 +7,6 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>true</IsPackable>
     <PackageId>RocketWelder.SDK.Devices.Tracker</PackageId>
-    <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
     <Description>Tracker device family for the RocketWelder SDK (ITracker — laser/camera tracker correction device).</Description>

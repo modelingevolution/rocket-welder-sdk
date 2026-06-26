@@ -7,7 +7,6 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>true</IsPackable>
     <PackageId>RocketWelder.SDK.Devices.Welding</PackageId>
-    <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
     <Description>Welding-machine device family for the RocketWelder SDK (IWeldingMachine, WeldingMode).</Description>

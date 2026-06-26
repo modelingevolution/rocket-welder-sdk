@@ -7,7 +7,6 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>true</IsPackable>
     <PackageId>RocketWelder.SDK.Localization</PackageId>
-    <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
     <Description>Feature-agnostic localization contracts for the RocketWelder SDK (IResolver, MetrologyRequest, ResolveResult, DeviationField, FeatureBinding, IlluminationSpec, MetrologyView).</Description>

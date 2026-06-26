@@ -10,7 +10,6 @@
     <!-- NuGet Package Settings -->
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>RocketWelder.SDK.Protocols</PackageId>
-    <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
     <Copyright>Copyright © ModelingEvolution 2024</Copyright>

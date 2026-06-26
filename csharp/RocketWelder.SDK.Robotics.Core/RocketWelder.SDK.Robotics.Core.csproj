@@ -7,7 +7,6 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageId>RocketWelder.SDK.Robotics.Core</PackageId>
-    <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
     <Description>Headless kinematic simulation engine: DH forward/inverse kinematics, SimulatedRobot (IRobot drop-in replacement), robot presets.</Description>
