@@ -11,8 +11,8 @@
     <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
-    <Description>Device-lifecycle engine for the RocketWelder SDK: generic PeripheralDeviceConfigAggregate, PeripheralDevice* events/commands, command handler, read model, IDeviceSignalPublisher port, and plugin loader. Host-only dependency — plugins reference only RocketWelder.SDK.Automation.Abstractions.</Description>
-    <PackageTags>rocketwelder;automation;eventsourcing;sdk;microplumberd</PackageTags>
+    <Description>Plugin loader/bootstrapper for the RocketWelder SDK: discovers and activates [RocketWelderPlugin] IPlugin assemblies into the host's DeviceTypeRegistry. No event-sourcing dependency — the device kernel (aggregate/events/commands) now lives in the host. Plugins reference only RocketWelder.SDK.Automation.Abstractions.</Description>
+    <PackageTags>rocketwelder;automation;plugins;sdk</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
   </PropertyGroup>
@@ -28,12 +28,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="MicroPlumberd" Version="1.2.0.0" />
-    <PackageReference Include="MicroPlumberd.Services" Version="1.2.0.0" />
-    <PackageReference Include="MicroPlumberd.SourceGenerators" Version="1.2.0.0" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.7" />
+    <!-- Epic 052 cutover: the event-sourcing packages + their source generators were removed — the
+         device kernel moved to the host. The plugin loader needs only logging abstractions;
+         IServiceProvider (System) and the plugin/registry contracts come transitively via Abstractions. -->
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
-    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.7" />
   </ItemGroup>
 
 </Project>
