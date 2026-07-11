@@ -1,0 +1,38 @@
+<!--
+  Central version stamping for the RocketWelder SDK family.
+
+  WHY THIS EXISTS (regression fixed in 2.11.1):
+  Every publishable csproj used to hardcode <Version>1.0.0</Version> with no <AssemblyVersion>.
+  The release workflow passes /p:Version=<release> on the command line, which overrides that
+  hardcode, so the *published* nupkgs were stamped correctly. BUT any build that did NOT pass
+  /p:Version — a developer's local `dotnet build`/`dotnet publish`, or a consumer building the
+  SDK from a project/source reference — fell back to 1.0.0 and produced an AssemblyVersion of
+  1.0.0.0. A 1.0.0.0 dll cannot satisfy a higher reference (e.g. AppEnvironment was compiled
+  against RocketWelder.SDK.Types 1.1.40.0); .NET rolls *up* but never *down*, so the host threw
+  FileNotFoundException at boot. It also inverted the plugin loader's "ride up to max" ranking,
+  which sorts shared assemblies by AssemblyName.Version.
+
+  THE FIX:
+  - Define the SDK version ONCE here (single source of truth). The per-project hardcoded
+    <Version>1.0.0</Version> lines have been removed.
+  - Derive AssemblyVersion and FileVersion from $(Version) (suffix stripped) so EVERY build path
+    — local, source/project reference, and the release workflow — stamps the real version.
+  - The release workflow's /p:Version=<release> is a command-line (global) property and still wins
+    over the default below, so tagged releases stamp the exact release version.
+-->
+<Project>
+
+  <PropertyGroup>
+    <!-- Fallback version for any build that does NOT pass /p:Version (local dev, source/project
+         references). Keep this >= every published release and every consumer's compiled reference
+         so roll-forward always succeeds. Bump on each release alongside the git tag. -->
+    <Version Condition="'$(Version)' == ''">2.11.1</Version>
+
+    <!-- AssemblyVersion / FileVersion track the package Version (strip any prerelease suffix such
+         as -preview1; AssemblyVersion must be purely numeric). The CLR pads a 3-part value to
+         4 parts (2.11.1 -> 2.11.1.0). -->
+    <AssemblyVersion Condition="'$(AssemblyVersion)' == ''">$(Version.Split('-')[0])</AssemblyVersion>
+    <FileVersion Condition="'$(FileVersion)' == ''">$(Version.Split('-')[0])</FileVersion>
+  </PropertyGroup>
+
+</Project>

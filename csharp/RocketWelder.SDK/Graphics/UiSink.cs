@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using BlazorBlaze.Server;
 using BlazorBlaze.VectorGraphics;
 using ModelingEvolution.Drawing;
+using RocketWelder.SDK.Hmi;
 using SkiaSharp;
 
 namespace RocketWelder.SDK.Graphics;

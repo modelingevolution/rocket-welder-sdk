@@ -1,7 +1,8 @@
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using ModelingEvolution.Drawing;
-using RocketWelder.SDK.Automation;
+using RocketWelder.SDK.Abstractions;
+using RocketWelder.SDK.Devices.Robot;
 
 namespace RocketWelder.SDK.Robotics.Core;
 
@@ -17,29 +18,45 @@ public sealed class SimulatedRobot : IRobot
     private readonly RobotModel _model;
     private readonly Pose3<double>? _toolTransform;
     private readonly Pose3<double>? _basePose;
+    private readonly CollisionEnvironment? _collisionEnv;
     private readonly Subject<Pose3<double>> _poseSubject = new();
 
     private RobotState _currentState;
+    private TeachingPointSet? _teachingPoints;
     private bool _isConnected;
     private bool _isDisposed;
     private Uri _address = new("sim://localhost");
     private bool _jointMode;
 
     /// <summary>
-    /// Creates a SimulatedRobot at the model's home position.
+    /// Creates a SimulatedRobot at the model's home position. When <paramref name="environment"/>
+    /// is supplied, every move checks the target configuration for self and environment collisions
+    /// before committing.
     /// </summary>
-    public SimulatedRobot(RobotModel model, Pose3<double>? toolTransform = null, Pose3<double>? basePose = null)
+    /// <param name="id">Stable robot identity (Epic 029, FR-1.1). Defaults to a fresh
+    /// <c>DeviceId.New("simulated")</c> so each simulator gets a unique catalogue scope.</param>
+    public SimulatedRobot(
+        RobotModel model,
+        Pose3<double>? toolTransform = null,
+        Pose3<double>? basePose = null,
+        CollisionEnvironment? environment = null,
+        DeviceId? id = null)
     {
         _model = model ?? throw new ArgumentNullException(nameof(model));
         _toolTransform = toolTransform;
         _basePose = basePose;
+        _collisionEnv = environment;
         _currentState = ForwardKinematics.Compute(model, model.HomePosition, toolTransform, basePose);
+        Id = id ?? DeviceId.New("simulated");
     }
 
     /// <summary>The robot model backing this simulator.</summary>
     public RobotModel Model => _model;
 
     #region IRobot Implementation
+
+    /// <inheritdoc/>
+    public DeviceId Id { get; }
 
     public Uri Address
     {
@@ -94,14 +111,34 @@ public sealed class SimulatedRobot : IRobot
         return true;
     }
 
-    public Pose3<double> GetTeachingPoint(string name) =>
-        throw new NotSupportedException("SimulatedRobot does not support teaching points.");
+    public Pose3<double> GetTeachingPoint(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (_teachingPoints is null)
+            throw new InvalidOperationException("No TeachingPointSet attached. Call AttachTeachingPoints first.");
+        return _teachingPoints.Get(name);
+    }
 
     public bool TryGetTeachingPoint(string name, out Pose3<double> pose)
     {
-        pose = default;
-        return false;
+        ArgumentNullException.ThrowIfNull(name);
+        if (_teachingPoints is null)
+        {
+            pose = default;
+            return false;
+        }
+        return _teachingPoints.TryGet(name, out pose);
     }
+
+    // === IRobot Teaching (no-op for the simulator — no pendant) ===
+
+    public void StartTeaching() { }
+
+    public void EndTeaching() { }
+
+    public IReadOnlyList<TeachingPoint> PeekTeachingPoints() => Array.Empty<TeachingPoint>();
+
+    public event EventHandler<TeachingPoint>? TeachingPointAdded { add { } remove { } }
 
     public Joints6<double> GetJointPositions()
     {
@@ -115,32 +152,55 @@ public sealed class SimulatedRobot : IRobot
         set => _jointMode = value;
     }
 
-    public void MoveJoint(Joints6<double> joints)
+    /// <summary>
+    /// Move to target joint angles. Per ADR-004, never throws on runtime conditions
+    /// (joint-limit violation, collision) — those are reported via <see cref="MoveResult"/>.
+    /// </summary>
+    public MoveResult MoveJoint(Joints6<double> joints)
     {
         ThrowIfDisposed();
         ThrowIfNotConnected();
 
         var violations = _model.ValidateJoints(joints);
         if (violations.Count > 0)
-            throw new ArgumentOutOfRangeException(nameof(joints),
-                $"Joint angles exceed limits: joint {violations[0].JointIndex} requested {violations[0].RequestedDeg}deg, limit {violations[0].LimitDeg}deg");
+            return MoveResult.Failed(MoveFailureReason.JointLimitsExceeded, violations);
+
+        if (FirstCollision(joints) is { } hit)
+            return MoveResult.RejectedByCollision(hit);
 
         _currentState = ForwardKinematics.Compute(_model, joints, _toolTransform, _basePose);
         _poseSubject.OnNext(_currentState.TcpPose);
+        return MoveResult.Succeeded();
     }
 
-    public int MoveLin(Pose3<double> target, Velocity velocity)
+    /// <summary>
+    /// Move linearly to target TCP pose. Per ADR-004, never throws on runtime
+    /// conditions (unreachable IK, collision) — those are reported via <see cref="MoveResult"/>.
+    /// </summary>
+    public MoveResult MoveLin(Pose3<double> target, Velocity velocity)
     {
         ThrowIfDisposed();
         ThrowIfNotConnected();
 
         var ikResult = InverseKinematics.Compute(_model, target, _currentState.Joints, _toolTransform, _basePose);
         if (!ikResult.Success)
-            return -1; // IRobot contract: non-zero on failure
+            return MoveResult.Failed(ikResult.Reason!.Value.ToMoveReason(), ikResult.Violations);
+
+        if (FirstCollision(ikResult.Joints) is { } hit)
+            return MoveResult.RejectedByCollision(hit);
 
         _currentState = ForwardKinematics.Compute(_model, ikResult.Joints, _toolTransform, _basePose);
         _poseSubject.OnNext(_currentState.TcpPose);
-        return 0;
+        return MoveResult.Succeeded();
+    }
+
+    void IRobot.MoveJoint(Joints6<double> joints) => MoveJoint(joints);
+
+    int IRobot.MoveLin(Pose3<double> target, Velocity velocity)
+    {
+        var r = MoveLin(target, velocity);
+        if (r.Success) return 0;
+        return r.Reason == MoveFailureReason.Collision ? -2 : -1;
     }
 
     public int MoveCircular(Pose3<double> pathPoint, Pose3<double> target, Velocity velocity) =>
@@ -167,40 +227,6 @@ public sealed class SimulatedRobot : IRobot
     #endregion
 
     #region SimulatedRobot-specific methods
-
-    /// <summary>
-    /// Attempts to move linearly to the target pose. Returns a structured result instead of throwing.
-    /// </summary>
-    public MoveResult TryMoveLin(Pose3<double> target, Velocity velocity)
-    {
-        ThrowIfDisposed();
-        ThrowIfNotConnected();
-
-        var ikResult = InverseKinematics.Compute(_model, target, _currentState.Joints, _toolTransform, _basePose);
-        if (!ikResult.Success)
-            return MoveResult.Failed(ikResult.Reason!.Value, ikResult.Violations);
-
-        _currentState = ForwardKinematics.Compute(_model, ikResult.Joints, _toolTransform, _basePose);
-        _poseSubject.OnNext(_currentState.TcpPose);
-        return MoveResult.Succeeded();
-    }
-
-    /// <summary>
-    /// Attempts to move to the given joint angles. Returns a structured result instead of throwing.
-    /// </summary>
-    public MoveResult TryMoveJoint(Joints6<double> joints)
-    {
-        ThrowIfDisposed();
-        ThrowIfNotConnected();
-
-        var violations = _model.ValidateJoints(joints);
-        if (violations.Count > 0)
-            return MoveResult.Failed(IkFailureReason.JointLimitsExceeded, violations);
-
-        _currentState = ForwardKinematics.Compute(_model, joints, _toolTransform, _basePose);
-        _poseSubject.OnNext(_currentState.TcpPose);
-        return MoveResult.Succeeded();
-    }
 
     /// <summary>
     /// Executes a sequence of waypoints with joint-space interpolation.
@@ -234,13 +260,19 @@ public sealed class SimulatedRobot : IRobot
 
             var targetJoints = ikResult.Joints;
             var maxDelta = (double)currentJoints.MaxAbsDelta(targetJoints);
-
             var numSteps = Math.Max(1, (int)Math.Ceiling(maxDelta / MaxStepDegrees));
 
             for (int s = 1; s <= numSteps; s++)
             {
                 var t = (double)s / numSteps;
                 var interpJoints = Joints6<double>.Lerp(currentJoints, targetJoints, t);
+
+                if (FirstCollision(interpJoints) is { } hit)
+                {
+                    _currentState = steps[^1];
+                    return SimulationRunResult.FailedByCollision(steps, wpIdx, hit);
+                }
+
                 var state = ForwardKinematics.Compute(_model, interpJoints, _toolTransform, _basePose);
                 steps.Add(state);
             }
@@ -253,6 +285,113 @@ public sealed class SimulatedRobot : IRobot
         _poseSubject.OnNext(_currentState.TcpPose);
 
         return SimulationRunResult.Succeeded(steps);
+    }
+
+    /// <summary>Attach or replace the teaching-point set used by Get/TryGet/Set/Remove teaching-point methods.</summary>
+    public void AttachTeachingPoints(TeachingPointSet points)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        ThrowIfDisposed();
+        _teachingPoints = points;
+    }
+
+    /// <summary>Set (add or overwrite) a teaching point. Requires an attached set.</summary>
+    public void SetTeachingPoint(string name, Pose3<double> pose)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ThrowIfDisposed();
+        if (_teachingPoints is null)
+            throw new InvalidOperationException("No TeachingPointSet attached. Call AttachTeachingPoints first.");
+        _teachingPoints.Set(name, pose);
+    }
+
+    /// <summary>Remove a teaching point. Requires an attached set. Returns true if it existed.</summary>
+    public bool RemoveTeachingPoint(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        ThrowIfDisposed();
+        if (_teachingPoints is null)
+            throw new InvalidOperationException("No TeachingPointSet attached. Call AttachTeachingPoints first.");
+        return _teachingPoints.Remove(name);
+    }
+
+    /// <summary>Execute every step of the program from the beginning.</summary>
+    public SimulationRunResult Execute(RobotProgram program, Velocity velocity) =>
+        Execute(program, velocity, 0);
+
+    /// <summary>Execute program steps from <paramref name="startIndex"/> to end.</summary>
+    public SimulationRunResult Execute(RobotProgram program, Velocity velocity, int startIndex)
+    {
+        ThrowIfDisposed();
+        ThrowIfNotConnected();
+        ArgumentNullException.ThrowIfNull(program);
+        if (startIndex < 0 || startIndex > program.Count)
+            throw new ArgumentOutOfRangeException(nameof(startIndex));
+
+        var steps = new List<RobotState> { _currentState };
+        var currentJoints = _currentState.Joints;
+
+        for (int i = startIndex; i < program.Count; i++)
+        {
+            var step = program.Steps[i];
+            Joints6<double> targetJoints;
+
+            switch (step)
+            {
+                case MoveJointStep mj:
+                {
+                    var violations = _model.ValidateJoints(mj.Target);
+                    if (violations.Count > 0)
+                    {
+                        _currentState = steps[^1];
+                        return SimulationRunResult.Failed(steps, i, IkFailureReason.JointLimitsExceeded);
+                    }
+                    targetJoints = mj.Target;
+                    break;
+                }
+                case MoveLinStep ml:
+                {
+                    var ik = InverseKinematics.Compute(_model, ml.Target, currentJoints, _toolTransform, _basePose);
+                    if (!ik.Success)
+                    {
+                        _currentState = steps[^1];
+                        return SimulationRunResult.Failed(steps, i, ik.Reason!.Value);
+                    }
+                    targetJoints = ik.Joints;
+                    break;
+                }
+                default:
+                    throw new NotSupportedException($"Unsupported ProgramStep: {step.GetType().Name}");
+            }
+
+            var maxDelta = (double)currentJoints.MaxAbsDelta(targetJoints);
+            var numSteps = Math.Max(1, (int)Math.Ceiling(maxDelta / MaxStepDegrees));
+            for (int s = 1; s <= numSteps; s++)
+            {
+                var t = (double)s / numSteps;
+                var interp = Joints6<double>.Lerp(currentJoints, targetJoints, t);
+
+                if (FirstCollision(interp) is { } hit)
+                {
+                    _currentState = steps[^1];
+                    return SimulationRunResult.FailedByCollision(steps, i, hit);
+                }
+
+                steps.Add(ForwardKinematics.Compute(_model, interp, _toolTransform, _basePose));
+            }
+            currentJoints = targetJoints;
+        }
+
+        _currentState = steps[^1];
+        _poseSubject.OnNext(_currentState.TcpPose);
+        return SimulationRunResult.Succeeded(steps);
+    }
+
+    private CollisionResult? FirstCollision(Joints6<double> joints)
+    {
+        if (_collisionEnv is null) return null;
+        var hits = CollisionDetector.CheckCollision(_model, joints, _collisionEnv);
+        return hits.Count == 0 ? null : hits[0];
     }
 
     #endregion

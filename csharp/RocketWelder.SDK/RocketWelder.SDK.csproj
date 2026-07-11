@@ -1,4 +1,5 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
 	  <TargetFramework>net10.0</TargetFramework>
@@ -7,7 +8,6 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <PackageId>RocketWelder.SDK</PackageId>
-    <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
     <Copyright>Copyright © ModelingEvolution 2024</Copyright>
@@ -17,27 +17,35 @@
     <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
-    <InternalsVisibleTo>RocketWelder.SDK.Tests</InternalsVisibleTo>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Generated into the assembly by the SDK (GenerateAssemblyInfo, now enabled). These used to
+         live in Properties/AssemblyInfo.cs alongside GenerateAssemblyInfo=false, which suppressed
+         the SDK's version stamping and left this dll at AssemblyVersion 0.0.0.0. -->
+    <InternalsVisibleTo Include="RocketWelder.SDK.Tests" />
+    <InternalsVisibleTo Include="ModelingEvolution.RocketWelder.Tests" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\RocketWelder.SDK.Protocols\RocketWelder.SDK.Protocols.csproj" />
     <ProjectReference Include="..\RocketWelder.SDK.Types\RocketWelder.SDK.Types.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Hmi\RocketWelder.SDK.Hmi.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Vision\RocketWelder.SDK.Vision.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Emgu.CV" Version="4.11.0.5746" />
     <PackageReference Include="Emgu.CV.runtime.ubuntu-x64" Version="4.11.0.5746" />
-    <PackageReference Include="MicroPlumberd" Version="1.1.6.8" />
-    <PackageReference Include="MicroPlumberd.Services" Version="1.1.6.8" />
-    <PackageReference Include="MicroPlumberd.SourceGenerators" Version="1.1.6.8" />
-    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
+    <PackageReference Include="MicroPlumberd" Version="1.2.0.0" />
+    <PackageReference Include="MicroPlumberd.Services" Version="1.2.0.0" />
+    <PackageReference Include="MicroPlumberd.SourceGenerators" Version="1.2.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
     <PackageReference Include="BlazorBlaze" Version="1.1.5" />
     <PackageReference Include="BlazorBlaze.Server" Version="1.1.5" />
-    <PackageReference Include="ModelingEvolution.Drawing" Version="1.7.0.65" />
+    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.8.75" />
     <PackageReference Include="ZeroBuffer" Version="1.2.8" />
   </ItemGroup>
 

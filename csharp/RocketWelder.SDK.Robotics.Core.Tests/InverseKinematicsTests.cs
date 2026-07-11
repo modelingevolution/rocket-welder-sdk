@@ -22,37 +22,39 @@ public class InverseKinematicsTests
     [Fact]
     public void ValidateJoints_SingleViolation()
     {
-        var joints = new Joints6<double>(0, 0, 0, 0, 0, 200);
+        // J3 limit is [-162, +162]; 200 overshoots +162 by 38.
+        var joints = new Joints6<double>(0, 0, 200, 0, 0, 0);
         var violations = _model.ValidateJoints(joints);
         violations.Count.Should().Be(1);
-        violations[0].JointIndex.Should().Be(5);
-        violations[0].LimitDeg.Should().Be(175);
+        violations[0].JointIndex.Should().Be(2);
+        violations[0].LimitDeg.Should().Be(162);
         violations[0].RequestedDeg.Should().Be(200);
-        violations[0].OvershootDeg.Should().Be(25);
+        violations[0].OvershootDeg.Should().Be(38);
     }
 
     /// <summary>Test 1.6 — Joint limit validation (two violations).</summary>
     [Fact]
     public void ValidateJoints_TwoViolations()
     {
-        var joints = new Joints6<double>(-180, 0, 0, 0, 0, 180);
+        // J1 [-178,178]: -200 overshoots -178 by 22.
+        // J6 [-360,360]: 400 overshoots +360 by 40.
+        var joints = new Joints6<double>(-200, 0, 0, 0, 0, 400);
         var violations = _model.ValidateJoints(joints);
         violations.Count.Should().Be(2);
 
-        // Joint 0: -180 < -175, overshoot = 5
         violations[0].JointIndex.Should().Be(0);
-        violations[0].OvershootDeg.Should().Be(5);
+        violations[0].OvershootDeg.Should().Be(22);
 
-        // Joint 5: 180 > 175, overshoot = 5
         violations[1].JointIndex.Should().Be(5);
-        violations[1].OvershootDeg.Should().Be(5);
+        violations[1].OvershootDeg.Should().Be(40);
     }
 
-    /// <summary>Test 1.6 — Joint limit validation (boundary values pass).</summary>
+    /// <summary>Test 1.6 — Joint limit validation (per-axis boundary values pass).</summary>
     [Fact]
     public void ValidateJoints_BoundaryValues_ShouldPass()
     {
-        var joints = new Joints6<double>(175, -175, 0, 0, 0, 0);
+        // Each joint at its upper limit (per fairino-preset-reference.md v6 limits).
+        var joints = new Joints6<double>(178, 85, 162, 85, 178, 360);
         var violations = _model.ValidateJoints(joints);
         violations.Count.Should().Be(0);
     }
@@ -62,7 +64,7 @@ public class InverseKinematicsTests
     public void IK_WristSingularity_WithCloseSeed_ShouldSucceed()
     {
         var singularJoints = new Joints6<double>(0, -45, 45, 30, 0, -30);
-        var expectedPose = new Pose3<double>(-738.8704, 209.7000, -228.3679, -90.0000, 0.0000, 0.0000);
+        var expectedPose = new Pose3<double>(-746.5804, 102.0000, -236.9416, -90.0000, 0.0000, 0.0000);
 
         var state = ForwardKinematics.Compute(_model, singularJoints);
         AssertPoseEquals(expectedPose, state.TcpPose);
@@ -80,7 +82,7 @@ public class InverseKinematicsTests
     public void IK_ElbowSingularity_WithCloseSeed_ShouldSucceed()
     {
         var nearExtendedJoints = new Joints6<double>(0, -3, 3, 0, 0, 0);
-        var expectedPose = new Pose3<double>(-816.6676, 209.7000, 37.5572, -90.0000, 0.0000, 0.0000);
+        var expectedPose = new Pose3<double>(-819.4276, 102.0000, 27.6572, -90.0000, 0.0000, 0.0000);
 
         var state = ForwardKinematics.Compute(_model, nearExtendedJoints);
         AssertPoseEquals(expectedPose, state.TcpPose);
@@ -115,7 +117,7 @@ public class InverseKinematicsTests
     [Fact]
     public void IK_WristSingularity_WithFarSeed_ShouldFail()
     {
-        var singularPose = new Pose3<double>(-738.8704, 209.7000, -228.3679, -90.0000, 0.0000, 0.0000);
+        var singularPose = new Pose3<double>(-746.5804, 102.0000, -236.9416, -90.0000, 0.0000, 0.0000);
         var result = InverseKinematics.Compute(_model, singularPose, CFG_B);
         result.Success.Should().BeFalse("IK with far seed at singular pose should fail");
         result.Reason.Should().Be(IkFailureReason.Singularity);
@@ -126,7 +128,7 @@ public class InverseKinematicsTests
     public void IK_ShoulderSingularity_WithCloseSeed_ShouldSucceed()
     {
         var shoulderJoints = new Joints6<double>(0, -124, 71, 0, 0, 0);
-        var expectedPose = new Pose3<double>(75.2292, 209.7000, -569.0931, -90.0000, -53.0000, 0.0000);
+        var expectedPose = new Pose3<double>(81.4747, 102.0000, -577.2553, -90.0000, -53.0000, 0.0000);
 
         var state = ForwardKinematics.Compute(_model, shoulderJoints);
         AssertPoseEquals(expectedPose, state.TcpPose, SingPosTol, SingRotTol);
@@ -138,38 +140,43 @@ public class InverseKinematicsTests
         AssertPoseEquals(state.TcpPose, state2.TcpPose, SingPosTol, SingRotTol);
     }
 
-    /// <summary>Test 1.17 — IK selects solution closest to seed (elbow-up vs elbow-down).</summary>
+    /// <summary>Test 1.17 — IK selects the branch closest to its seed (elbow-up vs elbow-down).</summary>
     [Fact]
     public void IK_Should_Select_ClosestToSeed()
     {
+        // Elbow-up seed and its FK pose.
         var elbowUp = new Joints6<double>(0, -30, 60, 0, 0, 0);
-        var elbowDown = new Joints6<double>(0, 15.45, -33.55, 0, 0, 0);
-
         var fkUp = ForwardKinematics.Compute(_model, elbowUp);
-        var fkDown = ForwardKinematics.Compute(_model, elbowDown);
 
-        // Positions should be close (< 0.1 mm)
-        var posDist = Math.Sqrt(
-            Math.Pow(fkUp.TcpPose.X - fkDown.TcpPose.X, 2) +
-            Math.Pow(fkUp.TcpPose.Y - fkDown.TcpPose.Y, 2) +
-            Math.Pow(fkUp.TcpPose.Z - fkDown.TcpPose.Z, 2));
-        posDist.Should().BeLessThan(0.1, "elbow-up and elbow-down should have similar positions");
+        // Discover an alternate IK branch ("elbow-down") that reaches the same pose
+        // by seeding IK with the sign-flipped elbow angle. Under the corrected FR5 DH
+        // there is no clean closed-form mirror, so we derive elbow-down from the solver.
+        var mirrorSeed = new Joints6<double>(0, -30, -60, 0, 0, 0);
+        var mirror = InverseKinematics.Compute(_model, fkUp.TcpPose, mirrorSeed);
+        mirror.Success.Should().BeTrue("mirror-seeded IK must converge to the alternate branch");
+        var elbowDown = mirror.Joints;
 
-        // IK seeded with elbow-up should return elbow-up
+        // The two configs must differ substantially (different IK branch).
+        var jointDistSq = 0.0;
+        for (int i = 0; i < 6; i++)
+            jointDistSq += Math.Pow((double)elbowUp[i] - (double)elbowDown[i], 2);
+        Math.Sqrt(jointDistSq).Should().BeGreaterThan(30.0, "branches should be meaningfully apart");
+
+        // IK seeded with elbow-up returns elbow-up.
         var ikResultUp = InverseKinematics.Compute(_model, fkUp.TcpPose, elbowUp);
         ikResultUp.Success.Should().BeTrue();
         for (int i = 0; i < 6; i++)
             AssertAngleApprox((double)ikResultUp.Joints[i], (double)elbowUp[i], 1.0,
                 $"Elbow-up: joint {i}");
 
-        // IK seeded with elbow-down should converge to a nearby configuration
-        // that matches the target pose (which has elbow-up orientation).
-        // The result is NOT the elbow-down configuration (different orientation)
-        // but the closest 6-DOF solution to the seed that matches the target.
+        // IK seeded with elbow-down returns a config close to elbow-down.
         var ikResultDown = InverseKinematics.Compute(_model, fkUp.TcpPose, elbowDown);
         ikResultDown.Success.Should().BeTrue();
+        for (int i = 0; i < 6; i++)
+            AssertAngleApprox((double)ikResultDown.Joints[i], (double)elbowDown[i], 1.0,
+                $"Elbow-down: joint {i}");
 
-        // Both IK results should reach same position
+        // Both IK results reach the same TCP position.
         var fkResultUp = ForwardKinematics.Compute(_model, ikResultUp.Joints);
         var fkResultDown = ForwardKinematics.Compute(_model, ikResultDown.Joints);
         AssertPositionEquals(fkResultUp.TcpPose, fkResultDown.TcpPose, 0.1);

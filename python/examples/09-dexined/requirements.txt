@@ -1,0 +1,6 @@
+# Runtime deps for local (non-Docker) runs of the DexiNed example.
+# In the Docker images torch/torchvision come from the CUDA/L4T base image,
+# and the SDK dependencies are installed from python/requirements.txt.
+torch>=2.0.0
+numpy>=1.21.0
+opencv-python>=4.5.0

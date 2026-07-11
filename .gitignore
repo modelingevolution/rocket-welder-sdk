@@ -44,10 +44,6 @@ project.lock.json
 project.fragment.lock.json
 artifacts/
 .dotnet/
-.nuget/
-.nuget-help.db
-*.db-shm
-*.db-wal
 
 # Python specific
 __pycache__/
@@ -129,3 +125,14 @@ local_settings.*
 /python/test_venv
 /python/test_output
 /python/venv38
+
+# Tooling caches
+.nuget-help.db
+.nuget/
+*.db-shm
+*.db-wal
+
+# Model weights are baked into the Docker image at build time, not stored in git
+# (the BIPED checkpoint is ~141 MB, over GitHub's 100 MB limit).
+/python/examples/09-dexined/checkpoints/
+*.pth

@@ -1,0 +1,171 @@
+{
+  "schema": "rw.weldprogram/2",
+  "id": "f3b1c0de-1111-2222-3333-444455556666",
+  "name": "T-bracket 6mm fillet",
+  "step": {
+    "path": "tbracket.step",
+    "sha256": "abc123sha256def"
+  },
+  "preview": {
+    "path": "tbracket.preview.jpg"
+  },
+  "datum": {
+    "scheme": "three-point",
+    "points": [
+      {
+        "id": "d0",
+        "p": [0, 0, 0],
+        "onFace": "F12",
+        "onEdge": null
+      },
+      {
+        "id": "d1",
+        "p": [100, 0, 0],
+        "onFace": null,
+        "onEdge": "E7"
+      },
+      {
+        "id": "d2",
+        "p": [0, 50, 10],
+        "onFace": "F30",
+        "onEdge": null
+      }
+    ]
+  },
+  "segments": [
+    {
+      "id": "s0",
+      "binding": {
+        "edgeIdHint": "E0",
+        "kind": "line",
+        "lengthMm": 100,
+        "midpoint": [50, 0, 0],
+        "tangentAtMid": [1, 0, 0],
+        "endpoints": [[0, 0, 0],[100, 0, 0]
+        ],
+        "adjFaceNormals": [[0, -1, 0],[0, 0, 1]
+        ]
+      },
+      "subRange": [0, 1],
+      "seamType": "fillet",
+      "position": "PB",
+      "weldSize": {
+        "fillet": {
+          "legMm": 8
+        },
+        "butt": null
+      },
+      "gas": {
+        "mix": "80/20 Ar/CO2",
+        "flowLpm": 14
+      },
+      "polarity": "DCEP",
+      "passes": [
+        {
+          "id": "p0",
+          "role": "root",
+          "jobRef": {
+            "id": 17
+          },
+          "toolFrame": {
+            "standoffMm": 12,
+            "workAngleDeg": 45,
+            "travelAngleDeg": 10,
+            "technique": "drag"
+          },
+          "motion": {
+            "travelSpeedMmPerS": 6.5,
+            "weave": null
+          }
+        },
+        {
+          "id": "p1",
+          "role": "cap",
+          "jobRef": {
+            "id": 18
+          },
+          "toolFrame": {
+            "standoffMm": 11,
+            "workAngleDeg": 45,
+            "travelAngleDeg": 8,
+            "technique": "drag"
+          },
+          "motion": {
+            "travelSpeedMmPerS": 5.5,
+            "weave": {
+              "amplitudeMm": 2,
+              "frequencyHz": 1.5,
+              "edgeDwellMs": 120,
+              "pattern": "triangle"
+            }
+          }
+        }
+      ],
+      "resolver": {
+        "mode": "metrology",
+        "featureRef": "E7",
+        "tracking": null
+      },
+      "externalAxis": null
+    },
+    {
+      "id": "s1",
+      "binding": {
+        "edgeIdHint": "E2",
+        "kind": "line",
+        "lengthMm": 100,
+        "midpoint": [50, 50, 0],
+        "tangentAtMid": [1, 0, 0],
+        "endpoints": [[0, 50, 0],[100, 50, 0]
+        ],
+        "adjFaceNormals": [[0, 0, 1],[0, 1, 0]
+        ]
+      },
+      "subRange": [0, 0.75],
+      "seamType": "butt",
+      "position": "PA",
+      "weldSize": {
+        "fillet": null,
+        "butt": {
+          "grooveAngleDeg": 60,
+          "rootGapMm": 2,
+          "rootFaceMm": 1.5,
+          "prep": "single-V"
+        }
+      },
+      "gas": {
+        "mix": "100 Ar",
+        "flowLpm": 12
+      },
+      "polarity": "DCEP",
+      "passes": [
+        {
+          "id": "p0",
+          "role": "cap",
+          "jobRef": {
+            "id": 4
+          },
+          "toolFrame": {
+            "standoffMm": 10,
+            "workAngleDeg": 90,
+            "travelAngleDeg": 0,
+            "technique": "perpendicular"
+          },
+          "motion": {
+            "travelSpeedMmPerS": 8.25,
+            "weave": null
+          }
+        }
+      ],
+      "resolver": null,
+      "externalAxis": null
+    }
+  ],
+  "weldOrderStrategy": "distortion-balanced",
+  "version": {
+    "authoredBy": "operator-id",
+    "authoredAtUtc": "2026-06-04T18:00:00Z",
+    "parentCommit": "abc123",
+    "appVersion": "rw2 1.2.3"
+  }
+}

@@ -1,6 +1,6 @@
 ﻿using System;
 using System.Linq;
-using EventStore.Client;
+using KurrentDB.Client;
 using MicroPlumberd;
 using MicroPlumberd.Services;
 using Microsoft.Extensions.Configuration;
@@ -14,7 +14,7 @@ public static class UiServiceContainerExtensions {
         // Only add Plumberd if not already registered
         if (di.All(x => x.ServiceType != typeof(IPlumberInstance)))
         {
-            di.AddPlumberd(sp => EventStoreClientSettings.Create(sp.GetRequiredService<IConfiguration>()["EventStore"] ?? throw new InvalidOperationException("EventStore not found int Configuration")));
+            di.AddPlumberd(sp => KurrentDBClientSettings.Create(sp.GetRequiredService<IConfiguration>()["EventStore"] ?? throw new InvalidOperationException("EventStore not found int Configuration")));
         }
         
         

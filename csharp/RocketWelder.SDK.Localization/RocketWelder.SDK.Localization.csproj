@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageId>RocketWelder.SDK.Localization</PackageId>
+    <Authors>ModelingEvolution</Authors>
+    <Company>ModelingEvolution</Company>
+    <Description>Feature-agnostic localization contracts for the RocketWelder SDK (IResolver, MetrologyRequest, ResolveResult, DeviationField, FeatureBinding, IlluminationSpec, MetrologyView).</Description>
+    <PackageTags>rocketwelder;localization;metrology;sdk</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.8.75" />
+    <ProjectReference Include="..\RocketWelder.SDK.Vision\RocketWelder.SDK.Vision.csproj" />
+  </ItemGroup>
+
+</Project>

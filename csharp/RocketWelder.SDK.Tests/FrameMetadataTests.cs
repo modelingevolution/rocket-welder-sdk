@@ -10,17 +10,18 @@ namespace RocketWelder.SDK.Tests;
 public class FrameMetadataTests
 {
     /// <summary>
-    /// Test that the FrameMetadata size is exactly 16 bytes.
-    /// This must match the C++ and Python implementations.
+    /// Test that the FrameMetadata size is exactly 24 bytes.
+    /// This must match the C++ and Python implementations (3 × uint64).
     /// </summary>
     [Fact]
-    public void Size_IsExactly16Bytes()
+    public void Size_IsExactly24Bytes()
     {
-        // C++ struct is 16 bytes:
-        //   [0-7]   frame_number    - uint64_t
-        //   [8-15]  timestamp_ns    - uint64_t
-        Assert.Equal(16, FrameMetadata.Size);
-        Assert.Equal(16, Marshal.SizeOf<FrameMetadata>());
+        // C++/Python struct is 24 bytes:
+        //   [0-7]   frame_number     - uint64_t
+        //   [8-15]  timestamp_ns     - uint64_t
+        //   [16-23] exposure_time_us - uint64_t
+        Assert.Equal(24, FrameMetadata.Size);
+        Assert.Equal(24, Marshal.SizeOf<FrameMetadata>());
     }
 
     /// <summary>
@@ -39,15 +40,17 @@ public class FrameMetadataTests
     [Fact]
     public void FromSpan_ReadsCorrectly()
     {
-        // Create binary data matching C++ struct layout (little-endian)
-        byte[] data = new byte[16];
-        BitConverter.TryWriteBytes(data.AsSpan(0, 8), 42UL);       // frame_number
+        // Create binary data matching C++ struct layout (little-endian, 24 bytes)
+        byte[] data = new byte[24];
+        BitConverter.TryWriteBytes(data.AsSpan(0, 8), 42UL);         // frame_number
         BitConverter.TryWriteBytes(data.AsSpan(8, 8), 1234567890UL); // timestamp_ns
+        BitConverter.TryWriteBytes(data.AsSpan(16, 8), 5000UL);      // exposure_time_us
 
         var metadata = FrameMetadata.FromSpan(data);
 
         Assert.Equal(42UL, metadata.FrameNumber);
         Assert.Equal(1234567890UL, metadata.TimestampNs);
+        Assert.Equal(5000UL, metadata.ExposureTimeUs);
     }
 
     /// <summary>
@@ -56,7 +59,7 @@ public class FrameMetadataTests
     [Fact]
     public void FromSpan_ThrowsForShortData()
     {
-        byte[] shortData = new byte[8]; // Only 8 bytes, need 16
+        byte[] shortData = new byte[8]; // Only 8 bytes, need 24
         Assert.Throws<ArgumentException>(() => FrameMetadata.FromSpan(shortData));
     }
 
@@ -109,25 +112,30 @@ public class FrameMetadataTests
     [Fact]
     public void CrossPlatform_ByteLayoutMatchesCpp()
     {
-        // C++ struct layout (16 bytes, 8-byte aligned):
-        //   [0-7]   frame_number    - uint64_t
-        //   [8-15]  timestamp_ns    - uint64_t
+        // C++ struct layout (24 bytes, 8-byte aligned):
+        //   [0-7]   frame_number     - uint64_t
+        //   [8-15]  timestamp_ns     - uint64_t
+        //   [16-23] exposure_time_us - uint64_t
 
         // Create data with known values at specific byte positions
         ulong frameNumber = 0x0102030405060708;
         ulong timestampNs = 0x1112131415161718;
+        ulong exposureTimeUs = 0x2122232425262728;
 
-        byte[] expectedBytes = new byte[16];
+        byte[] expectedBytes = new byte[24];
         // Little-endian: LSB first
         expectedBytes[0] = 0x08; expectedBytes[1] = 0x07; expectedBytes[2] = 0x06; expectedBytes[3] = 0x05;
         expectedBytes[4] = 0x04; expectedBytes[5] = 0x03; expectedBytes[6] = 0x02; expectedBytes[7] = 0x01;
         expectedBytes[8] = 0x18; expectedBytes[9] = 0x17; expectedBytes[10] = 0x16; expectedBytes[11] = 0x15;
         expectedBytes[12] = 0x14; expectedBytes[13] = 0x13; expectedBytes[14] = 0x12; expectedBytes[15] = 0x11;
+        expectedBytes[16] = 0x28; expectedBytes[17] = 0x27; expectedBytes[18] = 0x26; expectedBytes[19] = 0x25;
+        expectedBytes[20] = 0x24; expectedBytes[21] = 0x23; expectedBytes[22] = 0x22; expectedBytes[23] = 0x21;
 
         var metadata = FrameMetadata.FromSpan(expectedBytes);
 
         Assert.Equal(frameNumber, metadata.FrameNumber);
         Assert.Equal(timestampNs, metadata.TimestampNs);
+        Assert.Equal(exposureTimeUs, metadata.ExposureTimeUs);
     }
 
     /// <summary>
@@ -136,10 +144,11 @@ public class FrameMetadataTests
     [Fact]
     public void CrossPlatform_WritesMatchExpectedBytes()
     {
+        // 2-arg ctor sets exposure_time_us = ExposureTimeUnavailable (ulong.MaxValue).
         var metadata = new FrameMetadata(frameNumber: 1, timestampNs: 2);
 
         // Get the raw bytes from the struct
-        byte[] actualBytes = new byte[16];
+        byte[] actualBytes = new byte[24];
         MemoryMarshal.Write(actualBytes, in metadata);
 
         // Expected little-endian bytes
@@ -148,7 +157,9 @@ public class FrameMetadataTests
             // frame_number = 1 (little-endian uint64)
             0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
             // timestamp_ns = 2 (little-endian uint64)
-            0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+            0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            // exposure_time_us = UINT64_MAX (unavailable)
+            0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF
         };
 
         Assert.Equal(expectedBytes, actualBytes);
@@ -164,6 +175,8 @@ public class FrameMetadataTests
         Assert.Equal(0, (int)Marshal.OffsetOf<FrameMetadata>(nameof(FrameMetadata.FrameNumber)));
         // timestamp_ns at offset 8
         Assert.Equal(8, (int)Marshal.OffsetOf<FrameMetadata>(nameof(FrameMetadata.TimestampNs)));
+        // exposure_time_us at offset 16
+        Assert.Equal(16, (int)Marshal.OffsetOf<FrameMetadata>(nameof(FrameMetadata.ExposureTimeUs)));
     }
 
     /// <summary>
@@ -174,15 +187,16 @@ public class FrameMetadataTests
     [Fact]
     public void CrossPlatform_AlignmentIs8Bytes()
     {
-        // Verify the struct is exactly 16 bytes (no padding, two 8-byte fields)
-        Assert.Equal(16, Marshal.SizeOf<FrameMetadata>());
+        // Verify the struct is exactly 24 bytes (no padding, three 8-byte fields)
+        Assert.Equal(24, Marshal.SizeOf<FrameMetadata>());
 
-        // Verify field offsets are 8-byte aligned (0 and 8)
+        // Verify field offsets are 8-byte aligned (0, 8, 16)
         Assert.Equal(0, (int)Marshal.OffsetOf<FrameMetadata>(nameof(FrameMetadata.FrameNumber)));
         Assert.Equal(8, (int)Marshal.OffsetOf<FrameMetadata>(nameof(FrameMetadata.TimestampNs)));
+        Assert.Equal(16, (int)Marshal.OffsetOf<FrameMetadata>(nameof(FrameMetadata.ExposureTimeUs)));
 
-        // Verify no wasted space - each ulong is 8 bytes, total should be 16
-        Assert.Equal(2 * sizeof(ulong), Marshal.SizeOf<FrameMetadata>());
+        // Verify no wasted space - each ulong is 8 bytes, total should be 24
+        Assert.Equal(3 * sizeof(ulong), Marshal.SizeOf<FrameMetadata>());
     }
 
     /// <summary>

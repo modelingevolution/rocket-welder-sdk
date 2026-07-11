@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -7,7 +7,6 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
     <PackageId>RocketWelder.SDK.Robotics.Core</PackageId>
-    <Version>1.0.0</Version>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
     <Description>Headless kinematic simulation engine: DH forward/inverse kinematics, SimulatedRobot (IRobot drop-in replacement), robot presets.</Description>
@@ -17,12 +16,17 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ModelingEvolution.Drawing" Version="1.7.0.65" />
+    <InternalsVisibleTo Include="RocketWelder.SDK.Robotics.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.8.75" />
     <PackageReference Include="System.Reactive" Version="6.*" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\RocketWelder.SDK.Automation\RocketWelder.SDK.Automation.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Abstractions\RocketWelder.SDK.Abstractions.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Devices.Robot\RocketWelder.SDK.Devices.Robot.csproj" />
   </ItemGroup>
 
 </Project>

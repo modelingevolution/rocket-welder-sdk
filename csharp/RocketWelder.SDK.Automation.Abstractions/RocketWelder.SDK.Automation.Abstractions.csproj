@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageId>RocketWelder.SDK.Automation.Abstractions</PackageId>
+    <Authors>ModelingEvolution</Authors>
+    <Company>ModelingEvolution</Company>
+    <Description>Plugin contract and device-configuration abstractions for the RocketWelder SDK: [RocketWelderPlugin] / IPlugin / IPluginContext, DeviceTypeRegistry, DeviceTypeInfo, ConfigSet/ConfigProperty/ConfigPropertySchema. MicroPlumberd-free — plugins compile against this only.</Description>
+    <PackageTags>rocketwelder;automation;plugin;abstractions;sdk</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
+  </PropertyGroup>
+
+  <!-- NO MicroPlumberd, NO ModelingEvolution.Observable, NO SDK.Devices.* -->
+  <ItemGroup>
+    <ProjectReference Include="..\RocketWelder.SDK.Abstractions\RocketWelder.SDK.Abstractions.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- ISignal<float> for DeviceTypeInfo.GetSignals — only ISignal, nothing else from signals -->
+    <PackageReference Include="ModelingEvolution.Signals" Version="2.0.1.1" />
+    <!-- Ipv4Address for IpProperty -->
+    <PackageReference Include="ModelingEvolution.Ipv4" Version="1.1.4" />
+    <!-- JsonParsableConverter for ConfigProperty JSON -->
+    <PackageReference Include="ModelingEvolution.JsonParsableConverter" Version="1.0.1" />
+    <!-- DI/Logging abstractions for IPluginContext.Services + plugin logging -->
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
+  </ItemGroup>
+
+</Project>

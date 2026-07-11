@@ -56,6 +56,7 @@ PYTHON_EXAMPLES=(
     "05-ball-detector:ball-detector:false"
     "06-yolo:yolo:true"
     "07-simple-with-data:simple-with-data:false"
+    "08-yolo-stress:yolo-stress:true"
 )
 
 # C# examples definition: folder:name
