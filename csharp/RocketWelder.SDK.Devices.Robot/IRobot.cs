@@ -114,6 +114,17 @@ public interface IRobot : IDevice
     int MoveLin(Pose3<double> target, Velocity velocity);
 
     /// <summary>
+    /// Moves the robot point-to-point (joint-interpolated) to the target pose.
+    /// Unlike <see cref="MoveLin"/>, the TCP does not follow a straight Cartesian line: the
+    /// controller interpolates in joint space, so the motion reaches the pose while avoiding
+    /// singularities and joint limits better. The default implementation falls back to
+    /// <see cref="MoveLin"/> for drivers that do not provide a native PTP move.
+    /// </summary>
+    /// <param name="target">Target pose (X,Y,Z in mm, Rx,Ry,Rz in degrees).</param>
+    /// <param name="velocity">Motion velocity with explicit unit (see <see cref="MoveLin"/>).</param>
+    int MovePtp(Pose3<double> target, Velocity velocity) => MoveLin(target, velocity);
+
+    /// <summary>
     /// Moves the robot in a circular arc through pathPoint to target.
     /// </summary>
     int MoveCircular(Pose3<double> pathPoint, Pose3<double> target, Velocity velocity);
