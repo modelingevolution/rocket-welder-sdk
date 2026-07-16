@@ -453,6 +453,18 @@ public class SimulatedRobotTests
         robot.GetJointPositions().Should().Be(HOME);
     }
 
+    /// <summary>Test 2.20 — The 3-arg MoveSpline default overload routes to the 2-arg method
+    /// on a 2-arg-only implementer (SimulatedRobot has no override, so it still throws NotSupported).</summary>
+    [Fact]
+    public void MoveSpline_WithSmoothness_ShouldRouteTo_TwoArgOverload()
+    {
+        using var robot = new SimulatedRobot(_model);
+        robot.Connect();
+        var act = () => ((IRobot)robot).MoveSpline(
+            new[] { WP1 }, DefaultVelocity, SplineSmoothness.High);
+        act.Should().Throw<NotSupportedException>();
+    }
+
     public static IEnumerable<object[]> VelocityUnits()
     {
         yield return [Velocity.Percentage(50)];

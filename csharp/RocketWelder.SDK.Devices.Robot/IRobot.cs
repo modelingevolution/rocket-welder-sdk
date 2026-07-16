@@ -139,6 +139,14 @@ public interface IRobot : IDevice
     /// <exception cref="TimeoutException">ABB EGM: if convergence is not reached within 30s per waypoint.</exception>
     int MoveSpline(IEnumerable<Pose3<double>> waypoints, Velocity velocity);
 
+    /// <summary>
+    /// Spline move with an explicit <see cref="SplineSmoothness"/>. Best-effort: the default
+    /// ignores smoothness and behaves exactly like <see cref="MoveSpline(IEnumerable{Pose3{double}}, Velocity)"/>;
+    /// drivers that support tuning (e.g. Fairino) override this to honour it.
+    /// </summary>
+    int MoveSpline(IEnumerable<Pose3<double>> waypoints, Velocity velocity, SplineSmoothness smoothness)
+        => MoveSpline(waypoints, velocity);
+
     // === Error Handling ===
 
     /// <summary>Resets all robot errors.</summary>
