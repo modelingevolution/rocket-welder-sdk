@@ -1,18 +1,31 @@
 using FluentAssertions;
 using RocketWelder.SDK.Abstractions;
 using RocketWelder.SDK.Automation;
-using RocketWelder.SDK.Devices.Motion;
 
-namespace RocketWelder.SDK.Automation.Tests;
+namespace RocketWelder.SDK.Devices.Motion.Tests;
 
 /// <summary>
 /// FR-8 — the axis roster is declared by the plugin, <b>in code</b>: git-versioned, reviewable as a
 /// diff, and structural rather than a per-station configuration. The hub stores values keyed by
 /// these names; it never stores the structure.
+///
+/// <para>
+/// The roster rides on <see cref="MotionDeviceTypeInfo"/>, a subclass of the registry's
+/// <see cref="DeviceTypeInfo"/>. These tests pin both halves of that arrangement: the roster works,
+/// and a plain device type is entirely unaffected by it.
+/// </para>
 /// </summary>
 public class AxisRosterTests
 {
-    private static DeviceTypeInfo NonMotionDeviceType() => new(
+    private static MotionDeviceTypeInfo Positioner() => new(
+        DeviceType: "delta-positioner-2r",
+        InterfaceType: nameof(IPositioner),
+        DisplayName: "Delta 2-axis positioner",
+        InterfaceClrType: typeof(IPositioner),
+        PropertySchemas: [],
+        Factory: (_, _) => new object());
+
+    private static DeviceTypeInfo Camera() => new(
         DeviceType: "acme-camera",
         InterfaceType: "ICamera",
         DisplayName: "ACME camera",
@@ -21,21 +34,46 @@ public class AxisRosterTests
         Factory: (_, _) => new object());
 
     [Fact]
-    public void DeviceTypeInfo_WithoutAxes_HasAnEmptyRoster()
+    public void MotionDeviceTypeInfo_IsADeviceTypeInfo_SoTheRegistryStoresItUnchanged()
     {
-        // The member is additive: an existing plugin's constructor call is untouched and its
-        // device simply has no axes — never null, so a consumer never needs a null check.
-        var info = NonMotionDeviceType();
-
-        info.Axes.Should().NotBeNull().And.BeEmpty();
+        // The subclass is what keeps Automation.Abstractions untouched: the registry, the plugin
+        // contract and every non-motion plugin are unaware the roster exists.
+        Positioner().Should().BeAssignableTo<DeviceTypeInfo>();
     }
 
     [Fact]
-    public void DeviceTypeInfo_DeclaresItsAxesInOrder()
+    public void ANonMotionDeviceType_HasNoRosterAtAll()
     {
-        var info = NonMotionDeviceType() with
+        // Not "an empty roster" — no Axes member. Whether a device type has axes is a type test.
+        typeof(DeviceTypeInfo).GetProperty("Axes").Should().BeNull();
+
+        (Camera() is MotionDeviceTypeInfo).Should().BeFalse();
+    }
+
+    [Fact]
+    public void AConsumerFindsTheRosterByPatternMatching()
+    {
+        DeviceTypeInfo[] registry = [Camera(), Positioner() with { Axes = [new AxisDeclaration("tilt", AxisKind.Rotary, [])] }];
+
+        var declared = registry
+            .OfType<MotionDeviceTypeInfo>()
+            .SelectMany(m => m.Axes)
+            .Select(a => a.Name);
+
+        declared.Should().Equal("tilt");
+    }
+
+    [Fact]
+    public void MotionDeviceTypeInfo_WithoutAxes_HasAnEmptyRoster()
+    {
+        Positioner().Axes.Should().NotBeNull().And.BeEmpty();
+    }
+
+    [Fact]
+    public void MotionDeviceTypeInfo_DeclaresItsAxesInOrder()
+    {
+        var info = Positioner() with
         {
-            DeviceType = "delta-positioner-2r",
             Axes =
             [
                 new AxisDeclaration("tilt", AxisKind.Rotary,
@@ -50,11 +88,20 @@ public class AxisRosterTests
     }
 
     [Fact]
+    public void TheMarkerInterfaceIsTheDeclaredClrType()
+    {
+        // FR-3: InterfaceClrType IS the marker — marker-primary classification is how the registry
+        // already works, not a new mechanism.
+        Positioner().InterfaceClrType.Should().Be(typeof(IPositioner));
+        typeof(IMotionDevice).IsAssignableFrom(Positioner().InterfaceClrType).Should().BeTrue();
+    }
+
+    [Fact]
     public void AxisRoster_IsHeterogeneous_AndCarriesTheUnitForTheInspector()
     {
         // AC-15: the builder's inspector reads ° or mm from the DECLARATION, not from a constant.
         // A test declaration suffices — epic-065 ships no physical linear axis.
-        var info = NonMotionDeviceType() with
+        var info = Positioner() with
         {
             Axes =
             [

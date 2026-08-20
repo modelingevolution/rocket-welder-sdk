@@ -23,6 +23,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\RocketWelder.SDK.Abstractions\RocketWelder.SDK.Abstractions.csproj" />
+    <!-- For ConfigPropertySchema / DeviceTypeInfo, which MotionDeviceTypeInfo extends. One-way:
+         Automation.Abstractions never references this package, so no plugin that is not a motion
+         plugin acquires a motion dependency. -->
+    <ProjectReference Include="..\RocketWelder.SDK.Automation.Abstractions\RocketWelder.SDK.Automation.Abstractions.csproj" />
   </ItemGroup>
 
 </Project>

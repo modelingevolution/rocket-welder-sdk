@@ -14,76 +14,90 @@ adapter refactor is It-2 and is not in this repository yet.
 
 | Deliverable | Where |
 |---|---|
-| The contract — `IMotionAxis` (+ derived `Kind`), `IRotaryAxis`, `ILinearAxis`, `IMotionDevice` (+ derived `Kind`), `IPositioner`, `ILinearTrack`, `MotionDeviceExtensions`, `AxisState`, `AxisCapabilities`, `RotationSense`, `MotionDeviceKind`, `AxisStatus`, `LimitSwitchState`, `MotionError`, `MotionException` | `RocketWelder.SDK.Devices.Motion` |
-| `AxisKind` | `RocketWelder.SDK.Abstractions` — see the layering decision below |
-| `AxisDeclaration` + `DeviceTypeInfo.Axes` | `RocketWelder.SDK.Automation.Abstractions` |
+| The contract — `IMotionAxis` (+ derived `Kind`), `IRotaryAxis`, `ILinearAxis`, `IMotionDevice` (+ derived `Kind`), `IPositioner`, `ILinearTrack`, `MotionDeviceExtensions`, `AxisState`, `AxisKind`, `AxisCapabilities`, `RotationSense`, `MotionDeviceKind`, `AxisStatus`, `LimitSwitchState`, `MotionError`, `MotionException` | `RocketWelder.SDK.Devices.Motion` |
+| `AxisDeclaration` + `MotionDeviceTypeInfo : DeviceTypeInfo` (the roster) | `RocketWelder.SDK.Devices.Motion` |
+| `RocketWelder.SDK.Automation.Abstractions` | **untouched — zero diff against `master`** |
 | `ExternalAxis(string Device, string Axis, double AngleDeg)` | `RocketWelder.SDK.Operations.Welding` |
-| AC-21 negative-compilation suite, AC-26 transport check, derived-`Kind` and surface tests | `RocketWelder.SDK.Devices.Motion.Tests` |
-| Roster tests | `RocketWelder.SDK.Automation.Tests/AxisRosterTests.cs` |
+| AC-21 negative-compilation suite, AC-26 transport check, derived-`Kind`, surface and roster tests | `RocketWelder.SDK.Devices.Motion.Tests` |
 
 The contract is a transcription of `architecture.md` §"The contract (final)". Where the spec's code
 block and this code differ it is only in XML documentation, never in a signature.
 
 ---
 
-## The layering decision: where `AxisKind` lives, and why
+## The layering decision: the roster rides on a subclass
 
-**Decision:** `AxisKind` is declared in the **`RocketWelder.SDK.Abstractions`** package, in the
-**`RocketWelder.SDK.Devices.Motion` namespace**. `AxisDeclaration` stays in
-`RocketWelder.SDK.Automation.Abstractions` next to `DeviceTypeInfo`.
+**Decision (team-lead ruling, 2026-08-20 — the PRIMARY branch of that ruling was taken):**
+`RocketWelder.SDK.Automation.Abstractions` is left **completely untouched**. `AxisKind`,
+`AxisDeclaration` and `MotionDeviceTypeInfo : DeviceTypeInfo` all live in
+`RocketWelder.SDK.Devices.Motion`, which references `Automation.Abstractions` — one way, never back.
+Motion plugins register a `MotionDeviceTypeInfo`; the registry keeps storing `DeviceTypeInfo`;
+consumers pattern-match `is MotionDeviceTypeInfo m`.
 
-### The constraint
+### The constraint the ruling resolves
 
-Two types need `AxisKind`, and they live in packages that are **siblings**, not neighbours:
+The epic's own documents pull in two directions: `architecture.md` puts `AxisDeclaration` in the
+motion contract (where it needs `ConfigPropertySchema` from `Automation.Abstractions`), while FR-8
+puts `Axes` on `DeviceTypeInfo` (which would force `Automation.Abstractions` →
+`Devices.Motion`). Taken together that is a **reference cycle**. It has to be broken somewhere.
+
+Extending the record breaks it at the cheapest point. `Automation.Abstractions` carries an explicit
+`NO MicroPlumberd, NO ModelingEvolution.Observable, NO SDK.Devices.*` in its csproj, and every
+`Devices.*` package already depends on it-or-below; the subclass respects both. Nothing about the
+plugin contract changes, so no camera, welder or distance-sensor plugin acquires a motion
+dependency, and no existing `new DeviceTypeInfo(…)` call site is touched.
+
+### Why the primary branch was viable (checked, not assumed)
+
+The ruling's fallback applies only if subclassing breaks something concrete. It does not:
+
+- `DeviceTypeInfo` is `public record`, **not sealed**.
+- `DeviceTypeRegistry` stores it in `Dictionary`/`List` **by reference** and returns it as
+  `DeviceTypeInfo`; there is no exact-type check anywhere.
+- **No serialization of `DeviceTypeInfo` exists** in this repository — a grep for
+  `DeviceTypeInfo` next to `serial|json|deserial` returns nothing. Registration is in-process.
+- Record equality is unaffected in the direction that matters: a `MotionDeviceTypeInfo` never
+  equals a plain `DeviceTypeInfo` with the same values (the synthesised `EqualityContract` differs),
+  which is the correct answer, and nothing in the codebase compares registry entries by value.
+- The factory plumbing is `Func<ConfigSet, DeviceId, object>` and is inherited unchanged.
+
+`AxisKind` remains usable by `IMotionAxis`'s derived-`Kind` default interface member, since it is now
+in the same package as the interface.
+
+### One measured cost, accepted
+
+Deriving from `DeviceTypeInfo` makes **`ModelingEvolution.Signals` a direct reference of the contract
+package** — `DeviceTypeInfo.GetSignals` is typed `ISignal<float>`. This is measured, not inferred:
+`TransportDependencyTests.Contract_DirectReferences_AreExactlyTheDeclaredOnes` failed the moment the
+subclass landed, which is exactly what that pin exists for. Removing the `GetSignals` parameter from
+`MotionDeviceTypeInfo`'s own signature (letting plugins set it through the object initializer, since
+it is an `init` property on the base) was tried and **did not remove the reference** — the compiler
+emits it for the base type regardless — so the full parameter forwarding was restored rather than
+paying an ergonomic cost for nothing.
+
+`ModelingEvolution.Signals` is not a transport, so **NFR-4 / AC-26 are unaffected**; the direct
+reference set is now pinned at Drawing + Signals + Abstractions + Automation.Abstractions, and any
+further growth fails a test.
+
+Full reference set of `RocketWelder.SDK.Devices.Motion`:
 
 ```
-                    RocketWelder.SDK.Abstractions          (IDevice, DeviceId, …)
-                      ▲                          ▲
-                      │                          │
-  RocketWelder.SDK.Devices.*                RocketWelder.SDK.Automation.Abstractions
-  (Camera, Robot, Welding, DistanceSensor,  (IPlugin, DeviceTypeInfo, ConfigPropertySchema)
-   and now Motion)
+ModelingEvolution.Drawing 1.13.0.71     typed units (Degree, Length, Speed, AngularSpeed, Percentage)
+RocketWelder.SDK.Abstractions           IDevice, DeviceId
+RocketWelder.SDK.Automation.Abstractions  ConfigPropertySchema, DeviceTypeInfo, ConfigSet
+ModelingEvolution.Signals               inherited only — the contract itself uses no signal type
 ```
-
-Every `Devices.*` package references `Abstractions` (plus `ModelingEvolution.Drawing` / `Signals`)
-and nothing else in the family. `Automation.Abstractions` references `Abstractions` and carries an
-explicit comment in its csproj: *"NO MicroPlumberd, NO ModelingEvolution.Observable, **NO
-SDK.Devices.\***"*. There is no edge between the two columns today, in either direction.
-
-`AxisDeclaration` is pinned to `Automation.Abstractions` because it is typed by
-`ConfigPropertySchema` — FR-8 is explicit that the roster reuses the existing schema mechanism
-rather than inventing one — and `DeviceTypeInfo.Axes` has to be typed by it.
-
-### The options, and why they lose
-
-| Option | Outcome |
-|---|---|
-| `Automation.Abstractions` → references `Devices.Motion` (for `AxisKind`) | Breaks the package's stated rule and makes **every** plugin — camera, welder, distance sensor — carry the motion contract. It also inverts the sibling direction: `Devices.*` are consumers of `Abstractions`, not providers to the plugin contract. |
-| Move `AxisDeclaration` into `Devices.Motion` | It needs `ConfigPropertySchema`, so `Devices.Motion` → `Automation.Abstractions`; and `DeviceTypeInfo.Axes` needs `AxisDeclaration`, so `Automation.Abstractions` → `Devices.Motion`. **Reference cycle.** Dead on arrival. Also gives the contract a dependency on DI, logging and signals packages it has no use for. |
-| **`AxisKind` in `Abstractions`** | The common ancestor both columns already reference. **Adds no dependency edge to any package**, creates no cycle, and leaves `Devices.Motion`'s reference list at exactly `Abstractions` + `ModelingEvolution.Drawing` — which is what AC-26 pins. |
-
-### Why the namespace does not follow the package
-
-`AxisKind` sits in namespace `RocketWelder.SDK.Devices.Motion` so the published surface reads
-exactly as `architecture.md` specifies: a consumer writes one `using` and sees the whole contract.
-Namespace ≠ package id is already the norm here (`Automation.Abstractions` publishes the
-`RocketWelder.SDK.Automation` namespace). The practical payoff: if `Automation.Abstractions` ever
-grows a legitimate reason to reference `Devices.Motion`, moving the type is a
-`[TypeForwardedTo]` — **zero source change for every consumer**, because no `using` moves.
-
-The reasoning is repeated in the XML doc on `AxisKind` itself, where the next person to wonder
-"why is this file here?" will actually be standing.
-
----
 
 ## Notes on individual decisions
 
-**`DeviceTypeInfo.Axes` is an init-only property, not a positional parameter.** `DeviceTypeInfo` is
-a positional record whose last three parameters are optional; a new positional parameter would have
-to go last and would still churn every call site that uses positional syntax past that point. An
-init-only member with `= []` is purely additive: every existing plugin compiles unchanged, and a
-motion plugin writes `new DeviceTypeInfo(…) { Axes = [ … ] }`. Default empty (never `null`) means no
-consumer needs a null check.
+**`MotionDeviceTypeInfo.Axes` is an init-only property, not a positional parameter.**
+`DeviceTypeInfo`'s last three parameters are optional, so a new positional parameter would have to
+go last and would still churn any call site using positional syntax past that point. An init-only
+member with `= []` reads better at the call site anyway —
+`new MotionDeviceTypeInfo(…) { Axes = [ … ] }` — and default-empty (never `null`) means no consumer
+needs a null check. Note the asymmetry that is deliberate: a **non**-motion device type has no
+`Axes` member at all, so "does this device type have axes?" is a type test, not an empty-array
+check.
 
 **`Kind` is a default interface member on both `IMotionAxis` and `IMotionDevice`.** That is what
 makes "one classification mechanism" structural rather than a convention: an implementation *cannot*

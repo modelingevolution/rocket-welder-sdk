@@ -41,7 +41,13 @@ public class TransportDependencyTests
             .OrderBy(n => n, StringComparer.Ordinal)
             .ToArray();
 
-        direct.Should().Equal("ModelingEvolution.Drawing", "RocketWelder.SDK.Abstractions");
+        direct.Should().Equal(
+            "ModelingEvolution.Drawing",                 // the typed units
+            "ModelingEvolution.Signals",                 // NOT used by the contract: inherited via
+                                                         // MotionDeviceTypeInfo : DeviceTypeInfo,
+                                                         // whose GetSignals is typed ISignal<float>
+            "RocketWelder.SDK.Abstractions",             // IDevice / DeviceId
+            "RocketWelder.SDK.Automation.Abstractions"); // ConfigPropertySchema + DeviceTypeInfo
     }
 
     [Fact]
