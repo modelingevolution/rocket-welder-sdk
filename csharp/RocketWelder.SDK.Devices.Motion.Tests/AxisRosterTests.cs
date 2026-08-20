@@ -137,14 +137,48 @@ public class AxisRosterTests
     }
 
     [Fact]
-    public void AxisDeclaration_HasValueEquality()
+    public void AxisDeclaration_EqualityIsReferenceBasedOverPropertySchemas_SoDoNotBuildOnIt()
     {
-        // Roster equality is how a program-load check compares a stored facade against the loaded
-        // plugin's declaration (AC-17).
+        // ⚠ This pins a SHARP EDGE, not a feature. AxisDeclaration is a record, but its
+        // PropertySchemas member is ConfigPropertySchema[] — and record-synthesised equality
+        // compares an array BY REFERENCE. So two declarations that are structurally identical in
+        // every visible way are NOT equal:
+        var a = new AxisDeclaration("tilt", AxisKind.Rotary,
+            [new ConfigPropertySchema("Ip", "Drive IP", "ip", Required: true)]);
+        var b = new AxisDeclaration("tilt", AxisKind.Rotary,
+            [new ConfigPropertySchema("Ip", "Drive IP", "ip", Required: true)]);
+
+        a.Should().NotBe(b, "record equality compares ConfigPropertySchema[] by reference");
+        a.PropertySchemas.Should().NotBeSameAs(b.PropertySchemas);
+
+        // ...even though the SCHEMA ELEMENTS themselves do have value equality. The array is the
+        // only reference-compared link in the chain, which is exactly what makes this easy to miss.
+        a.PropertySchemas[0].Should().Be(b.PropertySchemas[0]);
+
+        // AC-17 CONSEQUENCE, stated so nobody rediscovers it the hard way: the program-load check
+        // that compares a stored facade against the loaded plugin's declaration must compare
+        // (Name, Kind) EXPLICITLY. It must never use == or .Equals on AxisDeclaration, which would
+        // report a mismatch on every load and fail programs that are in fact correct.
+        AxisIdentity(a).Should().Be(AxisIdentity(b));
+
+        static (string Name, AxisKind Kind) AxisIdentity(AxisDeclaration d) => (d.Name, d.Kind);
+    }
+
+    [Fact]
+    public void AxisDeclaration_EmptySchemasCompareEqual_ForTheWrongReason()
+    {
+        // The trap that made the original version of this test vacuous: a collection expression
+        // `[]` lowers to the INTERNED Array.Empty<ConfigPropertySchema>(), so both declarations
+        // hold the same array reference and equality succeeds — proving nothing about value
+        // semantics. Pinned so the next person reading a passing equality assertion here knows
+        // which of the two cases they are looking at.
         var a = new AxisDeclaration("tilt", AxisKind.Rotary, []);
         var b = new AxisDeclaration("tilt", AxisKind.Rotary, []);
 
+        a.PropertySchemas.Should().BeSameAs(b.PropertySchemas);
         a.Should().Be(b);
+
+        // Name and Kind do compare by value, which is the half that behaves as expected.
         a.Should().NotBe(new AxisDeclaration("tilt", AxisKind.Linear, []));
         a.Should().NotBe(new AxisDeclaration("turntable", AxisKind.Rotary, []));
     }

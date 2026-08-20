@@ -161,6 +161,24 @@ public class ContractSurfaceTests
     }
 
     [Fact]
+    public void SelfCheck_IsAnOptionalCapability_NotPartOfTheMotionAxisBase()
+    {
+        // FR-7's direction check is a commissioning diagnostic, not a motion verb. Keeping it off
+        // IMotionAxis is what keeps FR-12's block palette closed (the builder's verb list is the
+        // base's own verbs) and stops every axis that cannot self-check from having to declare a
+        // method it can only throw from.
+        var verify = typeof(ISelfCheckingAxis).GetMethod(nameof(ISelfCheckingAxis.VerifyDirectionAsync));
+
+        verify.Should().NotBeNull();
+        verify!.ReturnType.Should().Be<Task>();
+
+        typeof(IMotionAxis).IsAssignableFrom(typeof(ISelfCheckingAxis)).Should().BeFalse(
+            "the capability must not drag the whole axis contract in with it");
+        typeof(IMotionAxis).GetMethod(nameof(ISelfCheckingAxis.VerifyDirectionAsync)).Should().BeNull(
+            "an axis that cannot self-check must not be forced to declare that it can");
+    }
+
+    [Fact]
     public void UnitFreeBase_DeclaresNoSpeedOrPositionMember()
     {
         // FR-2: speed bounds and typed reads live on the LEAVES. If a unit-bearing member ever
