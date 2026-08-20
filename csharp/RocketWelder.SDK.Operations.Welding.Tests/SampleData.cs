@@ -44,7 +44,7 @@ internal static class SampleData
             },
             Resolver: new SegmentResolver(ResolverMode.Metrology, "E7",
                 new Tracking(TrackingMode.Tast, GapFill: true)),
-            ExternalAxis: new ExternalAxis(JointId: 1, AngleDeg: 30.0));
+            ExternalAxis: new ExternalAxis(Device: "positioner", Axis: "tilt", AngleDeg: 30.0));
 
         var s1 = new Segment(
             Id: "s1",

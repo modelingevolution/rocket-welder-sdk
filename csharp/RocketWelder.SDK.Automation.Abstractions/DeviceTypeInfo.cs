@@ -40,6 +40,20 @@ public record DeviceTypeInfo(
     Type? DetailView = null,
     Type? ParameterEditorView = null) : IComparable<DeviceTypeInfo>
 {
+    /// <summary>
+    /// The device type's <b>axis roster</b> (epic-065 FR-8): which axes a motion device has, what
+    /// kind each is, and the per-installation values the Add-device dialog collects per axis.
+    /// Empty for every device type that is not a motion device.
+    ///
+    /// <para>
+    /// Declared as an init-only member rather than a positional parameter so that adding it is
+    /// purely additive — every existing plugin's <c>new DeviceTypeInfo(…)</c> call keeps compiling
+    /// unchanged. A motion plugin sets it in the object initializer:
+    /// <c>new DeviceTypeInfo(…) { Axes = [new AxisDeclaration("tilt", AxisKind.Rotary, […])] }</c>.
+    /// </para>
+    /// </summary>
+    public AxisDeclaration[] Axes { get; init; } = [];
+
     /// <inheritdoc/>
     public int CompareTo(DeviceTypeInfo? other)
     {

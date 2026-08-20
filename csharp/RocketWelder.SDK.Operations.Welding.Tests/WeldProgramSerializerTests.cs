@@ -113,6 +113,28 @@ public class WeldProgramSerializerTests
     }
 
     [Fact]
+    public void Serialize_ExternalAxis_WritesDeviceAxisAngleInThatOrder()
+    {
+        // epic-065 FR-9: the setpoint identifies its axis by NAME on both halves — the cell role
+        // ("positioner") and the plugin-frozen axis name ("tilt") — never by a numeric joint id.
+        var text = Encoding.UTF8.GetString(WeldProgramSerializer.SerializeToUtf8Bytes(SampleData.Program()));
+
+        text.Should().NotContain("jointId");
+
+        var start = text.IndexOf("\"externalAxis\"", StringComparison.Ordinal);
+        start.Should().BeGreaterThan(-1);
+        var block = text[start..(start + 200)];
+
+        var iDevice = block.IndexOf("\"device\": \"positioner\"", StringComparison.Ordinal);
+        var iAxis = block.IndexOf("\"axis\": \"tilt\"", StringComparison.Ordinal);
+        var iAngle = block.IndexOf("\"angleDeg\"", StringComparison.Ordinal);
+
+        iDevice.Should().BeGreaterThan(-1);
+        iDevice.Should().BeLessThan(iAxis);
+        iAxis.Should().BeLessThan(iAngle);
+    }
+
+    [Fact]
     public void Serialize_PassKeysInFixedSchemaOrder()
     {
         var text = Encoding.UTF8.GetString(WeldProgramSerializer.SerializeToUtf8Bytes(SampleData.Program()));

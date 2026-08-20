@@ -173,9 +173,28 @@ public sealed record Tracking(
 
 /// <summary>
 /// Optional positioner / external-axis setpoint (per <c>data-model.md</c> §2 <c>segment.externalAxis</c>, D17).
+///
+/// <para>
+/// A weld-program <b>setpoint</b>, not an API call (epic-065 FR-9): the executor positions the named
+/// axis and waits for standstill before the arc strikes — indexed motion, the positioner is
+/// stationary while welding. Identity is by <b>name on both halves</b>, so the declarative weld
+/// program and the procedural automation program meet only at frozen identifiers.
+/// </para>
+///
+/// <para>
+/// <b>Flagged, not solved here:</b> <paramref name="AngleDeg"/> is rotary-only. The day a linear
+/// track joins weld programs, the setpoint needs a unit story consistent with the SDK's typed
+/// motion contract.
+/// </para>
 /// </summary>
-/// <param name="JointId">The positioner joint id.</param>
-/// <param name="AngleDeg">The joint setpoint angle in degrees.</param>
+/// <param name="Device">The <b>cell-role</b> identifier of the motion device — <c>"positioner"</c>,
+/// <c>"track"</c> — fixed per cell standard and resolved through the motion contract's kind handles.
+/// Never the vendor discriminator, so a vendor swap that redeclares the same axis names does not
+/// break stored programs.</param>
+/// <param name="Axis">The plugin-frozen axis name (<c>"tilt"</c>, <c>"turntable"</c>) declared by
+/// the device plugin's axis roster.</param>
+/// <param name="AngleDeg">The axis setpoint angle in degrees.</param>
 public sealed record ExternalAxis(
-    int JointId,
+    string Device,
+    string Axis,
     double AngleDeg);
