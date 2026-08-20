@@ -1,0 +1,75 @@
+name: Tests
+
+# Runs the C# test suites on every push and pull request that touches csharp/.
+#
+# WHY THIS EXISTS: every other workflow in this directory is restore -> build -> pack -> push.
+# Nothing ran `dotnet test`, so acceptance criteria worded "green in CI" (epic-065 AC-21's
+# negative-compilation suite and AC-26's transport-dependency check) had no CI to be green in.
+
+on:
+  push:
+    paths:
+      - 'csharp/**'
+      - '.github/workflows/test.yml'
+  pull_request:
+    paths:
+      - 'csharp/**'
+      - '.github/workflows/test.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  csharp:
+    name: C# tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        # Same version the publish workflows pin.
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        working-directory: ./csharp
+        run: dotnet restore RocketWelder.SDK.sln
+
+      - name: Build
+        working-directory: ./csharp
+        run: dotnet build RocketWelder.SDK.sln --configuration Release --no-restore
+
+      - name: Test
+        working-directory: ./csharp
+        # An EXPLICIT project list, not the whole solution, so this job is green from day one — a
+        # CI job that is red on arrival teaches people to ignore it. Every project below has been
+        # run and observed passing; add to this list as the others are verified, and treat a new
+        # test project's absence here as a bug.
+        #
+        # Deliberately NOT run yet, and why:
+        #   RocketWelder.SDK.Tests, RocketWelder.SDK.Server.Tests
+        #       ZeroBuffer / shared-memory IPC suites. They need native infrastructure and block
+        #       indefinitely on this developer's machine; nobody has confirmed what they need on a
+        #       hosted runner. Running them here would hang the job, not fail it.
+        #   RocketWelder.SDK.AdaptivePoints.Tests, RocketWelder.SDK.Devices.Robot.Tests,
+        #   RocketWelder.SDK.Robotics.Core.Tests
+        #       Not yet observed producing a result locally (they exit without a summary on a box
+        #       whose NuGet state was disturbed by the org-feed outage — see
+        #       RocketWelder.SDK.Devices.Motion/dev-log.md). They restore and build cleanly on the
+        #       runner, so these are candidates to promote once someone confirms them green.
+        run: |
+          set -euo pipefail
+          projects=(
+            RocketWelder.SDK.Devices.Motion.Tests      # epic-065 AC-21 + AC-26
+            RocketWelder.SDK.Automation.Tests
+            RocketWelder.SDK.Operations.Welding.Tests
+            RocketWelder.SDK.Types.Tests
+          )
+          for p in "${projects[@]}"; do
+            echo "::group::$p"
+            dotnet test "$p/$p.csproj" --configuration Release --no-build --nologo
+            echo "::endgroup::"
+          done
