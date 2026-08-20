@@ -74,8 +74,10 @@ public class ContractSurfaceTests
     }
 
     [Fact]
-    public void MotionError_HasAllThirteenDeclaredReasons()
+    public void MotionError_HasExactlyTheTwelveDeclaredReasons()
     {
+        // Twelve, not thirteen: architecture.md's enum block lists twelve members. Pinning the
+        // real count here rather than a remembered one is the point of the test.
         Enum.GetNames<MotionError>().Should().Equal(
             "Busy", "NotHomed", "OutOfRange", "UnreachableSpeed", "UnsupportedSense",
             "LimitTripped", "DriveFault", "CommunicationLost", "WatchdogTripped",
