@@ -16,7 +16,8 @@
   </PropertyGroup>
 
   <!-- NFR-4 / AC-26: no transport dependency. Adding a fieldbus package here is a contract
-       regression; MotionContractTests.Contract_HasNoTransportDependency fails the build if it happens. -->
+       regression; RocketWelder.SDK.Devices.Motion.Tests/TransportDependencyTests fails the Tests
+       workflow (.github/workflows/test.yml) if it happens. -->
   <ItemGroup>
     <PackageReference Include="ModelingEvolution.Drawing" Version="1.13.0.71" />
   </ItemGroup>

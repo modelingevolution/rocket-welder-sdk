@@ -64,6 +64,60 @@ public class AxisRosterTests
     }
 
     [Fact]
+    public void MotionDeviceTypeInfo_ConstructorMirrorsTheBaseConstructorExactly()
+    {
+        // MotionDeviceTypeInfo re-declares DeviceTypeInfo's whole parameter list in order to
+        // forward it. That duplication is invisible to the compiler: adding a 10th parameter to
+        // DeviceTypeInfo would leave this subclass silently NOT forwarding it, and every motion
+        // plugin would quietly lose the new field. Pin the parity so that becomes a failed test.
+        var baseCtor = LongestConstructorOf(typeof(DeviceTypeInfo));
+        var derivedCtor = LongestConstructorOf(typeof(MotionDeviceTypeInfo));
+
+        Signature(derivedCtor).Should().Equal(Signature(baseCtor),
+            "MotionDeviceTypeInfo must forward DeviceTypeInfo's constructor parameter-for-parameter, "
+            + "in the same order and with the same optionality");
+
+        static System.Reflection.ConstructorInfo LongestConstructorOf(Type t) =>
+            t.GetConstructors().MaxBy(c => c.GetParameters().Length)!;
+
+        static (string Type, string Name, bool Optional)[] Signature(System.Reflection.ConstructorInfo c) =>
+            c.GetParameters()
+             .Select(p => (Type: p.ParameterType.ToString(), p.Name!, p.IsOptional))
+             .ToArray();
+    }
+
+    [Fact]
+    public void MotionDeviceTypeInfo_ForwardsEveryBaseValue()
+    {
+        // Parity of the signature is not parity of the forwarding — the arguments could be passed
+        // in the wrong order and still typecheck where types repeat (DetailView and
+        // ParameterEditorView are both Type?). Check the values actually land.
+        var detail = typeof(string);
+        var editor = typeof(int);
+        var schemas = new[] { new ConfigPropertySchema("Ip", "Drive IP", "ip", Required: true) };
+
+        var info = new MotionDeviceTypeInfo(
+            DeviceType: "delta-positioner-2r",
+            InterfaceType: nameof(IPositioner),
+            DisplayName: "Delta 2-axis positioner",
+            InterfaceClrType: typeof(IPositioner),
+            PropertySchemas: schemas,
+            Factory: (_, _) => new object(),
+            GetSignals: null,
+            DetailView: detail,
+            ParameterEditorView: editor);
+
+        info.DeviceType.Should().Be("delta-positioner-2r");
+        info.InterfaceType.Should().Be(nameof(IPositioner));
+        info.DisplayName.Should().Be("Delta 2-axis positioner");
+        info.InterfaceClrType.Should().Be(typeof(IPositioner));
+        info.PropertySchemas.Should().BeSameAs(schemas);
+        info.Factory.Should().NotBeNull();
+        info.DetailView.Should().Be(detail);
+        info.ParameterEditorView.Should().Be(editor, "DetailView and ParameterEditorView must not be swapped");
+    }
+
+    [Fact]
     public void MotionDeviceTypeInfo_WithoutAxes_HasAnEmptyRoster()
     {
         Positioner().Axes.Should().NotBeNull().And.BeEmpty();

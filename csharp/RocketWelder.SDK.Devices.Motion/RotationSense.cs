@@ -5,7 +5,8 @@ namespace RocketWelder.SDK.Devices.Motion;
 /// to that target exist, i.e. on an axis declaring
 /// <see cref="AxisCapabilities.ContinuousRotation"/>; on any other axis a value other than
 /// <see cref="Shortest"/> is <b>rejected</b> with <see cref="MotionError.UnsupportedSense"/> —
-/// never silently ignored (FR-2).
+/// never silently ignored — FR-5's philosophy: a value the axis cannot honour is rejected, never
+/// quietly reinterpreted.
 ///
 /// <para>
 /// This is a shortest-path <i>hint</i> on <c>MoveAbsoluteAsync</c>, not a direction: the deleted

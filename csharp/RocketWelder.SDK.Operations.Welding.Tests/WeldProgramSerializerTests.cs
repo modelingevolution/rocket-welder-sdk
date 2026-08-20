@@ -48,6 +48,15 @@ public class WeldProgramSerializerTests
         var reserialized = WeldProgramSerializer.SerializeToUtf8Bytes(program);
 
         reserialized.Should().Equal(original);
+
+        // The fixture carries a NON-NULL externalAxis on purpose (epic-065 FR-9): with every
+        // setpoint null, this round-trip would never exercise device/axis/angleDeg at all and the
+        // schema change would be invisible to the strongest test in the suite. Asserted rather
+        // than assumed so nobody nulls it out and silently loses the coverage.
+        program.Segments[0].ExternalAxis.Should().NotBeNull();
+        program.Segments[0].ExternalAxis!.Device.Should().Be("positioner");
+        program.Segments[0].ExternalAxis.Axis.Should().Be("tilt");
+        program.Segments[0].ExternalAxis.AngleDeg.Should().Be(30.5);
     }
 
     [Fact]

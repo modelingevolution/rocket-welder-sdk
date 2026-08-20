@@ -174,3 +174,25 @@ dependency, transport or not.
 - No `<Version>` is committed in any csproj — CI injects it from the tag (see
   `Directory.Build.props`).
 - Build with `dotnet.exe` from WSL.
+- Tests run in CI via `.github/workflows/test.yml` (added with this iteration — every other
+  workflow was restore/build/pack/push, so nothing ran `dotnet test` and AC-21/AC-26 had no CI to
+  be green in).
+
+### NuGet feed outage during this work (2026-08-20)
+
+**Failure mode.** `https://nuget.modelingevolution.com` answered `HTTP 200` from WSL and refused
+the connection from Windows (`curl` exit 7, 5/5 probes) from roughly 16:30 onward — having served
+`ModelingEvolution.Drawing 1.13.0.71` to the same `dotnet.exe` at 16:22. Only Windows was affected;
+the hosted runner restores the whole solution cleanly, so this never reached CI.
+
+**Who it breaks.** Only projects with **floating** package versions, because a floating range forces
+a live feed query where a pinned version is satisfied from the global cache:
+`RocketWelder.SDK.Robotics.Core` (`System.Reactive 6.*`), `Robotics.Core.Tests`,
+`AdaptivePoints.Tests` and `Devices.Robot.Tests` (`NSubstitute 5.*`) — all `NU1301`, none related
+to this branch.
+
+**Workaround.** Restore those projects from nuget.org alone
+(`dotnet.exe restore <proj> -s https://api.nuget.org/v3/index.json`), then build the solution with
+`--no-restore`. Side effect worth knowing: it leaves those three test projects in a state where
+`dotnet test` exits without producing a summary, which is why `.github/workflows/test.yml` does not
+yet list them.

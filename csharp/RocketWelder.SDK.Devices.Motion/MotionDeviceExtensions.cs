@@ -22,7 +22,15 @@ public static class MotionDeviceExtensions
     public static IRotaryAxis Rotary(this IMotionDevice d, string name)
     {
         ArgumentNullException.ThrowIfNull(d);
-        return d[name] as IRotaryAxis
+
+        // Bind first, THEN narrow. Folding the two into one `as` would report a null from a
+        // sloppy indexer as WrongAxisKind — a misleading answer that sends the caller looking at
+        // the axis's declared kind instead of at the name that never bound.
+        var axis = d[name]
+                   ?? throw new MotionException(MotionError.UnknownAxis,
+                       $"Device '{d.Id}' has no axis named '{name}'.", name);
+
+        return axis as IRotaryAxis
                ?? throw new MotionException(MotionError.WrongAxisKind,
                    $"Axis '{name}' on device '{d.Id}' is not a rotary axis.", name);
     }
@@ -36,7 +44,15 @@ public static class MotionDeviceExtensions
     public static ILinearAxis Linear(this IMotionDevice d, string name)
     {
         ArgumentNullException.ThrowIfNull(d);
-        return d[name] as ILinearAxis
+
+        // Bind first, THEN narrow. Folding the two into one `as` would report a null from a
+        // sloppy indexer as WrongAxisKind — a misleading answer that sends the caller looking at
+        // the axis's declared kind instead of at the name that never bound.
+        var axis = d[name]
+                   ?? throw new MotionException(MotionError.UnknownAxis,
+                       $"Device '{d.Id}' has no axis named '{name}'.", name);
+
+        return axis as ILinearAxis
                ?? throw new MotionException(MotionError.WrongAxisKind,
                    $"Axis '{name}' on device '{d.Id}' is not a linear axis.", name);
     }
