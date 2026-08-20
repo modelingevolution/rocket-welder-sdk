@@ -48,6 +48,15 @@ public class WeldProgramSerializerTests
         var reserialized = WeldProgramSerializer.SerializeToUtf8Bytes(program);
 
         reserialized.Should().Equal(original);
+
+        // The fixture carries a NON-NULL externalAxis on purpose (epic-065 FR-9): with every
+        // setpoint null, this round-trip would never exercise device/axis/angleDeg at all and the
+        // schema change would be invisible to the strongest test in the suite. Asserted rather
+        // than assumed so nobody nulls it out and silently loses the coverage.
+        program.Segments[0].ExternalAxis.Should().NotBeNull();
+        program.Segments[0].ExternalAxis!.Device.Should().Be("positioner");
+        program.Segments[0].ExternalAxis.Axis.Should().Be("tilt");
+        program.Segments[0].ExternalAxis.AngleDeg.Should().Be(30.5);
     }
 
     [Fact]
@@ -110,6 +119,28 @@ public class WeldProgramSerializerTests
             idx.Should().BeGreaterThan(prev, $"'{key}' must follow the previous key in §2 order");
             prev = idx;
         }
+    }
+
+    [Fact]
+    public void Serialize_ExternalAxis_WritesDeviceAxisAngleInThatOrder()
+    {
+        // epic-065 FR-9: the setpoint identifies its axis by NAME on both halves — the cell role
+        // ("positioner") and the plugin-frozen axis name ("tilt") — never by a numeric joint id.
+        var text = Encoding.UTF8.GetString(WeldProgramSerializer.SerializeToUtf8Bytes(SampleData.Program()));
+
+        text.Should().NotContain("jointId");
+
+        var start = text.IndexOf("\"externalAxis\"", StringComparison.Ordinal);
+        start.Should().BeGreaterThan(-1);
+        var block = text[start..(start + 200)];
+
+        var iDevice = block.IndexOf("\"device\": \"positioner\"", StringComparison.Ordinal);
+        var iAxis = block.IndexOf("\"axis\": \"tilt\"", StringComparison.Ordinal);
+        var iAngle = block.IndexOf("\"angleDeg\"", StringComparison.Ordinal);
+
+        iDevice.Should().BeGreaterThan(-1);
+        iDevice.Should().BeLessThan(iAxis);
+        iAxis.Should().BeLessThan(iAngle);
     }
 
     [Fact]

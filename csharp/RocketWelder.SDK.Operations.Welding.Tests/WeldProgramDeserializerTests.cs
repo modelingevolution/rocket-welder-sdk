@@ -81,7 +81,8 @@ public class WeldProgramDeserializerTests
         s0.Resolver.Tracking!.Mode.Should().Be(TrackingMode.Tast);
         s0.Resolver.Tracking.GapFill.Should().BeTrue();
 
-        s0.ExternalAxis!.JointId.Should().Be(1);
+        s0.ExternalAxis!.Device.Should().Be("positioner");
+        s0.ExternalAxis.Axis.Should().Be("tilt");
         s0.ExternalAxis.AngleDeg.Should().Be(30.0);
     }
 

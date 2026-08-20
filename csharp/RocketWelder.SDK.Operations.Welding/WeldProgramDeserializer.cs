@@ -194,7 +194,8 @@ public static class WeldProgramDeserializer
         if (el.ValueKind == JsonValueKind.Null)
             return null;
         return new ExternalAxis(
-            JointId: el.GetProperty("jointId").GetInt32(),
+            Device: el.GetProperty("device").GetString()!,
+            Axis: el.GetProperty("axis").GetString()!,
             AngleDeg: el.GetProperty("angleDeg").GetDouble());
     }
 

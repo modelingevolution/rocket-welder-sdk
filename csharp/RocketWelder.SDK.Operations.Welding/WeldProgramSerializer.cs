@@ -159,7 +159,8 @@ public static class WeldProgramSerializer
         else
         {
             w.WriteStartObject();
-            w.WriteNumber("jointId", s.ExternalAxis.JointId);
+            w.WriteString("device", s.ExternalAxis.Device);
+            w.WriteString("axis", s.ExternalAxis.Axis);
             WriteFloatProperty(w, "angleDeg", s.ExternalAxis.AngleDeg);
             w.WriteEndObject();
         }

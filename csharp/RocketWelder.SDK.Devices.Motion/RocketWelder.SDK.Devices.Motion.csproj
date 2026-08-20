@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageId>RocketWelder.SDK.Devices.Motion</PackageId>
+    <Authors>ModelingEvolution</Authors>
+    <Company>ModelingEvolution</Company>
+    <Description>Vendor-neutral motion-axis contract for the RocketWelder SDK (IMotionAxis, IRotaryAxis, ILinearAxis, IMotionDevice, IPositioner, ILinearTrack). Transport-free by design — a program using this contract never drags in a fieldbus library.</Description>
+    <PackageTags>rocketwelder;devices;motion;positioner;axis;sdk</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
+  </PropertyGroup>
+
+  <!-- NFR-4 / AC-26: no transport dependency. Adding a fieldbus package here is a contract
+       regression; RocketWelder.SDK.Devices.Motion.Tests/TransportDependencyTests fails the Tests
+       workflow (.github/workflows/test.yml) if it happens. -->
+  <ItemGroup>
+    <PackageReference Include="ModelingEvolution.Drawing" Version="1.13.0.71" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RocketWelder.SDK.Abstractions\RocketWelder.SDK.Abstractions.csproj" />
+    <!-- For ConfigPropertySchema / DeviceTypeInfo, which MotionDeviceTypeInfo extends. One-way:
+         Automation.Abstractions never references this package, so no plugin that is not a motion
+         plugin acquires a motion dependency. -->
+    <ProjectReference Include="..\RocketWelder.SDK.Automation.Abstractions\RocketWelder.SDK.Automation.Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>
