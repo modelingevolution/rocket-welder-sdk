@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageId>RocketWelder.SDK.Devices.Positioner.Delta.Plugin</PackageId>
+    <Authors>ModelingEvolution</Authors>
+    <Company>ModelingEvolution</Company>
+    <Description>Host plugin that registers the Delta VFD-C2000 welding positioner as a peripheral device type.</Description>
+    <PackageTags>rocketwelder;plugin;positioner;delta;sdk</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RocketWelder.SDK.Automation.Abstractions\RocketWelder.SDK.Automation.Abstractions.csproj" />
+    <ProjectReference Include="..\RocketWelder.SDK.Devices.Positioner.Delta\RocketWelder.SDK.Devices.Positioner.Delta.csproj" />
+  </ItemGroup>
+
+</Project>
