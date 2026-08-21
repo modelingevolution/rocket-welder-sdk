@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Time.Testing;
+
 namespace RocketWelder.SDK.Devices.Motion.Delta.Tests;
 
 /// <summary>
@@ -147,21 +149,5 @@ public class PriorityGateTests
 
         task.IsCompleted.Should().BeTrue();
         (await task).Dispose();
-    }
-}
-
-/// <summary>A clock the test moves by hand, so lane ordering is asserted rather than raced.</summary>
-internal sealed class FakeTimeProvider : TimeProvider
-{
-    private DateTimeOffset _now = new(2026, 8, 21, 12, 0, 0, TimeSpan.Zero);
-
-    public override DateTimeOffset GetUtcNow()
-    {
-        lock (this) return _now;
-    }
-
-    public void Advance(TimeSpan by)
-    {
-        lock (this) _now += by;
     }
 }

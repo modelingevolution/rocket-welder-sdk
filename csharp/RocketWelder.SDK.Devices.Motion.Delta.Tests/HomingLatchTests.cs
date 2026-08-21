@@ -77,7 +77,7 @@ public class HomingLatchTests
         using var bed = AxisTestBed.Build(DeltaPositionerDefaults.Turntable, drive =>
         {
             drive.PositionCounts = PowerUpCounts;
-            ScriptTheCam(drive, latchFires: false);
+            AxisTestBed.ScriptTheCam(drive, latchFires: false);
         });
 
         await bed.Axis.PowerAsync(true);
@@ -94,7 +94,7 @@ public class HomingLatchTests
         var bed = AxisTestBed.Build(DeltaPositionerDefaults.Turntable, drive =>
         {
             drive.PositionCounts = PowerUpCounts;
-            ScriptTheCam(drive, latchFires: true);
+            AxisTestBed.ScriptTheCam(drive, latchFires: true);
         });
 
         await bed.Axis.PowerAsync(true);
@@ -102,28 +102,4 @@ public class HomingLatchTests
         return bed;
     }
 
-    /// <summary>
-    /// The cam, as this test decides it behaves: off, on, off, on again as the homing sequence walks
-    /// past it — one value per input read. When <paramref name="latchFires"/>, the ladder's two
-    /// instructions run in their real order on the falling edge while <c>M6</c> is armed.
-    /// </summary>
-    private static void ScriptTheCam(FakeDrive drive, bool latchFires)
-    {
-        const int homeSensor = 7;
-        var script = new Queue<bool>([true, false, true, false]);
-        var alreadyLatched = false;
-
-        drive.ShapeInputs = d =>
-        {
-            if (script.Count > 0) d.Inputs[homeSensor] = script.Dequeue();
-
-            if (alreadyLatched || d.Inputs[homeSensor]) return;
-            if (!d.ReadCoil(DeltaRegisters.PlcUnit, DeltaRegisters.M6_ArmLatch)) return;
-            if (!latchFires) return;
-
-            alreadyLatched = true;
-            d.LatchDelta = d.PositionCounts - d.HomeLatch;   // DSUB — against the OLD D120
-            d.HomeLatch = d.PositionCounts;                  // DMOV — only now is it replaced
-        };
-    }
 }

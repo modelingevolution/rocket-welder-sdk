@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 
 namespace RocketWelder.SDK.Devices.Motion.Delta;
 
@@ -15,10 +16,18 @@ public sealed class JsonAxisStateStore : IAxisStateStore
 {
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = true };
     private readonly string _path;
+    private readonly ILogger? _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     /// <summary>Creates a store backed by <paramref name="path"/>.</summary>
-    public JsonAxisStateStore(string path) => _path = path;
+    /// <param name="path">The JSON file holding every axis's persisted state.</param>
+    /// <param name="logger">Optional logger. Worth supplying: losing this file is how an axis
+    /// silently forgets where zero is, and the log is the only account of it having happened.</param>
+    public JsonAxisStateStore(string path, ILogger? logger = null)
+    {
+        _path = path;
+        _logger = logger;
+    }
 
     /// <inheritdoc/>
     public async Task<AxisPersistedState?> LoadAsync(string axis, CancellationToken ct = default)
@@ -58,18 +67,31 @@ public sealed class JsonAxisStateStore : IAxisStateStore
 
     private async Task<Dictionary<string, AxisPersistedState>> ReadAllAsync(CancellationToken ct)
     {
-        if (!File.Exists(_path)) return new Dictionary<string, AxisPersistedState>(StringComparer.OrdinalIgnoreCase);
+        if (!File.Exists(_path)) return Empty();
         try
         {
             var text = await File.ReadAllTextAsync(_path, ct);
-            return JsonSerializer.Deserialize<Dictionary<string, AxisPersistedState>>(text, Json)
-                   ?? new Dictionary<string, AxisPersistedState>(StringComparer.OrdinalIgnoreCase);
+            var parsed = JsonSerializer.Deserialize<Dictionary<string, AxisPersistedState>>(text, Json);
+
+            // Re-key through the case-insensitive comparer. Deserialisation always builds an
+            // ORDINAL dictionary regardless of what it is assigned to, so a file written as
+            // "Turntable" would stop answering to "turntable" — a silent unhomed axis.
+            return parsed is null ? Empty() : new Dictionary<string, AxisPersistedState>(parsed,
+                StringComparer.OrdinalIgnoreCase);
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
             // A corrupt file means the zero is unknown; starting from empty forces a re-home, which
-            // is the safe reading of "we do not know where zero is".
-            return new Dictionary<string, AxisPersistedState>(StringComparer.OrdinalIgnoreCase);
+            // is the safe reading of "we do not know where zero is". LOUDLY, though: an axis that
+            // silently forgets zero will drive confidently to a wrong absolute angle, and this is
+            // the only moment anyone can be told it happened.
+            _logger?.LogError(ex,
+                "Axis state file {Path} could not be parsed. Every stored zero is being treated as "
+                + "lost, so each axis will refuse absolute moves until it is re-homed", _path);
+            return Empty();
         }
     }
+
+    private static Dictionary<string, AxisPersistedState> Empty() =>
+        new(StringComparer.OrdinalIgnoreCase);
 }

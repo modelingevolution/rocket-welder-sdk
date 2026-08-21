@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Time.Testing;
 
 namespace RocketWelder.SDK.Devices.Motion.Delta.Tests;
 
@@ -264,18 +265,51 @@ public class HeartbeatTests
     [Fact]
     public async Task TheRunningTimerBeatsAtLeastFiveTimesASecond()
     {
-        // FR-11 decision D-f: >= 5 Hz against a 1 s stall window, which is four missed beats of
-        // slack. Asserted as a floor over a real second, not as a promise about any single tick.
+        // FR-11 decision D-f: >= 5 Hz against a 1 s stall window, which leaves four missed beats of
+        // slack. Driven by the injected clock rather than by wall time — a sleep-and-count version
+        // asserts the build agent's scheduling as much as the adapter's, and fails for reasons that
+        // have nothing to do with the beat rate.
+        var clock = new FakeTimeProvider();
         var drive = new FakeDrive();
-        await using var heartbeat = Build(drive);
+        await using var heartbeat = new DeltaHeartbeat("turntable", drive, 7, Interval, Expiry,
+            NullLogger.Instance, clock);
         await heartbeat.TryAcquireAsync(CancellationToken.None);
 
         heartbeat.Start();
-        await Task.Delay(TimeSpan.FromSeconds(1.2));
-        await heartbeat.StopAsync();
+        for (var i = 0; i < 5; i++)
+        {
+            clock.Advance(Interval);
+            await WaitForBeatsAsync(drive, i + 1);
+        }
 
-        var beats = drive.Ops.Count(o => o.IsWrite && o.Address == DeltaRegisters.D130_Heartbeat);
-        beats.Should().BeGreaterThanOrEqualTo(5);
+        Beats(drive).Should().BeGreaterThanOrEqualTo(5,
+            "one second of stall window must contain at least five beats");
+        await heartbeat.StopAsync();
+    }
+
+    [Fact]
+    public async Task TheConfiguredIntervalIsFastEnoughForTheStallWindow()
+    {
+        // The arithmetic behind D-f, pinned so a future "let's beat less often" edit has to argue
+        // with it: the default interval must leave at least four missed beats inside the window.
+        var cfg = DeltaPositionerDefaults.Turntable;
+
+        (cfg.WatchdogStallWindow / cfg.HeartbeatInterval).Should().BeGreaterThanOrEqualTo(5);
+    }
+
+    private static int Beats(FakeDrive drive) =>
+        drive.Ops.Count(o => o.IsWrite && o.Address == DeltaRegisters.D130_Heartbeat);
+
+    /// <summary>
+    /// The timer callback runs on the threadpool, so advancing the clock schedules a beat rather
+    /// than performing one. Waiting for the count is what makes this deterministic instead of
+    /// merely usually-right.
+    /// </summary>
+    private static async Task WaitForBeatsAsync(FakeDrive drive, int expected)
+    {
+        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+        while (Beats(drive) < expected && DateTime.UtcNow < deadline) await Task.Delay(5);
+        Beats(drive).Should().BeGreaterThanOrEqualTo(expected);
     }
 
     /// <summary>
@@ -295,7 +329,7 @@ public class HeartbeatTests
 
         public Task ConnectAsync(CancellationToken ct) => inner.ConnectAsync(ct);
 
-        public void Disconnect() => inner.Disconnect();
+        public Task DisconnectAsync(CancellationToken ct = default) => inner.DisconnectAsync(ct);
 
         public Task<ushort[]> ReadHoldingAsync(byte unit, ushort address, ushort count, string what,
             ChannelPriority priority = ChannelPriority.Move, CancellationToken ct = default)

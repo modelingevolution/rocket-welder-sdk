@@ -67,11 +67,10 @@ internal sealed class ModbusChannel : IModbusChannel
     }
 
     /// <inheritdoc/>
-    public void Disconnect()
+    public async Task DisconnectAsync(CancellationToken ct = default)
     {
         // Stop lane: disconnect is part of the shutdown path that must not queue behind a move.
-        using var _ = _gate.AcquireAsync(ChannelPriority.Stop, CancellationToken.None)
-            .AsTask().GetAwaiter().GetResult();
+        using var _ = await _gate.AcquireAsync(ChannelPriority.Stop, ct);
         try
         {
             if (_client.IsConnected) _client.Disconnect();

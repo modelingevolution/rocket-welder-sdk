@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 namespace RocketWelder.SDK.Devices.Motion.Delta;
 
 /// <summary>
@@ -34,23 +36,28 @@ public interface IAxisStateStore
 /// <param name="SpeedDegPerSecond">Traverse speed last chosen, in the axis's own unit.</param>
 public sealed record AxisPersistedState(long ZeroOffset, bool Homed, double SpeedDegPerSecond);
 
-/// <summary>Keeps state in memory only — everything is lost on restart, so the axis must re-home.</summary>
+/// <summary>
+/// Keeps state in memory only — everything is lost on restart, so the axis must re-home.
+///
+/// <para>
+/// A positioner's axes home concurrently (<c>HomeAllAsync</c>), so this really is written from
+/// several threads at once. Backed by a concurrent collection rather than a lock around a plain
+/// dictionary, per the org's thread-safe-collection standard.
+/// </para>
+/// </summary>
 public sealed class InMemoryAxisStateStore : IAxisStateStore
 {
-    private readonly Dictionary<string, AxisPersistedState> _state = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ConcurrentDictionary<string, AxisPersistedState> _state =
+        new(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc/>
-    public Task<AxisPersistedState?> LoadAsync(string axis, CancellationToken ct = default)
-    {
-        lock (_state)
-            return Task.FromResult(_state.TryGetValue(axis, out var s) ? s : null);
-    }
+    public Task<AxisPersistedState?> LoadAsync(string axis, CancellationToken ct = default) =>
+        Task.FromResult(_state.TryGetValue(axis, out var s) ? s : null);
 
     /// <inheritdoc/>
     public Task SaveAsync(string axis, AxisPersistedState state, CancellationToken ct = default)
     {
-        lock (_state)
-            _state[axis] = state;
+        _state[axis] = state;
         return Task.CompletedTask;
     }
 }

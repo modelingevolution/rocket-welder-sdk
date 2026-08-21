@@ -210,4 +210,61 @@ public sealed record DeltaAxisConfig
     /// The speed calibration in force, falling back to the theoretical ratio when none was measured.
     /// </summary>
     public SpeedCalibration SpeedCalibration => Speed ?? new SpeedCalibration(TheoreticalDegPerSecondPerHz, 0.0);
+
+    /// <summary>
+    /// Checks that the frequencies are orderable and that every speed this axis will ever command
+    /// falls inside its own declared range.
+    ///
+    /// <para>
+    /// This exists because FR-5's promise — a speed outside the achievable range is <b>rejected,
+    /// never clamped</b> — cannot be kept by the command path alone. The default traverse speed and
+    /// the seek and nudge speeds never pass through the caller-facing check, so a configuration with
+    /// <c>MoveHz</c> below <c>MinJogHz</c> would have been silently raised to the floor deep inside
+    /// the jog. Catching it at construction turns a wrong machine into a startup failure that names
+    /// the field, instead of a machine that quietly runs at a speed nobody asked for.
+    /// </para>
+    /// </summary>
+    /// <exception cref="ArgumentException">Some frequency is out of order or non-positive.</exception>
+    public void Validate()
+    {
+        if (MinJogHz.Hertz <= 0)
+            throw Invalid($"{nameof(MinJogHz)} must be positive (is {MinJogHz.Hertz:0.###} Hz)");
+
+        if (MaxMoveHz < MinJogHz)
+            throw Invalid($"{nameof(MaxMoveHz)} ({MaxMoveHz.Hertz:0.###} Hz) is below "
+                + $"{nameof(MinJogHz)} ({MinJogHz.Hertz:0.###} Hz)");
+
+        if (MaxJogHz < MaxMoveHz)
+            throw Invalid($"{nameof(MaxJogHz)} ({MaxJogHz.Hertz:0.###} Hz) is below "
+                + $"{nameof(MaxMoveHz)} ({MaxMoveHz.Hertz:0.###} Hz), so the guard would reject "
+                + "speeds the axis advertises as reachable");
+
+        foreach (var (name, value) in new[]
+                 {
+                     (nameof(MoveHz), MoveHz), (nameof(SeekHz), SeekHz), (nameof(NudgeHz), NudgeHz),
+                 })
+        {
+            if (value < MinJogHz || value > MaxMoveHz)
+                throw Invalid($"{name} ({value.Hertz:0.###} Hz) is outside "
+                    + $"{MinJogHz.Hertz:0.###}–{MaxMoveHz.Hertz:0.###} Hz, the range this axis "
+                    + "declares as reachable");
+        }
+
+        if (Max < Min)
+            throw Invalid($"{nameof(Max)} ({(double)Max:0.##}°) is below {nameof(Min)} ({(double)Min:0.##}°)");
+
+        if ((double)Tolerance <= 0)
+            throw Invalid($"{nameof(Tolerance)} must be positive (is {(double)Tolerance:0.###}°)");
+
+        if (CountsPerRevolution <= 0)
+            throw Invalid($"{nameof(CountsPerRevolution)} must be positive (is {CountsPerRevolution})");
+
+        if (SpeedCalibration.Slope <= 0)
+            throw Invalid($"the speed calibration's slope must be positive (is "
+                + $"{SpeedCalibration.Slope:0.####}); a non-positive slope makes every speed "
+                + "conversion meaningless");
+    }
+
+    private ArgumentException Invalid(string what) =>
+        new($"Axis '{Name}': {what}.", nameof(DeltaAxisConfig));
 }

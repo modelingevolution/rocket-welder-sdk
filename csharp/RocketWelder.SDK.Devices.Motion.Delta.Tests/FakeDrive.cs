@@ -157,7 +157,11 @@ internal sealed class FakeDrive : IModbusChannel
         return Task.CompletedTask;
     }
 
-    public void Disconnect() => IsConnected = false;
+    public Task DisconnectAsync(CancellationToken ct = default)
+    {
+        IsConnected = false;
+        return Task.CompletedTask;
+    }
 
     public Task<ushort[]> ReadHoldingAsync(byte unit, ushort address, ushort count, string what,
         ChannelPriority priority = ChannelPriority.Move, CancellationToken ct = default)

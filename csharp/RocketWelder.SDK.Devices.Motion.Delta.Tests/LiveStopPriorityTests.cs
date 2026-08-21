@@ -103,7 +103,7 @@ public class LiveStopPriorityTests
 
         public Task ConnectAsync(CancellationToken ct) => inner.ConnectAsync(ct);
 
-        public void Disconnect() => inner.Disconnect();
+        public Task DisconnectAsync(CancellationToken ct = default) => inner.DisconnectAsync(ct);
 
         public Task<ushort[]> ReadHoldingAsync(byte unit, ushort address, ushort count, string what,
             ChannelPriority priority = ChannelPriority.Move, CancellationToken ct = default) =>

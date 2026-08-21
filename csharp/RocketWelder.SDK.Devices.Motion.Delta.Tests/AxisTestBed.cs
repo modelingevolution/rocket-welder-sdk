@@ -68,6 +68,38 @@ internal sealed class AxisTestBed : IDisposable
     /// <summary>A typed angular speed in the axis's own unit.</summary>
     public static AngularSpeed<double, DegreePerSecond<double>> DegPerSecond(double value) => new(value);
 
+    /// <summary>
+    /// The home cam and the ladder behind it, as a <b>test</b> decides they behave: the cam reads
+    /// off, on, off, on again as the homing sequence walks past it — one value per input read — and
+    /// when <paramref name="latchFires"/>, the ladder's two instructions run in their real order on
+    /// the falling edge while <c>M6</c> is armed.
+    ///
+    /// <para>
+    /// Deliberately here rather than inside <see cref="FakeDrive"/>: the fake holds registers and
+    /// nothing else, so anything resembling machine behaviour stays visible to whoever reads the
+    /// test. <paramref name="latchFires"/> false is the ladder-is-missing case the homing sentinel
+    /// exists to detect.
+    /// </para>
+    /// </summary>
+    public static void ScriptTheCam(FakeDrive drive, bool latchFires = true, int homeSensor = 7)
+    {
+        var script = new Queue<bool>([true, false, true, false]);
+        var alreadyLatched = false;
+
+        drive.ShapeInputs = d =>
+        {
+            if (script.Count > 0) d.Inputs[homeSensor] = script.Dequeue();
+
+            if (alreadyLatched || d.Inputs[homeSensor]) return;
+            if (!d.ReadCoil(DeltaRegisters.PlcUnit, DeltaRegisters.M6_ArmLatch)) return;
+            if (!latchFires) return;
+
+            alreadyLatched = true;
+            d.LatchDelta = d.PositionCounts - d.HomeLatch;   // DSUB — against the OLD D120
+            d.HomeLatch = d.PositionCounts;                  // DMOV — only now is it replaced
+        };
+    }
+
     public void Dispose()
     {
         Axis.Dispose();

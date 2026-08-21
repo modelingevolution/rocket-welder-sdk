@@ -25,8 +25,12 @@ internal interface IModbusChannel : IDisposable
     /// <summary>Opens the session.</summary>
     Task ConnectAsync(CancellationToken ct);
 
-    /// <summary>Closes the session without disposing it.</summary>
-    void Disconnect();
+    /// <summary>
+    /// Closes the session without disposing it. Asynchronous because it takes the channel's stop
+    /// lane like any other traffic — blocking on that from a synchronous method deadlocks the
+    /// caller's thread against the very queue it is waiting to drain.
+    /// </summary>
+    Task DisconnectAsync(CancellationToken ct = default);
 
     /// <summary>Reads holding registers.</summary>
     Task<ushort[]> ReadHoldingAsync(byte unit, ushort address, ushort count, string what,

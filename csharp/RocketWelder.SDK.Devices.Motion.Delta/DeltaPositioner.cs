@@ -1,3 +1,4 @@
+using System.Runtime.ExceptionServices;
 using Microsoft.Extensions.Logging;
 using RocketWelder.SDK.Abstractions;
 
@@ -21,7 +22,7 @@ namespace RocketWelder.SDK.Devices.Motion.Delta;
 /// foreign heartbeat refuses, names the owner it saw, and retries at 1 Hz until expiry (AC-12).
 /// </para>
 /// </summary>
-public sealed class DeltaPositioner : IPositioner
+public sealed class DeltaPositioner : IPositioner, IAsyncDisposable
 {
     private readonly Dictionary<string, DeltaAxis> _byName;
     private readonly List<IModbusChannel> _channels = [];
@@ -151,22 +152,35 @@ public sealed class DeltaPositioner : IPositioner
     }
 
     /// <summary>
-    /// Stops beating, releases the lease and closes every channel. A process that is <i>killed</i>
-    /// rather than disconnected cannot do this — which is exactly the case FR-11's drive-side
-    /// watchdog exists for.
+    /// Brings every axis to rest, stops beating, releases the lease and closes every channel — in
+    /// that order. A process that is <i>killed</i> rather than disconnected cannot do any of it,
+    /// which is exactly the case FR-11's drive-side watchdog exists for.
     /// </summary>
-    public async Task DisconnectAsync()
+    /// <remarks>
+    /// <b>The stop comes first, and that ordering is the point.</b> Releasing the lease and dropping
+    /// the beat on a still-moving positioner hands a turning machine to whatever attaches next, and
+    /// leaves the drive's watchdog to stop it a second later — a backstop doing a shutdown's job.
+    /// </remarks>
+    public async Task DisconnectAsync(CancellationToken ct = default)
     {
+        try
+        {
+            await StopAllAsync(ct);
+        }
+        catch (MotionException ex)
+        {
+            // A drive that cannot be reached cannot be stopped politely either. Say so and carry on
+            // tearing down — the watchdog is the backstop for exactly this.
+            _logger?.LogWarning(ex, "Positioner {Id}: could not stop every axis before disconnecting", Id);
+        }
+
         foreach (var heartbeat in _heartbeats) await heartbeat.StopAsync();
-        foreach (var channel in _channels) channel.Disconnect();
+        foreach (var channel in _channels) await channel.DisconnectAsync(ct);
 
         if (!_connected) return;
         _connected = false;
         Disconnected?.Invoke(this, EventArgs.Empty);
     }
-
-    /// <inheritdoc cref="DisconnectAsync"/>
-    public void Disconnect() => DisconnectAsync().GetAwaiter().GetResult();
 
     /// <inheritdoc/>
     public async Task HomeAllAsync(CancellationToken ct = default)
@@ -177,15 +191,27 @@ public sealed class DeltaPositioner : IPositioner
             .ToArray();
         if (homing.Length == 0) return;
 
-        // Wait for every axis before surfacing a failure: leaving the others running while one
-        // faults is how a positioner ends up in a state nobody commanded.
+        // Wait for EVERY axis before surfacing anything: leaving the others running while one fails
+        // is how a positioner ends up in a state nobody commanded.
         try
         {
             await Task.WhenAll(homing);
         }
         catch
         {
-            throw homing.First(t => t.IsFaulted).Exception!.InnerException!;
+            // A fault outranks a cancellation. If one axis genuinely failed while the others were
+            // merely cancelled, the fault is what the caller has to see — and if NOTHING faulted,
+            // every task was cancelled, which is not a failure to be re-shaped into one.
+            //
+            // Looking only for a faulted task was a real bug: RunOperationAsync rethrows
+            // OperationCanceledException, so a cancelled home completes CANCELED rather than
+            // Faulted, and First(...) then threw "Sequence contains no matching element" — an
+            // InvalidOperationException in place of the cancellation the caller asked for (AC-10).
+            var faulted = homing.FirstOrDefault(t => t.IsFaulted);
+            if (faulted is not null)
+                ExceptionDispatchInfo.Capture(faulted.Exception!.InnerException ?? faulted.Exception).Throw();
+
+            throw;
         }
     }
 
@@ -202,13 +228,48 @@ public sealed class DeltaPositioner : IPositioner
         return results;
     }
 
-    /// <inheritdoc/>
+    /// <summary>
+    /// Disconnects properly — axes stopped, lease released — and then tears everything down. This is
+    /// the disposal to prefer.
+    /// </summary>
+    public async ValueTask DisposeAsync()
+    {
+        if (_disposed) return;
+
+        try
+        {
+            await DisconnectAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "Positioner {Id}: disconnect failed during disposal", Id);
+        }
+
+        Teardown();
+    }
+
+    /// <summary>
+    /// Synchronous disposal, for the <see cref="IDevice"/> contract.
+    /// </summary>
+    /// <remarks>
+    /// <b>It does not touch the network</b>, and that is deliberate: releasing the lease and stopping
+    /// the axes are Modbus round-trips, and blocking a thread on a socket from inside
+    /// <c>Dispose</c> is how a shutdown path deadlocks. The beat is abandoned locally instead and the
+    /// lease is left to expire one stall window later — the case the drive-side watchdog exists to
+    /// bound. Prefer <see cref="DisposeAsync"/>, which does it properly.
+    /// </remarks>
     public void Dispose()
+    {
+        if (_disposed) return;
+        foreach (var heartbeat in _heartbeats) heartbeat.Abandon();
+        Teardown();
+    }
+
+    private void Teardown()
     {
         if (_disposed) return;
         _disposed = true;
 
-        foreach (var heartbeat in _heartbeats) heartbeat.DisposeAsync().AsTask().GetAwaiter().GetResult();
         foreach (var axis in Axes.Cast<DeltaAxis>()) axis.Dispose();
         foreach (var channel in _channels) channel.Dispose();
     }

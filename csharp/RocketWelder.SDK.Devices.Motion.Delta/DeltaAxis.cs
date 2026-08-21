@@ -78,6 +78,9 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
 
     internal DeltaAxis(DeltaAxisConfig cfg, IModbusChannel channel, IAxisStateStore store, ILogger? logger)
     {
+        ArgumentNullException.ThrowIfNull(cfg);
+        cfg.Validate();
+
         _cfg = cfg;
         _channel = channel;
         _store = store;
@@ -174,7 +177,26 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
                 _homed = saved.Homed;
             }
 
-            _moveHz = Frequency<double>.FromHertz(_cfg.SpeedCalibration.ToHz(saved.SpeedDegPerSecond));
+            // A persisted speed is caller data that outlived the process, so it faces the same rule
+            // as a fresh command: out of range is REJECTED, not clamped. A stored 0 °/s converts to
+            // well under the drive's floor, and silently raising it there is how an axis ends up
+            // traversing at a speed nobody chose. Falling back to the configured default is the
+            // honest recovery, and it is said out loud.
+            var restored = Frequency<double>.FromHertz(_cfg.SpeedCalibration.ToHz(saved.SpeedDegPerSecond));
+            if (restored >= _cfg.MinJogHz && restored <= _cfg.MaxMoveHz)
+            {
+                _moveHz = restored;
+            }
+            else
+            {
+                _logger?.LogWarning(
+                    "{Axis}: the persisted traverse speed {Speed:0.###} °/s maps to {Hz:0.###} Hz, "
+                    + "outside {Min:0.###}–{Max:0.###} Hz. Ignoring it and using the configured "
+                    + "default of {Default:0.###} Hz",
+                    _cfg.Name, saved.SpeedDegPerSecond, restored.Hertz, _cfg.MinJogHz.Hertz,
+                    _cfg.MaxMoveHz.Hertz, _cfg.MoveHz.Hertz);
+                _moveHz = _cfg.MoveHz;
+            }
         }
 
         await ApplyDriveSetupAsync(ct);
@@ -363,7 +385,12 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
                 _state = AxisState.Stopping;
         }
 
-        if (abort is not null) await abort.CancelAsync();
+        // The supervisor owns and disposes the linked source, and may already have exited on its own
+        // (a limit trip, say), so cancelling it is a race this has to tolerate rather than avoid.
+        if (abort is not null)
+        {
+            try { await abort.CancelAsync(); } catch (ObjectDisposedException) { /* already finished */ }
+        }
 
         // Stop lane: this is the write NFR-5's 200 ms is measured to, and it must not queue behind a
         // 26 s homing hold (AC-23).
@@ -373,11 +400,16 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
         if (supervisor is not null)
         {
             try { await supervisor; } catch (OperationCanceledException) { /* expected */ }
+            Volatile.Write(ref _velocitySupervisor, null);
         }
 
         lock (_sync)
         {
             if (_state == AxisState.Stopping) _state = AxisState.Standstill;
+
+            // Whoever set it, the operation this belonged to is over. Leaving it behind meant a
+            // later StopAsync cancelled a source nobody was observing any more.
+            _abort = null;
         }
     }
 
@@ -523,6 +555,17 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
             + "continuing in ContinuousMotion", _cfg.Name, hz.Hertz);
     }
 
+    /// <summary>
+    /// Watches a continuous move for as long as it lasts. This is what makes the token passed to
+    /// <see cref="MoveVelocityAsync"/> stay observed after that task completes, and on an axis with
+    /// travel limits it is also the only thing watching them — the jog itself is open-loop.
+    ///
+    /// <para>
+    /// It <b>owns</b> <paramref name="abort"/>: the linked source is disposed here, on every exit
+    /// path, because this is the last thing running that holds it. Leaving it alive leaked the
+    /// registration on the caller's token for the lifetime of the axis, one per velocity command.
+    /// </para>
+    /// </summary>
     private async Task SuperviseVelocityAsync(CountDirection direction, CancellationTokenSource abort)
     {
         try
@@ -542,11 +585,41 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
         }
         catch (OperationCanceledException)
         {
-            // StopAsync or the caller's token: StopAsync does the ramp-down itself.
+            // WHO cancelled decides who ramps down, and the state itself answers that: StopAsync
+            // moves the axis to Stopping BEFORE cancelling, so anything still in ContinuousMotion
+            // was cancelled through the CALLER's own token — and then nobody else is going to stop
+            // the drive. FR-2 promises that cancelling the token passed to MoveVelocityAsync stops
+            // the axis, and this is the only place that promise can be kept.
+            if (State == AxisState.ContinuousMotion)
+            {
+                try
+                {
+                    await JogStopAsync(ChannelPriority.Stop, CancellationToken.None);
+                }
+                catch (MotionException ex)
+                {
+                    _logger?.LogError(ex, "{Axis}: could not ramp down after the caller cancelled a "
+                        + "continuous move; the drive's watchdog is the remaining backstop", _cfg.Name);
+                }
+
+                lock (_sync)
+                {
+                    if (_state == AxisState.ContinuousMotion) _state = AxisState.Standstill;
+                }
+            }
         }
         catch (MotionException ex)
         {
             Fault(ex.Error, ex.Message);
+        }
+        finally
+        {
+            lock (_sync)
+            {
+                if (ReferenceEquals(_abort, abort)) _abort = null;
+            }
+
+            abort.Dispose();
         }
     }
 
@@ -793,17 +866,20 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
         {
             try
             {
-                await JogUntilAsync(approach, seek, x => !x[org], "searching for the home sensor", MoveTimeout, ct);
+                await JogUntilAsync(approach, seek, x => ValueTask.FromResult(!x[org]),
+                    "searching for the home sensor", MoveTimeout, ct);
             }
             catch (MotionException ex) when (ex.Error == MotionError.LimitTripped)
             {
                 inputs = await ReadInputsAsync(ct);
                 if (LimitHit(inputs, null) is { } hit) await ReleaseLimitAsync(hit, ct);
-                await JogUntilAsync(back, seek, x => !x[org], "searching for the home sensor", MoveTimeout, ct);
+                await JogUntilAsync(back, seek, x => ValueTask.FromResult(!x[org]),
+                    "searching for the home sensor", MoveTimeout, ct);
             }
         }
 
-        await JogUntilAsync(back, seek, x => x[org], "leaving the home sensor", MoveTimeout / 3, ct);
+        await JogUntilAsync(back, seek, x => ValueTask.FromResult(x[org]),
+            "leaving the home sensor", MoveTimeout / 3, ct);
         await JogForAsync(back, seek, TimeSpan.FromSeconds(1.5), ct);   // clear of the whole edge
 
         // Sentinel BEFORE arming. The other order lets the latch fire and then be overwritten — and
@@ -817,9 +893,11 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
         try
         {
             // Ends on SENSOR DETECTION as well as on the latch changing: the cam sits close to the
-            // travel limit, and stopping late used to run the axis onto the limit instead.
+            // travel limit, and stopping late used to run the axis onto the limit instead. The `||`
+            // short-circuits, so the extra Modbus round-trip only happens on the polls where the cam
+            // is not seen.
             await JogUntilAsync(approach, fine,
-                x => !x[org] || LatchFiredNoWait(),
+                async x => !x[org] || await LatchFiredAsync(),
                 "creeping onto the home edge", MoveTimeout, ct);
 
             await Task.Delay(TimeSpan.FromMilliseconds(800), ct);   // let the PLC scan complete
@@ -844,10 +922,13 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
         await PersistAsync(ct);
         _logger?.LogInformation("{Axis}: homed — zero latched at raw count {Zero}", _cfg.Name, latched);
 
-        bool LatchFiredNoWait() =>
-            _channel.ReadDWordAsync(DeltaRegisters.PlcUnit, DeltaRegisters.D120_HomeLatch, "poll latch",
-                    ChannelPriority.Move, ct)
-                .GetAwaiter().GetResult() != LatchSentinel;
+        // Awaited, not blocked on. The inherited shape called .GetAwaiter().GetResult() on a Modbus
+        // round-trip from inside the poll predicate, parking a threadpool thread for the whole
+        // transaction every ~150 ms of the creep phase — and on a starved pool that is a deadlock,
+        // not merely a waste.
+        async ValueTask<bool> LatchFiredAsync() =>
+            await _channel.ReadDWordAsync(DeltaRegisters.PlcUnit, DeltaRegisters.D120_HomeLatch,
+                "poll latch", ChannelPriority.Move, ct) != LatchSentinel;
     }
 
     // ═══════════════════════ the move loop ═══════════════════════
@@ -1080,11 +1161,16 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
     private async Task JogStartAsync(Frequency<double> hz, CountDirection direction, ushort ramp,
         CancellationToken ct)
     {
-        var commanded = Math.Max(hz.Hertz, _cfg.MinJogHz.Hertz);
-        if (commanded > _cfg.MaxJogHz.Hertz)
+        // Rejected at both ends, never raised to the floor. The floor check used to be a silent
+        // Math.Max, which was the one place FR-5's "rejected, never clamped" did not hold — and the
+        // place a persisted 0 °/s quietly became a real move. Everything reaching here has already
+        // been range-checked (by RequireReachable, by DeltaAxisConfig.Validate, or by being derived
+        // from MinJogHz), so this is now an assertion rather than a policy.
+        var commanded = hz.Hertz;
+        if (commanded < _cfg.MinJogHz.Hertz || commanded > _cfg.MaxJogHz.Hertz)
             throw new MotionException(MotionError.UnreachableSpeed,
-                $"{_cfg.Name}: {commanded:0.##} Hz is above the {_cfg.MaxJogHz.Hertz:0.##} Hz jog guard",
-                _cfg.Name);
+                $"{_cfg.Name}: {commanded:0.##} Hz is outside the drive's usable "
+                + $"{_cfg.MinJogHz.Hertz:0.##}–{_cfg.MaxJogHz.Hertz:0.##} Hz band", _cfg.Name);
 
         await _channel.WriteRegistersAsync(DeltaRegisters.PlcUnit, DeltaRegisters.D111_Ramp,
             [ramp, ramp], "set ramps", ChannelPriority.Move, ct);
@@ -1134,8 +1220,8 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
         await JogStopAsync(ChannelPriority.Move, ct);
     }
 
-    private async Task JogUntilAsync(CountDirection direction, Frequency<double> hz, Func<bool[], bool> until,
-        string what, TimeSpan timeout, CancellationToken ct)
+    private async Task JogUntilAsync(CountDirection direction, Frequency<double> hz,
+        Func<bool[], ValueTask<bool>> until, string what, TimeSpan timeout, CancellationToken ct)
     {
         await JogStartAsync(hz, direction, JogRampRaw, ct);
         var deadline = DateTime.UtcNow + timeout;
@@ -1150,7 +1236,7 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
                 if (LimitHit(inputs, direction) is { } hit)
                     throw new MotionException(MotionError.LimitTripped,
                         $"{_cfg.Name}: {hit} travel limit tripped", _cfg.Name);
-                if (until(inputs)) return;
+                if (await until(inputs)) return;
             }
 
             throw Mechanical($"timed out {what}");
@@ -1295,8 +1381,8 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
                 "lift limit function", ChannelPriority.Move, ct);
             await SetCoilAsync(DeltaRegisters.M0_Run, true, ChannelPriority.Move, ct);
 
-            await JogUntilAsync(away, _cfg.SeekHz, x => x[input], $"retreating from the {side} limit",
-                TimeSpan.FromSeconds(60), ct);
+            await JogUntilAsync(away, _cfg.SeekHz, x => ValueTask.FromResult(x[input]),
+                $"retreating from the {side} limit", TimeSpan.FromSeconds(60), ct);
             await JogForAsync(away, _cfg.SeekHz, TimeSpan.FromSeconds(1), ct);
         }
         finally

@@ -310,6 +310,27 @@ internal sealed class DeltaHeartbeat : IAsyncDisposable
     /// <see cref="TaskCanceledException"/> — "somebody cancelled" rather than "the transport is
     /// dead", past every <c>catch (MotionException)</c> written to handle it.
     /// </remarks>
+    /// <summary>
+    /// Stops beating <b>without</b> the round-trip that releases the lease — the teardown a
+    /// synchronous <c>Dispose</c> can honestly perform.
+    ///
+    /// <para>
+    /// A synchronous dispose cannot do network I/O without blocking a thread on a socket, so it does
+    /// not try. The lease is simply left to expire on its own one stall window later, which is
+    /// exactly the situation FR-11's watchdog exists to bound. Prefer <see cref="StopAsync"/> or
+    /// <see cref="DisposeAsync"/>, which release it immediately.
+    /// </para>
+    /// </summary>
+    public void Abandon()
+    {
+        if (_loop is null) return;
+
+        try { _stop.Cancel(); } catch (ObjectDisposedException) { /* already torn down */ }
+        _loop = null;
+        _logger?.LogDebug("{Axis}: heartbeat abandoned without releasing the lease on {Host}; it "
+            + "expires in {Expiry:0.##} s", _axis, _channel.Host, Expiry.TotalSeconds);
+    }
+
     private async Task<ushort> ReadRegisterAsync(ushort address, string what, CancellationToken ct)
     {
         var words = await _channel.ReadHoldingAsync(DeltaRegisters.PlcUnit, address, 1, what,

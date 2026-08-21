@@ -81,7 +81,7 @@ internal sealed class PriorityGate : IDisposable
                 return new ValueTask<IDisposable>(new Release(this));
             }
 
-            waiter = new Waiter(priority, _time.GetUtcNow());
+            waiter = new Waiter(_time.GetUtcNow());
             QueueFor(priority).Enqueue(waiter);
         }
 
@@ -152,19 +152,38 @@ internal sealed class PriorityGate : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Closes the gate and <b>fails everything still queued</b>. Merely refusing new arrivals would
+    /// leave a waiter that passed a non-cancellable token parked forever on a channel nobody will
+    /// ever release — a hang rather than an error, on the shutdown path.
+    /// </summary>
     public void Dispose()
     {
-        lock (_sync) _disposed = true;
+        List<Waiter> stranded = [];
+        lock (_sync)
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            foreach (var queue in new[] { _stop, _heartbeat, _move })
+            {
+                while (queue.Count > 0)
+                {
+                    var waiter = queue.Dequeue();
+                    if (waiter.TryClaim()) stranded.Add(waiter);
+                }
+            }
+        }
+
+        foreach (var waiter in stranded) waiter.Fail(new ObjectDisposedException(nameof(PriorityGate)));
     }
 
-    private sealed class Waiter(ChannelPriority priority, DateTimeOffset enqueued)
+    private sealed class Waiter(DateTimeOffset enqueued)
     {
         private readonly TaskCompletionSource<IDisposable> _tcs =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
 
         private int _claimed;
-
-        public ChannelPriority Priority { get; } = priority;
 
         public DateTimeOffset Enqueued { get; } = enqueued;
 
@@ -174,6 +193,9 @@ internal sealed class PriorityGate : IDisposable
         public bool TryClaim() => Interlocked.CompareExchange(ref _claimed, 1, 0) == 0;
 
         public void Grant(PriorityGate gate) => _tcs.TrySetResult(new Release(gate));
+
+        /// <summary>Fails a waiter that will never be granted, so it does not park forever.</summary>
+        public void Fail(Exception error) => _tcs.TrySetException(error);
 
         public async Task<IDisposable> WaitAsync(CancellationToken ct)
         {
