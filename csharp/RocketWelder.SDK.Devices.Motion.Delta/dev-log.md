@@ -135,9 +135,79 @@ on the heartbeat's age at all, so an unowned or already-ours register is decided
 
 ---
 
+## Review round (verdict CHANGES REQUIRED on `8962d9e`)
+
+Three blockers and a minors list, all closed on the same branch. What changed, and what each was:
+
+### Blockers
+
+1. **`HomeAllAsync` turned a cancellation into `InvalidOperationException`.** `RunOperationAsync`
+   rethrows `OperationCanceledException`, so a cancelled home completes **Canceled**, not Faulted —
+   and `First(t => t.IsFaulted)` then threw "Sequence contains no matching element" in place of the
+   cancellation the caller asked for (AC-10). Now a fault outranks a cancellation and is rethrown
+   with its stack intact via `ExceptionDispatchInfo`; when nothing faulted, every task was cancelled
+   and that is rethrown as-is. **Control run against the pre-fix code confirms the new test fails
+   with exactly the reported symptom.**
+
+2. **Sync-over-async in the homing poll.** `LatchFiredNoWait` blocked a threadpool thread on a
+   Modbus round-trip every ~150 ms of the creep phase — on a starved pool a deadlock, not merely
+   waste. `JogUntilAsync` now takes `Func<bool[], ValueTask<bool>>`; the `||` still short-circuits,
+   so the extra read only happens on polls where the cam is not seen.
+
+3. **Untested frozen-contract clauses**, +48 unit tests across four new classes — `SelfCheckTests`
+   (FR-7/AC-7), `LimitSwitchTests` (`LimitTripped` and the Min|Max wiring-fault clause),
+   `PositionerTests` (the whole device surface) and `ConfigValidationTests`. Blocker 1 is precisely
+   the bug the device-level gap let through: every axis-level test passed while it was live.
+
+### Minors, all sweeped
+
+- `InMemoryAxisStateStore` → `ConcurrentDictionary`. Axes home concurrently, so it really is
+  written from several threads.
+- `JsonAxisStateStore` gained an optional `ILogger` and now **logs the corrupt-file case at Error**
+  — this is the "we lost the zero" seam, and an axis that silently forgets zero drives confidently
+  to a wrong absolute angle. Its deserialised dictionary is also re-keyed through
+  `OrdinalIgnoreCase`: `JsonSerializer` always builds an ordinal one, so a file written as
+  `"Turntable"` would have stopped answering to `"turntable"`.
+- **The FR-5 hole is closed.** `MoveHz`, `SeekHz` and `NudgeHz` never pass through the
+  caller-facing check, and `JogStartAsync` raised anything under the floor with a silent
+  `Math.Max` — the one place "rejected, never clamped" did not hold, and the place a persisted
+  0 °/s quietly became a real 1 Hz move. Now `DeltaAxisConfig.Validate()` runs at construction, a
+  persisted speed outside the range is rejected in favour of the configured default (out loud), and
+  the jog's floor check throws instead of raising. Control run confirms the old code commanded
+  1.0 Hz where the default is 30.
+- `ModbusChannel.DisconnectAsync` replaces the sync `Disconnect`, which blocked on the priority gate
+  from inside an async caller.
+- `MoveVelocityAsync` no longer leaks its linked CTS: the supervisor owns and disposes it on every
+  path, and `StopAsync` clears `_abort`. Writing that surfaced a further bug — **if the caller
+  cancelled their own token rather than calling `StopAsync`, nothing ramped the axis down.** The
+  supervisor now distinguishes the two by the axis state (`StopAsync` moves to `Stopping` *before*
+  cancelling) and performs the stop itself, which is what FR-2's "cancelling it stops the axis"
+  actually requires.
+- `PriorityGate.Dispose` now fails everything still queued. Refusing only new arrivals left a waiter
+  with a non-cancellable token parked forever — a hang on the shutdown path. `Waiter.Priority` was
+  dead and is gone.
+- `DeltaPositioner` implements `IAsyncDisposable`; the synchronous `Dispose` no longer blocks on
+  network I/O, abandoning the beat locally instead (the lease then expires on its own, which is the
+  case the watchdog bounds).
+- The beat-rate test is driven by the injected `TimeProvider`
+  (`Microsoft.Extensions.TimeProvider.Testing`) rather than by wall clock.
+- The live sense test now measures the **distance actually travelled** through the raw encoder
+  count, with a Shortest-sense control on the same target — it previously only re-checked arithmetic
+  a unit test already pinned.
+- `DisconnectAsync` calls `StopAllAsync` first (reviewer's suggestion): a graceful disconnect of a
+  moving positioner brings the axes to rest before dropping the beat, instead of handing a turning
+  machine to whatever attaches next and leaving the watchdog to do a shutdown's job.
+
+Not acted on, by instruction: **Q1** (`MotionError.MotionFailed` — a contract change the user
+decides), **Q3** (the unhomed-turntable / `RequiresHoming` question — Daniel's), and any ladder or
+epic-doc edit.
+
+---
+
 ## Defects found while building this
 
-Four, all fixed; two were in the code and two in my own tests.
+Four during the build, all fixed; two were in the code and two in my own tests. Three more came out
+of the review round and are listed above.
 
 1. **`AxisStatus` was cached beside the state**, so a reset axis went on reporting the `DriveFault`
    it had just been reset out of — precisely the stale-boolean shape AC-1 exists to forbid. The
@@ -175,6 +245,7 @@ on the machine on 2026-08-19 and recorded in `current-state.md`.
 | Tilt speed fit `0.2214·hz − 0.081` | `DeltaPositionerDefaults.TiltSpeed` | **Derived.** The one recorded sweep is the turntable's — its slope is 97.4 % of the turntable's theoretical ratio and 239 % of tilt's, so it cannot be tilt's. Carried as the same measured 2.6 % slip on tilt's own gearing with the same measured 0.366 Hz dead band. Identical derivation to the simulator's, deliberately. **Risk R-4 — bench-measure before any tilt speed number is trusted.** |
 | Tilt pulse calibration `Slope 0.7, DeadTime 0.0` | `DeltaPositionerDefaults.Tilt` | **Inherited, unverified**, from the port. The turntable's equivalent turned out to be wrong by 2× plus a dead time. It currently meets the 0.10° tolerance regardless — on inherited numbers. **Risk R-4.** |
 | `MaxJogHz = 60` | `DeltaAxisConfig.MaxJogHz` | **Inherited.** A bare constant in the port; nothing measured the drive's real ceiling and the recorded sweep stops at 50 Hz. Named as configuration here rather than hidden so a bench session can pin it. The simulator's `MaxOutputHz` carries the same 60 for the same reason. |
+| Direction-check threshold `20` raw counts | `DeltaAxis.VerifyDirectionCoreAsync` | **Inherited** from the port, where it was a bare literal. It is two encoder quanta (the quantum is 10 counts = 0.036°), so it reads as "more than noise" — but nothing measured how far the axis actually creeps during the check's 1.5 s jog, so the margin above the noise floor is unquantified. Pinned from both sides by `SelfCheckTests` so it cannot drift silently; worth confirming on the bench alongside the tilt pulse calibration. |
 | D130–D133 addresses | `DeltaRegisters` | **Proposed**, chosen in the simulator repository in the same free D block the existing program already uses. FR-11 says these addresses join the documented ladder register map but names none, and the port has none to copy. **Pending ratification at the AC-25 ladder edit** — if the vendor's ISPSoft project puts them elsewhere, one constant block changes and nothing else does. |
 | `SimulatorTolerance = 0.2°` | `LiveSimulator` (tests only) | **Not a machine number and must never travel back into the defaults.** The simulator's endgame is not the machine's. Matches the simulator repo's own smoke test. |
 

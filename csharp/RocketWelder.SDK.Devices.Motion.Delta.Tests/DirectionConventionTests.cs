@@ -76,8 +76,10 @@ public class DirectionConventionTests
     [Fact]
     public async Task AReportedSpeedIsSigned_InAngleSpaceRatherThanCountSpace()
     {
-        // AxisStatus has no direction field: the sign IS the direction (P-2). On the tilt axis a
-        // "forward" drive command lowers the angle, so the reported speed must be negative.
+        // AxisStatus has no direction field: the sign IS the direction (P-2). And the sign is read
+        // back in ANGLE space, not count space — which is the whole point on the tilt axis, where a
+        // rising angle is a FALLING count. A +5 °/s command must therefore read back positive even
+        // though the encoder is running the other way.
         using var bed = await AxisTestBed.HomedAsync(DeltaPositionerDefaults.Tilt);
         await bed.Axis.MoveVelocityAsync(AxisTestBed.DegPerSecond(5));
 

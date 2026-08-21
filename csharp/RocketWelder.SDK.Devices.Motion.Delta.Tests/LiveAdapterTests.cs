@@ -124,11 +124,14 @@ public class LiveAdapterTests
     }
 
     [SimFact]
-    public async Task RotationSenseChoosesThePath_OnTheWrappingAxis()
+    public async Task APositiveSenseMoveReallyTravelsTheLongWayRound()
     {
-        // Positive sense to a target 20° BEHIND the current angle must travel the long way round,
-        // which is observable without timing: the axis passes through the far side. Asserted by the
-        // travel the adapter computes, then by where it lands.
+        // The sense is only meaningful if it changes what the MACHINE does, so this measures the
+        // distance actually travelled rather than re-checking the arithmetic a unit test already
+        // pins. The raw encoder count is unwrapped and monotonic, so the total travel is simply the
+        // difference — no timing, no coast, nothing model-shaped.
+        //
+        // Target 20° BEHIND: Shortest would travel 20°, Positive must travel 340°.
         await LiveSimulator.QuiesceAsync(LiveSimulator.TurntablePort);
         using var positioner = BuildTurntable(ownerId: 105);
         await positioner.ConnectAsync();
@@ -137,17 +140,56 @@ public class LiveAdapterTests
         await axis.PowerAsync(true);
         await axis.HomeAsync(new CancellationTokenSource(MoveBudget).Token);
 
+        using var observer = LiveSimulator.Observe(LiveSimulator.TurntablePort);
+        await observer.ConnectAsync(CancellationToken.None);
+
         var start = (await axis.ReadStatusAsync()).Position!.Value;
         var target = Normalise(start - 20.0);
+        var countsBefore = await LiveSimulator.ReadDWordAsync(observer, DeltaRegisters.D1051_Position);
 
-        DeltaAxis.WrappedTravel(start, target, RotationSense.Positive)
-            .Should().BeApproximately(340.0, 1.0, "the positive path to a target 20° behind is the long way");
+        await axis.MoveAbsoluteAsync(Deg.Of(target), sense: RotationSense.Positive,
+            ct: new CancellationTokenSource(MoveBudget).Token);
+
+        var countsAfter = await LiveSimulator.ReadDWordAsync(observer, DeltaRegisters.D1051_Position);
+        var travelled = Math.Abs(countsAfter - countsBefore) / axis.Config.CountsPerDegree;
+
+        travelled.Should().BeGreaterThan(180.0,
+            "a positive-sense move to a target 20° behind has to go the long way round, and 340° of "
+            + "travel is not something a shortest-path move could produce by any margin of error");
+        ShortestGap((await axis.ReadStatusAsync()).Position!.Value, target)
+            .Should().BeLessThanOrEqualTo((double)axis.Tolerance);
+
+        await positioner.DisconnectAsync();
+    }
+
+    [SimFact]
+    public async Task AShortestSenseMoveToTheSameTargetTakesTheShortWay()
+    {
+        // The control for the test above: same target, same axis, the other sense — and now the
+        // travel must be the small one. Without this pair, "it moved 340°" could just be what this
+        // adapter always does.
+        await LiveSimulator.QuiesceAsync(LiveSimulator.TurntablePort);
+        using var positioner = BuildTurntable(ownerId: 106);
+        await positioner.ConnectAsync();
+        var axis = (DeltaAxis)positioner[DeltaPositionerDefaults.TurntableAxisName];
+
+        await axis.PowerAsync(true);
+        await axis.HomeAsync(new CancellationTokenSource(MoveBudget).Token);
+
+        using var observer = LiveSimulator.Observe(LiveSimulator.TurntablePort);
+        await observer.ConnectAsync(CancellationToken.None);
+
+        var start = (await axis.ReadStatusAsync()).Position!.Value;
+        var target = Normalise(start - 20.0);
+        var countsBefore = await LiveSimulator.ReadDWordAsync(observer, DeltaRegisters.D1051_Position);
 
         await axis.MoveAbsoluteAsync(Deg.Of(target), sense: RotationSense.Shortest,
             ct: new CancellationTokenSource(MoveBudget).Token);
 
-        var landed = (await axis.ReadStatusAsync()).Position!.Value;
-        ShortestGap(landed, target).Should().BeLessThanOrEqualTo((double)axis.Tolerance);
+        var countsAfter = await LiveSimulator.ReadDWordAsync(observer, DeltaRegisters.D1051_Position);
+        var travelled = Math.Abs(countsAfter - countsBefore) / axis.Config.CountsPerDegree;
+
+        travelled.Should().BeLessThan(90.0, "the short way to a target 20° behind is 20°");
 
         await positioner.DisconnectAsync();
     }
