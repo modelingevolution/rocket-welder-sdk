@@ -23,12 +23,35 @@ public class TransportDependencyTests
     [Fact]
     public void Contract_ReferencesNoTransportAssembly_Transitively()
     {
+        // The closure RECORDS shared-framework assemblies (it just does not walk through them), so
+        // the marker match has to be filtered through the same allowlist the walk uses. Without
+        // this, the "sockets" marker matches System.Net.Sockets the moment any package in the
+        // closure names it directly — a false accusation about an assembly present in every .NET
+        // process, and the kind of failure that teaches people to suppress the check.
         var offenders = ClosureOf(Contract)
+            .Where(n => !IsFrameworkAssembly(n))
             .Where(n => TransportMarkers.Any(m => n.Contains(m, StringComparison.OrdinalIgnoreCase)))
             .ToArray();
 
         offenders.Should().BeEmpty(
             "NFR-4: a program using the motion contract must not drag in a Modbus library");
+    }
+
+    [Fact]
+    public void Control_TheFrameworkFilterDoesNotWaveThroughARealTransport()
+    {
+        // The filter added above must not become a blanket excuse. A NuGet-shipped transport is not
+        // a framework assembly, so it stays visible to the marker match even though its name looks
+        // like one.
+        var pretendClosure = new[] { "System.Net.Sockets", "System.IO.Ports", "FluentModbus" };
+
+        var flagged = pretendClosure
+            .Where(n => !IsFrameworkAssembly(n))
+            .Where(n => TransportMarkers.Any(m => n.Contains(m, StringComparison.OrdinalIgnoreCase)))
+            .ToArray();
+
+        flagged.Should().BeEquivalentTo(["System.IO.Ports", "FluentModbus"],
+            "the shared-framework socket assembly is filtered, the two real transports are not");
     }
 
     [Fact]
