@@ -304,10 +304,18 @@ internal sealed class DeltaHeartbeat : IAsyncDisposable
         _leaseHeld = false;
     }
 
-    private Task<ushort> ReadRegisterAsync(ushort address, string what, CancellationToken ct) =>
-        _channel.ReadHoldingAsync(DeltaRegisters.PlcUnit, address, 1, what, ChannelPriority.Heartbeat, ct)
-            .ContinueWith(t => t.Result[0], ct, TaskContinuationOptions.OnlyOnRanToCompletion,
-                TaskScheduler.Default);
+    /// <remarks>
+    /// A plain await, deliberately. The inherited <c>ContinueWith(…, OnlyOnRanToCompletion)</c> shape
+    /// turns a FAULTED read into a CANCELLED task, so a drive that had gone away surfaced as
+    /// <see cref="TaskCanceledException"/> — "somebody cancelled" rather than "the transport is
+    /// dead", past every <c>catch (MotionException)</c> written to handle it.
+    /// </remarks>
+    private async Task<ushort> ReadRegisterAsync(ushort address, string what, CancellationToken ct)
+    {
+        var words = await _channel.ReadHoldingAsync(DeltaRegisters.PlcUnit, address, 1, what,
+            ChannelPriority.Heartbeat, ct);
+        return words[0];
+    }
 
     private Task WriteRegisterAsync(ushort address, ushort value, string what, CancellationToken ct) =>
         _channel.WriteRegisterAsync(DeltaRegisters.PlcUnit, address, value, what,

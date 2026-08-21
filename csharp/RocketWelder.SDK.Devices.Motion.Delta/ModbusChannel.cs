@@ -99,6 +99,13 @@ internal sealed class ModbusChannel : IModbusChannel
     private async Task<T> ExecuteAsync<T>(Func<ModbusTcpClient, T> operation, string what,
         ChannelPriority priority, CancellationToken ct)
     {
+        // A disposed channel must not quietly reopen the socket. EnsureConnected would otherwise
+        // reconnect a session the owner has deliberately torn down — which would also make a killed
+        // commander look alive again for one transaction.
+        if (_disposed)
+            throw new MotionException(MotionError.CommunicationLost,
+                $"{Host}: {what} attempted on a disposed channel");
+
         using var _ = await _gate.AcquireAsync(priority, ct);
 
         for (var attempt = 0; attempt < 2; attempt++)
