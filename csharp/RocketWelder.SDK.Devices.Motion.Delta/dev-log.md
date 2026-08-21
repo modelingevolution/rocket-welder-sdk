@@ -135,6 +135,20 @@ on the heartbeat's age at all, so an unowned or already-ours register is decided
 
 ---
 
+## Test counts
+
+| | Count | Where they run |
+|---|---|---|
+| Unit | **151** | Anywhere. No sockets: the axis drives an `IModbusChannel` fake that holds registers and nothing else. |
+| Live-simulator | **20** | Against a running `delta-positioner-sim` over real Modbus TCP. They **skip with a stated reason** when none is reachable, which on a CI runner is always. |
+| **Total** | **171** | |
+
+Of the live-simulator tests, 6 are FR-11 watchdog kill-tests, 4 are advisory-lease tests and 2 are
+the NFR-5 stop budget.
+
+*(The first report of this iteration said 104/18; the true split at that commit was 103/19. Corrected
+here and in the counts above, which are for the post-review state.)*
+
 ## Review round (verdict CHANGES REQUIRED on `8962d9e`)
 
 Three blockers and a minors list, all closed on the same branch. What changed, and what each was:
@@ -313,6 +327,13 @@ revolution. Worth Daniel's eye.
 - The org NuGet feed `nuget.modelingevolution.com` was **down throughout** this iteration (NU1301 /
   connection refused). Everything restores cleanly from nuget.org; the NU1900 warnings in every build
   log are the same outage and are not caused by anything here.
+- **The "exits without a summary" symptom is stale local NuGet assets, not the tests.** The three
+  promoted suites intermittently produce *no output at all* with exit code 0 when run with
+  `--no-restore` against assets the feed outage left half-written; an explicit
+  `dotnet restore --source https://api.nuget.org/v3/index.json` cures it and they then report 14, 10
+  and 237 passing every time. This is why `test.yml`'s explicit `restore` step matters, and why the
+  promotion is safe there even though the symptom is reproducible on this box. If a future run sees
+  an empty result locally, restore before concluding anything about the suite.
 - `Microsoft.Extensions.Logging.Abstractions` is pinned to **10.0.7**, matching the rest of the repo.
   9.0.0 (the port's version) is a package downgrade against `Automation.Abstractions` and fails the
   build as NU1605.
