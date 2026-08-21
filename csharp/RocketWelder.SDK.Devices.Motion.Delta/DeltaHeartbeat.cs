@@ -101,15 +101,9 @@ internal sealed class DeltaHeartbeat : IAsyncDisposable
     {
         var owner = await ReadRegisterAsync(DeltaRegisters.D131_OwnerId, "read lease owner", ct);
 
-        var age = TimeSpan.Zero;
-        if (owner != AdvisoryLease.Unowned && owner != OwnerId)
-        {
-            var before = await ReadRegisterAsync(DeltaRegisters.D130_Heartbeat, "sample heartbeat", ct);
-            var start = _time.GetTimestamp();
-            await Task.Delay(Expiry, _time, ct);
-            var after = await ReadRegisterAsync(DeltaRegisters.D130_Heartbeat, "sample heartbeat", ct);
-            age = before == after ? _time.GetElapsedTime(start) : TimeSpan.Zero;
-        }
+        var age = owner != AdvisoryLease.Unowned && owner != OwnerId
+            ? await SampleHeartbeatAgeAsync(ct)
+            : TimeSpan.Zero;
 
         var decision = AdvisoryLease.Evaluate(owner, age, Expiry, OwnerId);
         if (!decision.Granted)
@@ -127,11 +121,43 @@ internal sealed class DeltaHeartbeat : IAsyncDisposable
     }
 
     /// <summary>
+    /// How long D130 has been unchanged, obtained the only way it can be: by sampling the register
+    /// across the expiry window. Unchanged for the whole window means at least <see cref="Expiry"/>
+    /// old; a change at any point means the incumbent is alive and the age is zero.
+    ///
+    /// <para>
+    /// The wait is re-checked against a <b>measured</b> elapsed time rather than trusted, because a
+    /// platform timer asked for 1 s can fire at 985 ms. Reporting that as the age would refuse a
+    /// genuinely dead lease on a rounding error and cost a whole retry second; reporting the full
+    /// window instead would claim an observation that was never made. Waiting out the remainder is
+    /// the only answer that is both correct and honest.
+    /// </para>
+    /// </summary>
+    private async Task<TimeSpan> SampleHeartbeatAgeAsync(CancellationToken ct)
+    {
+        var before = await ReadRegisterAsync(DeltaRegisters.D130_Heartbeat, "sample heartbeat", ct);
+        var start = _time.GetTimestamp();
+
+        while (true)
+        {
+            var remaining = Expiry - _time.GetElapsedTime(start);
+            if (remaining > TimeSpan.Zero) await Task.Delay(remaining, _time, ct);
+
+            var after = await ReadRegisterAsync(DeltaRegisters.D130_Heartbeat, "sample heartbeat", ct);
+            if (after != before) return TimeSpan.Zero;
+
+            var elapsed = _time.GetElapsedTime(start);
+            if (elapsed >= Expiry) return elapsed;
+        }
+    }
+
+    /// <summary>
     /// Takes the lease, retrying at <see cref="AdvisoryLease.RetryInterval"/> until it is granted —
     /// which is what lets a rolling deploy attach as soon as the outgoing instance stops beating.
     /// </summary>
     /// <param name="timeout">How long to keep retrying, or <see langword="null"/> to retry until
     /// <paramref name="ct"/> fires.</param>
+    /// <param name="ct">Cancellation.</param>
     /// <exception cref="MotionException"><see cref="MotionError.LeaseHeld"/> — the timeout elapsed
     /// with a live foreign heartbeat still on the drive. The message names the owner that was seen.</exception>
     public async Task AcquireAsync(TimeSpan? timeout, CancellationToken ct)

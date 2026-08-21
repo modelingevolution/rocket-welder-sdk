@@ -65,9 +65,16 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
     private MotionError? _error;
     private CancellationTokenSource? _abort;
     private Task? _velocitySupervisor;
-    private AxisStatus _status;
     private DateTimeOffset _lastIdleStatus = DateTimeOffset.MinValue;
     private string? _setupError;
+
+    // The last MEASUREMENT. Deliberately not a whole cached AxisStatus: state and error are read
+    // live from the fields above, so a status snapshot can never disagree with State about what the
+    // axis is doing. A cached status is exactly the stale-boolean shape AC-1 forbids — it is how a
+    // reset axis ends up still reporting the fault it was reset out of.
+    private double? _position;
+    private double _speed;
+    private LimitSwitchState _limits;
 
     internal DeltaAxis(DeltaAxisConfig cfg, IModbusChannel channel, IAxisStateStore store, ILogger? logger)
     {
@@ -76,7 +83,6 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
         _store = store;
         _logger = logger;
         _moveHz = cfg.MoveHz;
-        _status = new AxisStatus(AxisState.Disabled, null, 0.0, LimitSwitchState.None, null);
     }
 
     /// <summary>Configuration this axis was built from.</summary>
@@ -147,8 +153,11 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
     /// <inheritdoc/>
     public AxisStatus Status
     {
-        get { lock (_sync) return _status; }
+        get { lock (_sync) return Snapshot(); }
     }
+
+    /// <summary>The last measurement, projected over the LIVE state and error. Caller holds the lock.</summary>
+    private AxisStatus Snapshot() => new(_state, _position, _speed, _limits, _error);
 
     /// <inheritdoc/>
     public event EventHandler<AxisStatus>? StatusChanged;
@@ -277,18 +286,17 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
                     _logger?.LogError("{Axis}: drive reported fault {Fault}", _cfg.Name, fault);
                 }
 
-                status = new AxisStatus(_state, PositionOf(pulses), signedSpeed, limits, _error);
-                _status = status;
+                _position = PositionOf(pulses);
+                _speed = signedSpeed;
+                _limits = limits;
+                status = Snapshot();
             }
         }
         catch (MotionException ex)
         {
-            lock (_sync)
-            {
-                status = _status with { State = _state, Error = _error ?? MotionError.CommunicationLost };
-                _status = status;
-            }
-
+            // A failed read does NOT fault the axis: the transport dropping a frame while a move is
+            // running is not the move failing, and the move loop's own reads will surface a real
+            // loss. The caller gets the exception; the state is left as it was.
             _logger?.LogWarning(ex, "{Axis}: status read failed", _cfg.Name);
             throw;
         }
@@ -302,15 +310,9 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
     /// that needs homing has no meaningful angle, and reporting a number derived from wherever the
     /// encoder happened to power up would be a confident lie.
     /// </summary>
-    private double? PositionOf(long pulses)
-    {
-        lock (_sync)
-        {
-            if (_cfg.RequiresHoming && !_homed) return null;
-        }
-
-        return (double)PulsesToDegrees(pulses);
-    }
+    /// <remarks>Caller holds <see cref="_sync"/>.</remarks>
+    private double? PositionOf(long pulses) =>
+        _cfg.RequiresHoming && !_homed ? null : (double)PulsesToDegrees(pulses);
 
     // ═══════════════════════ lifecycle commands ═══════════════════════
 
@@ -675,7 +677,6 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
         {
             _state = AxisState.ErrorStop;
             _error = error;
-            _status = _status with { State = AxisState.ErrorStop, Error = error };
         }
 
         _logger?.LogError("{Axis}: {Error} — {Message}", _cfg.Name, error, message);
@@ -1348,7 +1349,7 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
     /// The target is normalised into the wrap domain first — that is what
     /// <see cref="AxisCapabilities.ContinuousRotation"/> means.
     /// </summary>
-    private static double WrappedTravel(double currentUnwrapped, double target, RotationSense sense)
+    internal static double WrappedTravel(double currentUnwrapped, double target, RotationSense sense)
     {
         var normalised = Mod(target, 360.0);
         var forward = Mod(normalised - Mod(currentUnwrapped, 360.0), 360.0);

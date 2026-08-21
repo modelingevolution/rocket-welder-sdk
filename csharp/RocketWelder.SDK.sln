@@ -86,6 +86,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Devices.Mo
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Devices.Motion.Delta", "RocketWelder.SDK.Devices.Motion.Delta\RocketWelder.SDK.Devices.Motion.Delta.csproj", "{808EFBB2-1497-4D6D-A1CC-F55B6C7B4BF9}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Devices.Motion.Delta.Tests", "RocketWelder.SDK.Devices.Motion.Delta.Tests\RocketWelder.SDK.Devices.Motion.Delta.Tests.csproj", "{204D59F9-2A93-4F83-90C0-97A75A9C0963}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -528,6 +530,18 @@ Global
 		{808EFBB2-1497-4D6D-A1CC-F55B6C7B4BF9}.Release|x64.Build.0 = Release|Any CPU
 		{808EFBB2-1497-4D6D-A1CC-F55B6C7B4BF9}.Release|x86.ActiveCfg = Release|Any CPU
 		{808EFBB2-1497-4D6D-A1CC-F55B6C7B4BF9}.Release|x86.Build.0 = Release|Any CPU
+		{204D59F9-2A93-4F83-90C0-97A75A9C0963}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{204D59F9-2A93-4F83-90C0-97A75A9C0963}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{204D59F9-2A93-4F83-90C0-97A75A9C0963}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{204D59F9-2A93-4F83-90C0-97A75A9C0963}.Debug|x64.Build.0 = Debug|Any CPU
+		{204D59F9-2A93-4F83-90C0-97A75A9C0963}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{204D59F9-2A93-4F83-90C0-97A75A9C0963}.Debug|x86.Build.0 = Debug|Any CPU
+		{204D59F9-2A93-4F83-90C0-97A75A9C0963}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{204D59F9-2A93-4F83-90C0-97A75A9C0963}.Release|Any CPU.Build.0 = Release|Any CPU
+		{204D59F9-2A93-4F83-90C0-97A75A9C0963}.Release|x64.ActiveCfg = Release|Any CPU
+		{204D59F9-2A93-4F83-90C0-97A75A9C0963}.Release|x64.Build.0 = Release|Any CPU
+		{204D59F9-2A93-4F83-90C0-97A75A9C0963}.Release|x86.ActiveCfg = Release|Any CPU
+		{204D59F9-2A93-4F83-90C0-97A75A9C0963}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
