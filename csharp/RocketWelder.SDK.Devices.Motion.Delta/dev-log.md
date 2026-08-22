@@ -139,9 +139,9 @@ on the heartbeat's age at all, so an unowned or already-ours register is decided
 
 | | Count | Where they run |
 |---|---|---|
-| Unit | **151** | Anywhere. No sockets: the axis drives an `IModbusChannel` fake that holds registers and nothing else. |
+| Unit | **164** | Anywhere. No sockets: the axis drives an `IModbusChannel` fake that holds registers and nothing else. |
 | Live-simulator | **20** | Against a running `delta-positioner-sim` over real Modbus TCP. They **skip with a stated reason** when none is reachable, which on a CI runner is always. |
-| **Total** | **171** | |
+| **Total** | **184** | |
 
 Of the live-simulator tests, 6 are FR-11 watchdog kill-tests, 4 are advisory-lease tests and 2 are
 the NFR-5 stop budget.
@@ -215,6 +215,34 @@ Three blockers and a minors list, all closed on the same branch. What changed, a
 Not acted on, by instruction: **Q1** (`MotionError.MotionFailed` — a contract change the user
 decides), **Q3** (the unhomed-turntable / `RequiresHoming` question — Daniel's), and any ladder or
 epic-doc edit.
+
+### Second round: five follow-ups (verdict APPROVE with follow-ups, `10e075e`)
+
+1. **A vacuous assertion of my own.** `DisconnectingStopsTheAxesBeforeReleasingTheLease` never
+   called `ConnectAsync`, so no lease was ever held, the release index was always −1, and an
+   `if (leaseRelease >= 0)` guard skipped the assertion the test is named for. It now connects,
+   checks D131 really holds our owner id first, and asserts both indices found. **Control: removing
+   the stop-before-release step fails the test, where the guarded version passed.** A second test
+   pins the other half of the ordering — the lease is claimed before any write that could move the
+   machine.
+2. `Abandon()` had been inserted between `ReadRegisterAsync`'s `<remarks>` and its declaration, so
+   the `ContinueWith` explanation documented the wrong method. Moved back.
+3. **The supervisor no longer reports `Standstill` when the ramp-down did not reach the drive.** It
+   faults with `CommunicationLost` instead: claiming "at rest" about a machine nobody managed to stop
+   is the worst available answer, and the watchdog catching it a second later does not make the state
+   true while it is being read.
+4. `JogStartAsync`'s bounds carry a **four-ULP representation tolerance**. The °/s → Hz conversion is
+   four floating-point operations — exact for today's calibration, but one lost bit in a re-measured
+   one would make `MoveVelocityAsync(axis.MinSpeed)` throw `UnreachableSpeed`, an axis refusing its
+   own advertised minimum. Four ULP near 50 Hz is ~3·10⁻¹⁴ Hz, twelve orders under the drive's
+   0.01 Hz register resolution. Guarded both ways: both axes accept their advertised Min and Max, and
+   a control pins that a full 0.01 Hz below the floor is still rejected, so the slack cannot drift
+   into a physical allowance.
+5. `Validate()` bounds-checks `HomeSensorInput` and `LimitInputs` against `DeltaRegisters.InputCount`
+   — input 12 used to surface as an `IndexOutOfRangeException` from the middle of a jog rather than
+   the named startup failure. It also rejects both limits naming one input (the axis could never tell
+   which end it rests on) and a home sensor colliding with a limit, with a control that the real
+   machine's X7 / X5–X6 are accepted.
 
 ---
 
