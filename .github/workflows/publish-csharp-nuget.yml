@@ -56,11 +56,22 @@ jobs:
 
     - name: Push all packages to NuGet
       working-directory: ./csharp
+      # Push per file so one rejected package (e.g. an API key whose glob
+      # doesn't cover the root id) cannot abort the remaining pushes.
+      # The step still fails at the end, listing exactly what was rejected.
       run: |
-        dotnet nuget push "./nupkg/*.nupkg" \
-          --api-key ${{ secrets.NUGET_API_KEY }} \
-          --source https://api.nuget.org/v3/index.json \
-          --skip-duplicate
+        failed=""
+        for pkg in ./nupkg/*.nupkg; do
+          echo "Pushing $pkg"
+          dotnet nuget push "$pkg" \
+            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate || failed="$failed $pkg"
+        done
+        if [ -n "$failed" ]; then
+          echo "::error::Failed to push:$failed"
+          exit 1
+        fi
       env:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
 
