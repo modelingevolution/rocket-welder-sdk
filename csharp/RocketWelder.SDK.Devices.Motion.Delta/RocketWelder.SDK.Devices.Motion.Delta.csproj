@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IsPackable>true</IsPackable>
+    <PackageId>RocketWelder.SDK.Devices.Motion.Delta</PackageId>
+    <Authors>ModelingEvolution</Authors>
+    <Company>ModelingEvolution</Company>
+    <Description>Delta VFD-C2000 welding-positioner adapter for the RocketWelder motion contract. Software homing and positioning over Modbus TCP against the drive's built-in PLC, typed angular speeds converted per machine to drive frequency, and the FR-11 dead-commander heartbeat with its advisory lease.</Description>
+    <PackageTags>rocketwelder;devices;motion;positioner;delta;modbus;sdk</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentModbus" Version="5.3.2" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\RocketWelder.SDK.Devices.Motion\RocketWelder.SDK.Devices.Motion.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="RocketWelder.SDK.Devices.Motion.Delta.Tests" />
+  </ItemGroup>
+
+</Project>

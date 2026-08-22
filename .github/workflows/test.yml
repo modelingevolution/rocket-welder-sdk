@@ -54,19 +54,24 @@ jobs:
         #       ZeroBuffer / shared-memory IPC suites. They need native infrastructure and block
         #       indefinitely on this developer's machine; nobody has confirmed what they need on a
         #       hosted runner. Running them here would hang the job, not fail it.
-        #   RocketWelder.SDK.AdaptivePoints.Tests, RocketWelder.SDK.Devices.Robot.Tests,
-        #   RocketWelder.SDK.Robotics.Core.Tests
-        #       Not yet observed producing a result locally (they exit without a summary on a box
-        #       whose NuGet state was disturbed by the org-feed outage — see
-        #       RocketWelder.SDK.Devices.Motion/dev-log.md). They restore and build cleanly on the
-        #       runner, so these are candidates to promote once someone confirms them green.
+        #
+        # Promoted 2026-08-21 (epic-065 It-2): AdaptivePoints, Devices.Robot and Robotics.Core.
+        # They had been held out as "not observed producing a result locally" — that turned out to
+        # be the org NuGet feed being down, not the tests. Restored from nuget.org and run with
+        # --no-restore they produce 14, 10 and 237 passing.
         run: |
           set -euo pipefail
           projects=(
             RocketWelder.SDK.Devices.Motion.Tests      # epic-065 AC-21 + AC-26
+            RocketWelder.SDK.Devices.Motion.Delta.Tests # epic-065 It-2 adapter; its live-simulator
+                                                        # tests skip with a reason when no simulator
+                                                        # is reachable, which on a runner is always
             RocketWelder.SDK.Automation.Tests
             RocketWelder.SDK.Operations.Welding.Tests
             RocketWelder.SDK.Types.Tests
+            RocketWelder.SDK.AdaptivePoints.Tests
+            RocketWelder.SDK.Devices.Robot.Tests
+            RocketWelder.SDK.Robotics.Core.Tests
           )
           for p in "${projects[@]}"; do
             echo "::group::$p"
