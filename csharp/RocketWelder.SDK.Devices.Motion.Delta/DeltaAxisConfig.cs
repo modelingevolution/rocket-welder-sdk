@@ -250,6 +250,25 @@ public sealed record DeltaAxisConfig
                     + "declares as reachable");
         }
 
+        // The X inputs are read as one block of DeltaRegisters.InputCount discrete inputs, and every
+        // index below is used to subscript that array. An out-of-range index is a wrong machine, and
+        // it must fail HERE, by name, at startup — not as an IndexOutOfRangeException surfacing from
+        // the middle of a jog, which is what it did before.
+        RequireInputIndex(nameof(HomeSensorInput), HomeSensorInput);
+        if (LimitInputs is { } limits)
+        {
+            RequireInputIndex($"{nameof(LimitInputs)}.Min", limits.Min);
+            RequireInputIndex($"{nameof(LimitInputs)}.Max", limits.Max);
+
+            if (limits.Min == limits.Max)
+                throw Invalid($"{nameof(LimitInputs)} names input {limits.Min} for both ends of "
+                    + "travel, so the axis could never tell which limit it was resting on");
+
+            if (limits.Min == HomeSensorInput || limits.Max == HomeSensorInput)
+                throw Invalid($"{nameof(HomeSensorInput)} ({HomeSensorInput}) collides with a travel "
+                    + "limit input, so homing and the limit check would read the same switch");
+        }
+
         if (Max < Min)
             throw Invalid($"{nameof(Max)} ({(double)Max:0.##}°) is below {nameof(Min)} ({(double)Min:0.##}°)");
 
@@ -263,6 +282,13 @@ public sealed record DeltaAxisConfig
             throw Invalid($"the speed calibration's slope must be positive (is "
                 + $"{SpeedCalibration.Slope:0.####}); a non-positive slope makes every speed "
                 + "conversion meaningless");
+    }
+
+    private void RequireInputIndex(string field, int index)
+    {
+        if (index < 0 || index >= DeltaRegisters.InputCount)
+            throw Invalid($"{field} is X{index}, outside the X0–X{DeltaRegisters.InputCount - 1} block "
+                + "the adapter reads in one transaction");
     }
 
     private ArgumentException Invalid(string what) =>

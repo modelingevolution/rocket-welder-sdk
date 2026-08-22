@@ -208,24 +208,58 @@ public class PositionerTests
         // Ordering, and it matters: dropping the beat and releasing the lease on a still-moving
         // positioner hands a turning machine to whatever attaches next, and leaves the drive's
         // watchdog doing a shutdown's job.
+        //
+        // The bed is driven through ConnectAsync so the lease is genuinely TAKEN. Without that the
+        // heartbeat never holds one, StopAsync has nothing to release, and the ordering assertion
+        // below has nothing to compare — which is what this test used to do behind a guard clause.
         using var bed = PositionerTestBed.TwoAxes();
+        await bed.Positioner.ConnectAsync();
         await bed.PowerAllAsync();
         await ((IRotaryAxis)bed.Positioner["turntable"]).MoveVelocityAsync(AxisTestBed.DegPerSecond(5));
+
+        var turntable = bed.Drives.Single(d => d.Host.Contains("turntable", StringComparison.Ordinal));
+        turntable.ReadHolding(DeltaRegisters.PlcUnit, DeltaRegisters.D131_OwnerId)
+            .Should().Be(bed.Positioner.OwnerId, "the arrangement only means anything if the lease is held");
 
         await bed.Positioner.DisconnectAsync();
 
         bed.Positioner.Axes.Should().OnlyContain(a => a.State == AxisState.Standstill);
         bed.Drives.Should().OnlyContain(d => !d.ReadCoil(DeltaRegisters.PlcUnit, DeltaRegisters.M4_Move));
 
-        var turntable = bed.Drives.Single(d => d.Host.Contains("turntable", StringComparison.Ordinal));
         var writes = turntable.Writes.ToArray();
         var lastMotionCoil = Array.FindLastIndex(writes,
             o => o.Address == DeltaRegisters.M4_Move && !o.Flag);
         var leaseRelease = Array.FindLastIndex(writes,
             o => o.Address == DeltaRegisters.D131_OwnerId && o.Value == AdvisoryLease.Unowned);
 
-        if (leaseRelease >= 0)
-            lastMotionCoil.Should().BeLessThan(leaseRelease, "the axis is stopped before the lease goes");
+        leaseRelease.Should().BeGreaterThan(-1, "a graceful disconnect releases the lease");
+        lastMotionCoil.Should().BeGreaterThan(-1, "and it drops the motion coil");
+        lastMotionCoil.Should().BeLessThan(leaseRelease, "the axis is stopped before the lease goes");
+    }
+
+    [Fact]
+    public async Task ConnectingTakesTheLeaseBeforeAnythingThatCouldMoveTheMachine()
+    {
+        // The other half of the ordering: the lease is claimed before the drive-setup writes, so a
+        // refused instance never touches a drive somebody else is commanding.
+        using var bed = PositionerTestBed.TwoAxes();
+
+        await bed.Positioner.ConnectAsync();
+
+        var turntable = bed.Drives.Single(d => d.Host.Contains("turntable", StringComparison.Ordinal));
+        var writes = turntable.Writes.ToArray();
+        var leaseClaim = Array.FindIndex(writes,
+            o => o.Address == DeltaRegisters.D131_OwnerId && o.Value == bed.Positioner.OwnerId);
+        var firstMotionWrite = Array.FindIndex(writes,
+            o => o.Address is DeltaRegisters.M0_Run or DeltaRegisters.M4_Move
+                or DeltaRegisters.D110_Frequency);
+
+        leaseClaim.Should().BeGreaterThan(-1);
+        firstMotionWrite.Should().BeGreaterThan(-1);
+        leaseClaim.Should().BeLessThan(firstMotionWrite,
+            "checking the lease after writing to the drive would defeat the point of checking it");
+
+        await bed.Positioner.DisconnectAsync();
     }
 
     /// <summary>A <see cref="DeltaPositioner"/> over fake drives, one per axis.</summary>

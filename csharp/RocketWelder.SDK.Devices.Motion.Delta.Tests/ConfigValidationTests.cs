@@ -87,6 +87,72 @@ public class ConfigValidationTests
         act.Should().Throw<ArgumentException>().WithMessage("*MaxJogHz*");
     }
 
+    [Theory]
+    [InlineData(10)]   // one past the end of the block
+    [InlineData(12)]
+    [InlineData(-1)]
+    public void AHomeSensorOutsideTheReadableInputBlockIsRefused(int input)
+    {
+        // The X inputs are read as one block of DeltaRegisters.InputCount discrete inputs and every
+        // index subscripts that array. Before this rule, input 12 gave an IndexOutOfRangeException
+        // from the middle of a jog — a wrong machine failing as a crash, deep in motion, instead of
+        // as the named startup failure Validate() exists to produce.
+        var broken = DeltaPositionerDefaults.Turntable with { HomeSensorInput = input };
+
+        var act = () => AxisTestBed.Build(broken);
+
+        act.Should().Throw<ArgumentException>().WithMessage($"*{nameof(DeltaAxisConfig.HomeSensorInput)}*");
+    }
+
+    [Theory]
+    [InlineData(10, 6)]
+    [InlineData(5, 99)]
+    [InlineData(-2, 6)]
+    public void ALimitInputOutsideTheReadableBlockIsRefused(int min, int max)
+    {
+        var broken = DeltaPositionerDefaults.Tilt with { LimitInputs = (min, max) };
+
+        var act = () => AxisTestBed.Build(broken);
+
+        act.Should().Throw<ArgumentException>().WithMessage($"*{nameof(DeltaAxisConfig.LimitInputs)}*");
+    }
+
+    [Fact]
+    public void TheTwoLimitInputsMustBeDifferentSwitches()
+    {
+        // Both ends of travel on one input means the axis can never tell which limit it is resting
+        // on — and therefore never which way it is allowed to retreat.
+        var broken = DeltaPositionerDefaults.Tilt with { LimitInputs = (5, 5) };
+
+        var act = () => AxisTestBed.Build(broken);
+
+        act.Should().Throw<ArgumentException>().WithMessage("*both ends of travel*");
+    }
+
+    [Fact]
+    public void TheHomeSensorMustNotShareAnInputWithATravelLimit()
+    {
+        var broken = DeltaPositionerDefaults.Tilt with { HomeSensorInput = 5, LimitInputs = (5, 6) };
+
+        var act = () => AxisTestBed.Build(broken);
+
+        act.Should().Throw<ArgumentException>().WithMessage("*collides*");
+    }
+
+    [Fact]
+    public void TheInputIndicesTheMachineActuallyUsesAreAccepted()
+    {
+        // The control: the new rule must not reject the real machine. Tilt uses X7 for the cam and
+        // X5/X6 for the limits; the turntable uses X7 and no limits.
+        var act = () =>
+        {
+            DeltaPositionerDefaults.Tilt.Validate();
+            DeltaPositionerDefaults.Turntable.Validate();
+        };
+
+        act.Should().NotThrow();
+    }
+
     [Fact]
     public void ANonPositiveToleranceIsRefused()
     {

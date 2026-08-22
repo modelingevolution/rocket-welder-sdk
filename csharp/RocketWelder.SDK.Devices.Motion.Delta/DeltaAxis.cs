@@ -598,8 +598,15 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
                 }
                 catch (MotionException ex)
                 {
-                    _logger?.LogError(ex, "{Axis}: could not ramp down after the caller cancelled a "
-                        + "continuous move; the drive's watchdog is the remaining backstop", _cfg.Name);
+                    // The ramp-down did NOT reach the drive, so the axis may well still be turning.
+                    // Reporting Standstill here would be the worst kind of lie: a status that says
+                    // "at rest" about a machine nobody has managed to stop. The watchdog will catch
+                    // it within the stall window, but the state has to say what is actually known.
+                    Fault(MotionError.CommunicationLost,
+                        $"{_cfg.Name}: the caller cancelled a continuous move but the ramp-down could "
+                        + $"not be delivered ({ex.Message}). The axis may still be turning; the "
+                        + "drive's dead-commander watchdog is the remaining backstop");
+                    return;
                 }
 
                 lock (_sync)
@@ -1166,8 +1173,16 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
         // place a persisted 0 °/s quietly became a real move. Everything reaching here has already
         // been range-checked (by RequireReachable, by DeltaAxisConfig.Validate, or by being derived
         // from MinJogHz), so this is now an assertion rather than a policy.
+        //
+        // The bounds carry a representation tolerance, and only that. MoveVelocityAsync(axis.MinSpeed)
+        // range-checks in °/s and then converts to Hz through the calibration — `(slope·hz + c − c)/slope`
+        // — which is exact for today's numbers but need not stay exact for a re-measured calibration.
+        // Losing a single bit there would make an axis reject its own advertised minimum speed. The
+        // slack is a few ULP: far below the drive's 0.01 Hz register resolution, so nothing
+        // physically out of range can slip through it.
         var commanded = hz.Hertz;
-        if (commanded < _cfg.MinJogHz.Hertz || commanded > _cfg.MaxJogHz.Hertz)
+        if (commanded < Slacken(_cfg.MinJogHz.Hertz, down: true)
+            || commanded > Slacken(_cfg.MaxJogHz.Hertz, down: false))
             throw new MotionException(MotionError.UnreachableSpeed,
                 $"{_cfg.Name}: {commanded:0.##} Hz is outside the drive's usable "
                 + $"{_cfg.MinJogHz.Hertz:0.##}–{_cfg.MaxJogHz.Hertz:0.##} Hz band", _cfg.Name);
@@ -1178,6 +1193,24 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
             (ushort)Math.Round(commanded * 100), "set frequency", ChannelPriority.Move, ct);
         await SetCoilAsync(DeltaRegisters.M5_Direction, DirectionBit(direction), ChannelPriority.Move, ct);
         await SetCoilAsync(DeltaRegisters.M4_Move, true, ChannelPriority.Move, ct);
+    }
+
+    /// <summary>
+    /// Nudges a bound by four ULP so a value that survived a floating-point round-trip through the
+    /// speed calibration still counts as inside it.
+    /// </summary>
+    /// <remarks>
+    /// Four, not one: the °/s → Hz conversion is <c>(slope·hz + intercept − intercept) / slope</c>,
+    /// four operations, each of which may round. This is slack for <i>representation</i> and nothing
+    /// else — four ULP near 50 Hz is about 3·10⁻¹⁴ Hz, twelve orders of magnitude under the drive's
+    /// own 0.01 Hz register resolution, so no physically out-of-range speed can hide in it.
+    /// </remarks>
+    private static double Slacken(double bound, bool down)
+    {
+        var slackened = bound;
+        for (var i = 0; i < 4; i++)
+            slackened = down ? Math.BitDecrement(slackened) : Math.BitIncrement(slackened);
+        return slackened;
     }
 
     /// <summary>Changes speed WITHOUT interrupting motion — the PLC tracks the register live.</summary>

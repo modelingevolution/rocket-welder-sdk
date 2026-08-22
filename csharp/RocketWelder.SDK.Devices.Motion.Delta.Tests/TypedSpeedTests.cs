@@ -165,6 +165,57 @@ public class TypedSpeedTests
         await bed.Axis.StopAsync();
     }
 
+    [Theory]
+    [InlineData(DeltaPositionerDefaults.TiltAxisName)]
+    [InlineData(DeltaPositionerDefaults.TurntableAxisName)]
+    public async Task AnAxisAcceptsItsOwnAdvertisedMinimumAndMaximum(string axisName)
+    {
+        // An axis that refuses the exact speeds it publishes would be absurd, and it is one rounding
+        // bit away: MinSpeed/MaxSpeed are derived °/s, the command range-checks in °/s, and the
+        // conversion back to Hz is four floating-point operations. Today it is exact; a re-measured
+        // calibration need not be, which is why the jog's bounds carry a few ULP of representation
+        // slack. This is the guard that keeps that true.
+        var config = axisName == DeltaPositionerDefaults.TiltAxisName
+            ? DeltaPositionerDefaults.Tilt
+            : DeltaPositionerDefaults.Turntable;
+
+        foreach (var speed in new[] { AxisAdvertisedMin(config), AxisAdvertisedMax(config) })
+        {
+            using var bed = await AxisTestBed.Build(config).PoweredAsync();
+
+            var act = () => bed.Axis.MoveVelocityAsync(speed);
+
+            await act.Should().NotThrowAsync($"the axis advertises {speed} as reachable");
+            await bed.Axis.StopAsync();
+        }
+    }
+
+    [Fact]
+    public void TheSlackIsRepresentationOnly_NotAPhysicalAllowance()
+    {
+        // The control on the tolerance itself: it must not have become a licence to command speeds
+        // that are genuinely out of range. A whole 0.01 Hz — the drive's own register resolution —
+        // below the floor is still rejected.
+        var config = DeltaPositionerDefaults.Turntable;
+        var belowFloor = config.SpeedCalibration.ToAngularSpeed(
+            Frequency<double>.FromHertz(config.MinJogHz.Hertz - 0.01));
+
+        var bed = AxisTestBed.Build(config);
+        using var _ = bed;
+        bed.Axis.PowerAsync(true).GetAwaiter().GetResult();
+
+        var act = () => bed.Axis.MoveVelocityAsync(belowFloor);
+
+        act.Should().ThrowAsync<MotionException>().GetAwaiter().GetResult()
+            .Which.Error.Should().Be(MotionError.UnreachableSpeed);
+    }
+
+    private static AngularSpeed<double, DegreePerSecond<double>> AxisAdvertisedMin(DeltaAxisConfig c) =>
+        c.SpeedCalibration.ToAngularSpeed(c.MinJogHz);
+
+    private static AngularSpeed<double, DegreePerSecond<double>> AxisAdvertisedMax(DeltaAxisConfig c) =>
+        c.SpeedCalibration.ToAngularSpeed(c.MaxMoveHz);
+
     [Fact]
     public async Task TheCommandedFrequencyOnTheWire_IsTheCalibrationsAnswer()
     {

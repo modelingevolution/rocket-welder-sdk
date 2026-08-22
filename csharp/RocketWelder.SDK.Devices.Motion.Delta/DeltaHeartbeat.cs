@@ -304,12 +304,6 @@ internal sealed class DeltaHeartbeat : IAsyncDisposable
         _leaseHeld = false;
     }
 
-    /// <remarks>
-    /// A plain await, deliberately. The inherited <c>ContinueWith(…, OnlyOnRanToCompletion)</c> shape
-    /// turns a FAULTED read into a CANCELLED task, so a drive that had gone away surfaced as
-    /// <see cref="TaskCanceledException"/> — "somebody cancelled" rather than "the transport is
-    /// dead", past every <c>catch (MotionException)</c> written to handle it.
-    /// </remarks>
     /// <summary>
     /// Stops beating <b>without</b> the round-trip that releases the lease — the teardown a
     /// synchronous <c>Dispose</c> can honestly perform.
@@ -331,6 +325,13 @@ internal sealed class DeltaHeartbeat : IAsyncDisposable
             + "expires in {Expiry:0.##} s", _axis, _channel.Host, Expiry.TotalSeconds);
     }
 
+    /// <summary>Reads one PLC register on the heartbeat lane.</summary>
+    /// <remarks>
+    /// A plain await, deliberately. The inherited <c>ContinueWith(…, OnlyOnRanToCompletion)</c> shape
+    /// turns a FAULTED read into a CANCELLED task, so a drive that had gone away surfaced as
+    /// <see cref="TaskCanceledException"/> — "somebody cancelled" rather than "the transport is
+    /// dead", past every <c>catch (MotionException)</c> written to handle it.
+    /// </remarks>
     private async Task<ushort> ReadRegisterAsync(ushort address, string what, CancellationToken ct)
     {
         var words = await _channel.ReadHoldingAsync(DeltaRegisters.PlcUnit, address, 1, what,
