@@ -139,11 +139,26 @@ public sealed class DeltaPositioner : IPositioner, IAsyncDisposable
         {
             await _channels[i].ConnectAsync(ct);
             await _heartbeats[i].AcquireAsync(_leaseTimeout, ct);
-            _heartbeats[i].Start();
+            // A latched D132 at acquire is a PREVIOUS commander's death: the lease was won, so the
+            // trip predates our ownership and is ours to acknowledge (the documented recovery is
+            // reset + re-command, and at attach there is no command to re-issue). Left in place it
+            // faulted every axis at the first monitor poll, before the first command ever ran —
+            // and no host seam calls ResetAsync (found live 2026-08-24). Idempotent when clear.
+            await _heartbeats[i].ClearWatchdogFaultAsync(ct);
         }
 
+        // Initialise BEFORE the first beat. The watchdog arms on the first CHANGE of D130 — the
+        // beat loop's write, not the lease acquisition — and the per-axis setup writes share the
+        // beat's channel: on a slow link they starve it past the stall window and the watchdog
+        // trips on OUR OWN connect (observed live 2026-08-24: both axes tripped between
+        // "heartbeat started" and "connected", faulting the positioner before its first command).
+        // Until the first beat the drive is in the ordinary pre-arm state, so this window adds
+        // nothing an attach did not already have.
         foreach (var axis in Axes.Cast<DeltaAxis>())
             await axis.InitialiseAsync(ct);
+
+        foreach (var heartbeat in _heartbeats)
+            heartbeat.Start();
 
         _connected = true;
         Connected?.Invoke(this, EventArgs.Empty);

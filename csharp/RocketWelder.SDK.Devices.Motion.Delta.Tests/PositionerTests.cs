@@ -262,6 +262,54 @@ public class PositionerTests
         await bed.Positioner.DisconnectAsync();
     }
 
+    // Found live 2026-08-24: the connect sequence tripped its OWN watchdog — the beat started
+    // before the per-axis setup writes, which share its channel and on a slow link starve it past
+    // the stall window. The watchdog arms on the first CHANGE of D130, so no beat may reach the
+    // wire until initialisation is done.
+    [Fact]
+    public async Task ConnectingBeatsOnlyAfterTheSetupWrites_SoItCannotTripItsOwnWatchdog()
+    {
+        using var bed = PositionerTestBed.TwoAxes();
+
+        await bed.Positioner.ConnectAsync();
+
+        foreach (var drive in bed.Drives)
+        {
+            var writes = drive.Writes.ToArray();
+            var firstBeat = Array.FindIndex(writes, o => o.Address == DeltaRegisters.D130_Heartbeat);
+            // The LAST RequiredSetup register — written on every axis (limit setup is tilt-only).
+            var lastSetup = Array.FindLastIndex(writes,
+                o => o.Address == DeltaRegisters.RequiredSetup[^1].Address);
+
+            lastSetup.Should().BeGreaterThan(-1, "initialisation writes the required setup");
+            (firstBeat == -1 || firstBeat > lastSetup).Should().BeTrue(
+                "the first beat arms the drive watchdog, so it must follow the last setup write");
+        }
+
+        await bed.Positioner.DisconnectAsync();
+    }
+
+    // The other stale-state half of the same live find: a latched D132 from a PREVIOUS commander's
+    // death faulted every axis at the first monitor poll — and no host seam calls ResetAsync.
+    // Winning the lease means the trip predates our ownership; connect acknowledges it.
+    [Fact]
+    public async Task ConnectingClearsAStaleWatchdogFault_LeftByADeadPredecessor()
+    {
+        using var bed = PositionerTestBed.TwoAxes();
+        foreach (var drive in bed.Drives)
+            drive.WriteHolding(DeltaRegisters.PlcUnit, DeltaRegisters.D132_WatchdogFault, 1);
+
+        await bed.Positioner.ConnectAsync();
+
+        bed.Drives.Should().OnlyContain(d =>
+            d.ReadHolding(DeltaRegisters.PlcUnit, DeltaRegisters.D132_WatchdogFault)
+                == DeltaRegisters.WatchdogHealthy);
+        bed.Positioner.Axes.Should().OnlyContain(a => a.State != AxisState.ErrorStop,
+            "a predecessor's trip is not this owner's fault to carry");
+
+        await bed.Positioner.DisconnectAsync();
+    }
+
     /// <summary>A <see cref="DeltaPositioner"/> over fake drives, one per axis.</summary>
     private sealed class PositionerTestBed : IDisposable
     {
