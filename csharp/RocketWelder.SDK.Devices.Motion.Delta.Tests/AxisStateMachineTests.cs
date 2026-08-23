@@ -29,6 +29,27 @@ public class AxisStateMachineTests
         bed.Drive.ReadCoil(DeltaRegisters.PlcUnit, DeltaRegisters.M0_Run).Should().BeTrue();
     }
 
+    // Found live 2026-08-24: a freshly connected positioner sits Disabled, PowerAsync is the only exit, and
+    // no seam in any host calls it — so every verb, including Home, was refused forever. Homing's first
+    // write has always been M0_Run=true on the bench, so Home IS the deliberate energise act and must be
+    // callable from Disabled. Move verbs stay gated — the test below pins that side.
+    [Fact]
+    public async Task HomingFromDisabled_PowersOn_References_AndEndsAtStandstill()
+    {
+        using var bed = AxisTestBed.Build(DeltaPositionerDefaults.Turntable, drive =>
+        {
+            drive.PositionCounts = -13_280;
+            AxisTestBed.ScriptTheCam(drive, latchFires: true);
+        });
+        bed.Axis.State.Should().Be(AxisState.Disabled);
+
+        await bed.Axis.HomeAsync();
+
+        bed.Axis.State.Should().Be(AxisState.Standstill);
+        bed.Axis.IsHomed.Should().BeTrue();
+        bed.Drive.ReadCoil(DeltaRegisters.PlcUnit, DeltaRegisters.M0_Run).Should().BeTrue();
+    }
+
     [Fact]
     public async Task AMotionCommandFromDisabled_IsRejectedBusy_AndNothingIsCommanded()
     {
@@ -185,10 +206,12 @@ public class AxisStateMachineTests
     [Fact]
     public async Task ARejectedCommandCarriesTheAxisName_SoACallerNeedNotParseTheMessage()
     {
-        // AC-19: a caller branches on the enum and the axis name, never on message text.
+        // AC-19: a caller branches on the enum and the axis name, never on message text. The example
+        // verb is a Move: Home is no longer rejected from Disabled (it IS the energise act), so the
+        // rejected-command specimen must be one that stays gated.
         using var bed = AxisTestBed.Tilt();
 
-        var act = () => bed.Axis.HomeAsync();
+        var act = () => bed.Axis.MoveAbsoluteAsync(Degree<double>.Create(10));
 
         var ex = (await act.Should().ThrowAsync<MotionException>()).Which;
         ex.Error.Should().Be(MotionError.Busy);

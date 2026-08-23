@@ -369,8 +369,14 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
     }
 
     /// <inheritdoc/>
+    /// <remarks>Callable from <see cref="AxisState.Disabled"/>, deliberately: homing's first write is
+    /// <c>M0_Run = true</c> — on the bench, homing has always BEEN the power-on act, and the host offers no
+    /// other seam that energises an axis (found live 2026-08-24: a freshly connected positioner sat in
+    /// Disabled with every verb refused, including this one). Move verbs stay gated on
+    /// <see cref="AxisState.Standstill"/>; energising remains the operator's deliberate act, expressed as
+    /// the Home verb rather than an implicit power-on at attach.</remarks>
     public Task HomeAsync(CancellationToken ct = default) =>
-        RunOperationAsync(AxisState.Homing, HomeCoreAsync, ct);
+        RunOperationAsync(AxisState.Homing, HomeCoreAsync, ct, allowFromDisabled: true);
 
     /// <inheritdoc/>
     public async Task StopAsync(CancellationToken ct = default)
@@ -692,16 +698,20 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
     /// state (FR-1 / AC-1).
     /// </summary>
     private async Task RunOperationAsync(AxisState working, Func<CancellationToken, Task> body,
-        CancellationToken ct)
+        CancellationToken ct, bool allowFromDisabled = false)
     {
         CancellationTokenSource abort;
         lock (_sync)
         {
-            if (_state != AxisState.Standstill)
+            // allowFromDisabled is Home's alone — see HomeAsync. Every other operation still requires a
+            // powered, referenced axis, so a Move on a cold positioner names the actual remedy.
+            if (_state != AxisState.Standstill && !(allowFromDisabled && _state == AxisState.Disabled))
                 throw new MotionException(MotionError.Busy,
                     _state == AxisState.ErrorStop
                         ? $"{_cfg.Name}: a fault is latched ({_error}) — call ResetAsync first"
-                        : $"{_cfg.Name}: another operation is running (axis is {_state})", _cfg.Name);
+                        : _state == AxisState.Disabled
+                            ? $"{_cfg.Name}: the axis is Disabled — home it first (homing powers it on)"
+                            : $"{_cfg.Name}: another operation is running (axis is {_state})", _cfg.Name);
 
             _state = working;
             _error = null;
@@ -771,7 +781,9 @@ public sealed class DeltaAxis : IRotaryAxis, ISelfCheckingAxis, IDisposable
         throw new MotionException(MotionError.Busy,
             state == AxisState.ErrorStop
                 ? $"{_cfg.Name}: a fault is latched — call ResetAsync first"
-                : $"{_cfg.Name}: a motion command was issued while the axis is {state}", _cfg.Name);
+                : state == AxisState.Disabled
+                    ? $"{_cfg.Name}: the axis is Disabled — home it first (homing powers it on)"
+                    : $"{_cfg.Name}: a motion command was issued while the axis is {state}", _cfg.Name);
     }
 
     private void EnsureSenseSupported(RotationSense sense)
