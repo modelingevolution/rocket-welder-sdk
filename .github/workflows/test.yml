@@ -63,9 +63,9 @@ jobs:
           set -euo pipefail
           projects=(
             RocketWelder.SDK.Devices.Motion.Tests      # epic-065 AC-21 + AC-26
-            RocketWelder.SDK.Devices.Motion.Delta.Tests # epic-065 It-2 adapter; its live-simulator
-                                                        # tests skip with a reason when no simulator
-                                                        # is reachable, which on a runner is always
+            # The Delta ADAPTER (Devices.Motion.Delta) lives in the delta-positioner repo with the
+            # plugin since 2026-08-24 (owner decision) — this repo holds only the vendor-neutral
+            # motion contract.
             RocketWelder.SDK.Automation.Tests
             RocketWelder.SDK.Operations.Welding.Tests
             RocketWelder.SDK.Types.Tests
