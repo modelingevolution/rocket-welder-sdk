@@ -199,18 +199,19 @@ yet list them.
 
 ---
 
-## Addendum 2026-08-25 — three `MotionError` members (the lossy-`DriveFault` follow-up)
+## Addendum 2026-08-25 — three `MotionError` members
 
 **Author:** .NET engineer · **Scope:** `MotionError.cs` + `ContractSurfaceTests.cs`. Purely
 additive; no existing member renamed, reordered or renumbered.
 
 ### Why
 
-The It-2 Delta adapter shipped with a documented lossy mapping. `DeltaAxis.Mechanical(string)` in
-the `delta-positioner` repo says so in its own remarks: a stall, a positioning timeout, a move that
-stopped outside tolerance, and a home latch that never fired are **all four** reported as
-`MotionError.DriveFault` with the real cause only in the message — which is precisely the
-message-matching AC-19 forbids callers from doing. Two owner approvals close it:
+The twelve-member enum froze before every failure a real machine produces had been met. Four had
+no member of their own: a stall, a positioning deadline elapsing, a move stopping outside tolerance,
+and a home reference that was never captured. A failure with no member can only be reported as the
+nearest one that exists, with the real cause left in the message — and reading the message is
+exactly what AC-19 forbids a caller from doing, so these members are what make AC-19 satisfiable at
+all. Three owner approvals close it:
 
 | Approved | Member | Covers |
 |---|---|---|
@@ -231,12 +232,12 @@ sensor and failed to capture the reference. `WatchdogTripped` explicitly leaves 
 untouched. `MotionFailed` would be a category error: the mechanism did its part, the capture did
 not happen, and pointing the operator at an obstruction sends them to the wrong place. The name
 follows the owner's own wording ("home latch"); position latching is a general motion-control
-concept (registration / touch-probe latch), not a Delta-only one.
+concept (registration / touch-probe latch), not a vendor-specific one.
 
 ### Append-only, and pinned as such
 
-The enum crosses process and storage boundaries — `delta-positioner` throws it, rw2 renders it
-(`MotionDeviceStatusService` surfaces `nameof(...)`), and an `AxisStatus` carrying one can be in
+The enum crosses process and storage boundaries — adapters throw it, hosts render it (rw2's
+`MotionDeviceStatusService` surfaces `nameof(...)`), and an `AxisStatus` carrying one can be in
 flight across a version change. Renumbering member N would silently reinterpret every persisted N.
 `MotionError_OrdinalsAreFrozen_SoAnAdditionCannotReinterpretAStoredValue` pins **names and
 numbers** 0..14, so a reorder fails the build, not the shop floor.
@@ -244,13 +245,13 @@ numbers** 0..14, so a reorder fails the build, not the shop floor.
 ### In-repo blast radius
 
 Inside `rocket-welder-sdk`, `RocketWelder.SDK.Devices.Motion` has exactly one consumer — its own
-test project — and nothing in this repository *produces* a `DriveFault`; the enum is a contract
-here and the producers live downstream. **Not changed (separate repos, separate owners):**
-`delta-positioner`'s `Mechanical()` is the one place whose four call sites should now split three
-ways (`MotionFailed` ×3, `HomeLatchFailed` ×1), which would also let `DeltaAxis` drop its
-`ex.Message.Contains("not moving")` catch for a proper enum branch. rw2 needs no change to keep
-working; no Fairino code-99 mapping exists there yet, so `SafetyStop` unblocks that adapter rather
-than correcting it.
+test project — and nothing in this repository *produces* a `MotionError`. The enum is a contract
+here; the producers are adapters, and they live in their own repositories under their own owners.
+
+Because the change is additive, every existing downstream mapping keeps compiling and keeps behaving
+exactly as it did — an adapter gains the **option** of the new members and nothing else. Whether and
+when to take that option is each adapter owner's call. **No downstream repository is changed,
+proposed against, or queued by this work.**
 
 ### Verification
 
