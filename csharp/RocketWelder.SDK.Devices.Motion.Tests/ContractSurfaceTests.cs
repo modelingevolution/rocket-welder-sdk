@@ -74,26 +74,21 @@ public class ContractSurfaceTests
     }
 
     [Fact]
-    public void MotionError_HasExactlyTheFifteenDeclaredReasons()
+    public void MotionError_HasFifteenMembersWithFrozenOrdinals_SoAnAdditionCannotReinterpretAStoredValue()
     {
-        // Fifteen: architecture.md's original enum block lists twelve, plus the three owner
-        // approvals of 2026-08-22 (MotionFailed, HomeLatchFailed) and 2026-08-25 (SafetyStop).
-        // Pinning the real count here rather than a remembered one is the point of the test.
-        Enum.GetNames<MotionError>().Should().Equal(
-            "Busy", "NotHomed", "OutOfRange", "UnreachableSpeed", "UnsupportedSense",
-            "LimitTripped", "DriveFault", "CommunicationLost", "WatchdogTripped",
-            "UnknownAxis", "WrongAxisKind", "LeaseHeld",
-            "MotionFailed", "HomeLatchFailed", "SafetyStop");
-    }
-
-    [Fact]
-    public void MotionError_OrdinalsAreFrozen_SoAnAdditionCannotReinterpretAStoredValue()
-    {
-        // The enum crosses process and storage boundaries — delta-positioner throws it, rw2 renders
-        // it, and an AxisStatus carrying one can be in flight when a version changes. Growth is
-        // append-only: renumbering member N would silently turn every persisted N into a different
-        // failure, and a "reset the drive" instruction for what was an open guard is exactly the
-        // wrong thing to tell an operator. Names AND numbers, so a reorder fails here too.
+        // Names AND numbers, which is why this is the only MotionError surface test: a rename, an
+        // addition, a removal, a reorder and a renumber-without-reorder all fail here, and the last
+        // of those is invisible to a names-only assertion.
+        //
+        // The numbers are load-bearing because the enum crosses process and storage boundaries —
+        // adapters throw it, hosts render it, and an AxisStatus carrying one can be in flight when
+        // a version changes. Renumbering member N would silently turn every persisted N into a
+        // different failure, and "reset the drive" for what was an open guard is exactly the wrong
+        // thing to tell an operator.
+        //
+        // Fifteen: architecture.md's original block froze twelve, plus the owner approvals of
+        // 2026-08-22 (MotionFailed, HomeLatchFailed) and 2026-08-25 (SafetyStop). Pinned from the
+        // real enum rather than a remembered count, which is the point.
         var actual = Enum.GetValues<MotionError>()
                          .ToDictionary(e => e.ToString(), e => (int)e);
 
@@ -115,33 +110,6 @@ public class ContractSurfaceTests
             ["HomeLatchFailed"] = 13,
             ["SafetyStop"] = 14,
         });
-    }
-
-    [Fact]
-    public void MotionError_TheThreeAddedReasonsAreEachDistinctFromDriveFault()
-    {
-        // The whole reason these are separate members is that they carry different remedies, and a
-        // caller branches on the enum alone (AC-19). If any of them collapsed back onto DriveFault
-        // the operator would be told to reset a healthy drive.
-        MotionException[] failures =
-        [
-            new(MotionError.DriveFault, "any text at all"),
-            new(MotionError.MotionFailed, "any text at all"),
-            new(MotionError.HomeLatchFailed, "any text at all"),
-            new(MotionError.SafetyStop, "any text at all"),
-        ];
-
-        failures.Select(Remedy).Should().Equal(
-            "reset-the-drive", "clear-the-obstruction", "call-maintenance", "clear-the-safety-circuit");
-
-        static string Remedy(MotionException e) => e.Error switch
-        {
-            MotionError.DriveFault => "reset-the-drive",
-            MotionError.MotionFailed => "clear-the-obstruction",
-            MotionError.HomeLatchFailed => "call-maintenance",
-            MotionError.SafetyStop => "clear-the-safety-circuit",
-            _ => "abort",
-        };
     }
 
     [Fact]
