@@ -196,3 +196,63 @@ to this branch.
 `--no-restore`. Side effect worth knowing: it leaves those three test projects in a state where
 `dotnet test` exits without producing a summary, which is why `.github/workflows/test.yml` does not
 yet list them.
+
+---
+
+## Addendum 2026-08-25 — three `MotionError` members (the lossy-`DriveFault` follow-up)
+
+**Author:** .NET engineer · **Scope:** `MotionError.cs` + `ContractSurfaceTests.cs`. Purely
+additive; no existing member renamed, reordered or renumbered.
+
+### Why
+
+The It-2 Delta adapter shipped with a documented lossy mapping. `DeltaAxis.Mechanical(string)` in
+the `delta-positioner` repo says so in its own remarks: a stall, a positioning timeout, a move that
+stopped outside tolerance, and a home latch that never fired are **all four** reported as
+`MotionError.DriveFault` with the real cause only in the message — which is precisely the
+message-matching AC-19 forbids callers from doing. Two owner approvals close it:
+
+| Approved | Member | Covers |
+|---|---|---|
+| 2026-08-22 | `MotionFailed` | stall · positioning timeout · stopped outside tolerance |
+| 2026-08-22 | `HomeLatchFailed` | home latch never fired ⇒ *check the PLC program*, not reset-and-retry |
+| 2026-08-25 | `SafetyStop` | safety circuit stopped the motion (e.g. Fairino controller code 99) |
+
+The separation is not taxonomy, it is **the remedy**. `DriveFault` tells an operator to reset a
+drive. That instruction is wrong three different ways: for `MotionFailed` the drive is healthy and
+the obstruction is mechanical; for `HomeLatchFailed` the fix is in the control program and belongs
+to maintenance, so retrying only reproduces it; for `SafetyStop` the cause is an open guard, a
+latched e-stop or a person in the cell, and the fix is at the safety circuit, not the axis.
+
+`HomeLatchFailed` was checked against the existing surface before being added rather than assumed
+missing. Nothing covers it: `NotHomed` is *"an absolute move was issued on an unhomed axis"* — a
+caller mistake with a clear remedy (home first) — whereas here `Home` itself ran, reached the
+sensor and failed to capture the reference. `WatchdogTripped` explicitly leaves the latch
+untouched. `MotionFailed` would be a category error: the mechanism did its part, the capture did
+not happen, and pointing the operator at an obstruction sends them to the wrong place. The name
+follows the owner's own wording ("home latch"); position latching is a general motion-control
+concept (registration / touch-probe latch), not a Delta-only one.
+
+### Append-only, and pinned as such
+
+The enum crosses process and storage boundaries — `delta-positioner` throws it, rw2 renders it
+(`MotionDeviceStatusService` surfaces `nameof(...)`), and an `AxisStatus` carrying one can be in
+flight across a version change. Renumbering member N would silently reinterpret every persisted N.
+`MotionError_OrdinalsAreFrozen_SoAnAdditionCannotReinterpretAStoredValue` pins **names and
+numbers** 0..14, so a reorder fails the build, not the shop floor.
+
+### In-repo blast radius
+
+Inside `rocket-welder-sdk`, `RocketWelder.SDK.Devices.Motion` has exactly one consumer — its own
+test project — and nothing in this repository *produces* a `DriveFault`; the enum is a contract
+here and the producers live downstream. **Not changed (separate repos, separate owners):**
+`delta-positioner`'s `Mechanical()` is the one place whose four call sites should now split three
+ways (`MotionFailed` ×3, `HomeLatchFailed` ×1), which would also let `DeltaAxis` drop its
+`ex.Message.Contains("not moving")` catch for a proper enum branch. rw2 needs no change to keep
+working; no Fairino code-99 mapping exists there yet, so `SafetyStop` unblocks that adapter rather
+than correcting it.
+
+### Verification
+
+`RocketWelder.SDK.Devices.Motion.Tests` — **61 passed, 0 failed, 0 skipped** (59 before; +2 new).
+Build clean, 0 errors, no new warnings.

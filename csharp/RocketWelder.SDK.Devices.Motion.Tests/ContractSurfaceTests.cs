@@ -74,14 +74,74 @@ public class ContractSurfaceTests
     }
 
     [Fact]
-    public void MotionError_HasExactlyTheTwelveDeclaredReasons()
+    public void MotionError_HasExactlyTheFifteenDeclaredReasons()
     {
-        // Twelve, not thirteen: architecture.md's enum block lists twelve members. Pinning the
-        // real count here rather than a remembered one is the point of the test.
+        // Fifteen: architecture.md's original enum block lists twelve, plus the three owner
+        // approvals of 2026-08-22 (MotionFailed, HomeLatchFailed) and 2026-08-25 (SafetyStop).
+        // Pinning the real count here rather than a remembered one is the point of the test.
         Enum.GetNames<MotionError>().Should().Equal(
             "Busy", "NotHomed", "OutOfRange", "UnreachableSpeed", "UnsupportedSense",
             "LimitTripped", "DriveFault", "CommunicationLost", "WatchdogTripped",
-            "UnknownAxis", "WrongAxisKind", "LeaseHeld");
+            "UnknownAxis", "WrongAxisKind", "LeaseHeld",
+            "MotionFailed", "HomeLatchFailed", "SafetyStop");
+    }
+
+    [Fact]
+    public void MotionError_OrdinalsAreFrozen_SoAnAdditionCannotReinterpretAStoredValue()
+    {
+        // The enum crosses process and storage boundaries — delta-positioner throws it, rw2 renders
+        // it, and an AxisStatus carrying one can be in flight when a version changes. Growth is
+        // append-only: renumbering member N would silently turn every persisted N into a different
+        // failure, and a "reset the drive" instruction for what was an open guard is exactly the
+        // wrong thing to tell an operator. Names AND numbers, so a reorder fails here too.
+        var actual = Enum.GetValues<MotionError>()
+                         .ToDictionary(e => e.ToString(), e => (int)e);
+
+        actual.Should().Equal(new Dictionary<string, int>
+        {
+            ["Busy"] = 0,
+            ["NotHomed"] = 1,
+            ["OutOfRange"] = 2,
+            ["UnreachableSpeed"] = 3,
+            ["UnsupportedSense"] = 4,
+            ["LimitTripped"] = 5,
+            ["DriveFault"] = 6,
+            ["CommunicationLost"] = 7,
+            ["WatchdogTripped"] = 8,
+            ["UnknownAxis"] = 9,
+            ["WrongAxisKind"] = 10,
+            ["LeaseHeld"] = 11,
+            ["MotionFailed"] = 12,
+            ["HomeLatchFailed"] = 13,
+            ["SafetyStop"] = 14,
+        });
+    }
+
+    [Fact]
+    public void MotionError_TheThreeAddedReasonsAreEachDistinctFromDriveFault()
+    {
+        // The whole reason these are separate members is that they carry different remedies, and a
+        // caller branches on the enum alone (AC-19). If any of them collapsed back onto DriveFault
+        // the operator would be told to reset a healthy drive.
+        MotionException[] failures =
+        [
+            new(MotionError.DriveFault, "any text at all"),
+            new(MotionError.MotionFailed, "any text at all"),
+            new(MotionError.HomeLatchFailed, "any text at all"),
+            new(MotionError.SafetyStop, "any text at all"),
+        ];
+
+        failures.Select(Remedy).Should().Equal(
+            "reset-the-drive", "clear-the-obstruction", "call-maintenance", "clear-the-safety-circuit");
+
+        static string Remedy(MotionException e) => e.Error switch
+        {
+            MotionError.DriveFault => "reset-the-drive",
+            MotionError.MotionFailed => "clear-the-obstruction",
+            MotionError.HomeLatchFailed => "call-maintenance",
+            MotionError.SafetyStop => "clear-the-safety-circuit",
+            _ => "abort",
+        };
     }
 
     [Fact]

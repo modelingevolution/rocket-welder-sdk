@@ -50,4 +50,44 @@ public enum MotionError
     /// <summary>Another commander's heartbeat is live on this drive; the FR-11 advisory lease is
     /// held elsewhere. Retry until it expires.</summary>
     LeaseHeld,
+
+    /// <summary>The command was accepted and the drive stayed healthy, but the motion did not
+    /// achieve what it was told to: the axis stalled, the positioning deadline elapsed, or it came
+    /// to rest outside the commanded tolerance.
+    ///
+    /// <para>
+    /// <b>Deliberately not <see cref="DriveFault"/>.</b> There is no drive fault to reset here —
+    /// the drive did as it was told and the mechanism did not follow. The operator clears the
+    /// mechanical cause (an obstruction, a binding or cold gearbox, a load beyond the axis's
+    /// torque, a target the configured speed cannot reach inside the timeout) and re-commands. The
+    /// home reference is untouched, so no re-home is needed unless the axis was pushed off
+    /// position.
+    /// </para></summary>
+    MotionFailed,
+
+    /// <summary>Homing found the home sensor but the reference position was never captured — the
+    /// position latch did not fire, so the axis has no zero and remains unhomed.
+    ///
+    /// <para>
+    /// <b>Do not offer reset-and-retry.</b> The mechanism did its part and the capture did not
+    /// happen, so re-running <c>Home</c> reproduces the same result. The fault lies in the
+    /// machine's control program or the sensor wiring behind it — on a PLC-mediated axis, the
+    /// home-latch network in the ladder. Escalate to maintenance or commissioning. Reported apart
+    /// from <see cref="MotionFailed"/> because the remedy is a different person's job.
+    /// </para></summary>
+    HomeLatchFailed,
+
+    /// <summary>The machine's safety circuit stopped the motion — an open guard or interlock, a
+    /// latched emergency stop, a light curtain or area scanner tripped, or a controller-level
+    /// protective stop (e.g. Fairino controller code 99).
+    ///
+    /// <para>
+    /// Neither a drive fault nor a caller mistake, and the remedy is neither of theirs:
+    /// <see cref="DriveFault"/> sends an operator to reset a drive, which is the wrong instruction
+    /// when the real cause is an open guard, a latched e-stop or a person standing in the cell. The
+    /// condition is cleared and acknowledged <b>at the safety circuit</b>, not at the axis, and only
+    /// then is the move re-commanded. Motion stays refused while the circuit is open, so retrying
+    /// without clearing it simply fails again.
+    /// </para></summary>
+    SafetyStop,
 }
