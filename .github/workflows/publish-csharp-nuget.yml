@@ -76,13 +76,97 @@ jobs:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
 
     - name: Publish to ModelingEvolution NuGet
+      id: push_me
       working-directory: ./csharp
-      run: |
-        dotnet nuget push "./nupkg/*.nupkg" \
-          --api-key ${{ secrets.NUGET_API_KEY_ME }} \
-          --source https://nuget.modelingevolution.com/v3/index.json \
-          --skip-duplicate
+      # Still non-fatal, ON PURPOSE and for one reason only: nuget.org has already accepted
+      # every package by this point, and the org feed is self-hosted and has gone unreachable
+      # mid-release before (Devices.Motion/dev-log.md, 2026-08-20 feed outage). Dying here
+      # would leave a half-published release, which is worse than a late one.
+      #
+      # What is NOT acceptable is discarding the result, which is what this step used to do:
+      # the job went green whether the feed took the packages or was switched off. The outcome
+      # is now recorded and the "Verify" step below is what actually decides the job.
       continue-on-error: true
+      run: |
+        if dotnet nuget push "./nupkg/*.nupkg" \
+             --api-key ${{ secrets.NUGET_API_KEY_ME }} \
+             --source https://nuget.modelingevolution.com/v3/index.json \
+             --skip-duplicate
+        then
+          echo "outcome=success" >> $GITHUB_OUTPUT
+        else
+          echo "outcome=failed" >> $GITHUB_OUTPUT
+          echo "::warning::Push to the ModelingEvolution feed reported a failure. Not fatal here \
+        so nuget.org is not left half-published — the Verify step decides whether this release stands."
+        fi
+
+    - name: Verify both feeds actually serve this version
+      working-directory: ./csharp
+      env:
+        VERSION: ${{ steps.version.outputs.version }}
+        # nuget.org validates and indexes asynchronously, package by package — measured at
+        # roughly five minutes for a 22-package release, with some ids fetchable while others
+        # still 404. Poll to that shape rather than checking once and calling it a failure.
+        TIMEOUT_SECONDS: '900'
+        POLL_SECONDS: '15'
+      run: |
+        set -u
+        # A push returning 0 is not the same fact as a package a consumer can restore, and the
+        # release status is read as if it were. This step closes that gap: it asks each feed
+        # for the versions it serves and fails the job if this one is missing from either.
+        #
+        # EVERY packed package is checked, not a representative one — nuget.org indexes them
+        # independently, so "the first one is up" says nothing about the twenty-second.
+        #
+        # The two feeds expose the same {"versions":[...]} body under DIFFERENT paths:
+        #   nuget.org  -> /v3-flatcontainer/<id>/index.json
+        #   org feed   -> /v3/package/<id>/index.json
+        # Ids are lowercased in both.
+        ids=""
+        for f in ./nupkg/*.nupkg; do
+          b="$(basename "$f")"
+          ids="$ids ${b%".${VERSION}.nupkg"}"
+        done
+        total="$(echo $ids | wc -w)"
+        echo "Verifying $total package(s) at version $VERSION on both feeds..."
+
+        deadline=$(( $(date +%s) + TIMEOUT_SECONDS ))
+        while :; do
+          missing=""
+          for id in $ids; do
+            lid="$(echo "$id" | tr '[:upper:]' '[:lower:]')"
+            for feed in \
+              "nuget.org|https://api.nuget.org/v3-flatcontainer/$lid/index.json" \
+              "modelingevolution|https://nuget.modelingevolution.com/v3/package/$lid/index.json"
+            do
+              name="${feed%%|*}"; url="${feed#*|}"
+              # `|| true` so one dropped connection cannot end the whole verification.
+              body="$(curl -sS --max-time 20 "$url" 2>/dev/null || true)"
+              case "$body" in
+                *"\"$VERSION\""*) ;;
+                *) missing="$missing $name:$id" ;;
+              esac
+            done
+          done
+
+          # `if`, not `[ ... ] && break`: under `set -e` an AND-OR list whose test fails is a
+          # non-zero statement, and that has ended jobs before.
+          if [ -z "$missing" ]; then break; fi
+          now="$(date +%s)"
+          if [ "$now" -ge "$deadline" ]; then break; fi
+          echo "  still indexing ($(( deadline - now ))s left) — missing:$missing"
+          sleep "$POLL_SECONDS"
+        done
+
+        if [ -n "$missing" ]; then
+          echo "::error::Release $VERSION is NOT fetchable from every feed after ${TIMEOUT_SECONDS}s. \
+        Missing as feed:package —$missing (ModelingEvolution push step reported: \
+        ${{ steps.push_me.outputs.outcome }}). The tag exists and nuget.org may be serving part of \
+        the release: verify before re-running, and never re-cut the tag to fix a feed problem."
+          exit 1
+        fi
+
+        echo "All $total package(s) serve $VERSION from nuget.org and the ModelingEvolution feed."
 
     - name: Summary
       working-directory: ./csharp
@@ -102,4 +186,4 @@ jobs:
           echo "dotnet add package ${PKG_ID} --version ${VERSION}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-        done
+        done
