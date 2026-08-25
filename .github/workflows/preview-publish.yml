@@ -106,13 +106,40 @@ jobs:
         NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
 
     - name: Publish to ModelingEvolution NuGet
+      id: push_me
       working-directory: ./csharp
-      run: |
-        dotnet nuget push "./nupkg/*.nupkg" \
-          --api-key ${{ secrets.NUGET_API_KEY_ME }} \
-          --source https://nuget.modelingevolution.com/v3/index.json \
-          --skip-duplicate
+      # Non-fatal for the same reason as the release path: nuget.org has already accepted every
+      # package by this point, and the org feed is self-hosted and has gone unreachable mid-run
+      # before. Dying here would leave a half-published preview.
+      #
+      # What is NOT acceptable is discarding the result, which is what this step used to do — the
+      # run went green whether the feed took the packages or was switched off. The outcome is now
+      # recorded and the "Verify" step below decides the job.
       continue-on-error: true
+      run: |
+        if dotnet nuget push "./nupkg/*.nupkg" \
+             --api-key ${{ secrets.NUGET_API_KEY_ME }} \
+             --source https://nuget.modelingevolution.com/v3/index.json \
+             --skip-duplicate
+        then
+          echo "outcome=success" >> $GITHUB_OUTPUT
+        else
+          echo "outcome=failed" >> $GITHUB_OUTPUT
+          echo "::warning::Push to the ModelingEvolution feed reported a failure. Not fatal here \
+        so nuget.org is not left half-published — the Verify step decides whether this preview stands."
+        fi
+
+    - name: Verify both feeds actually serve this preview
+      working-directory: ./csharp
+      env:
+        VERSION: ${{ needs.preview-version.outputs.version }}
+        PUSH_OUTCOME: ${{ steps.push_me.outputs.outcome }}
+        # Shorter budget than the release path on purpose: this runs on every push to every
+        # feature/* branch, so minutes spent waiting here are paid far more often than at release.
+        # A preview that has not indexed inside ten minutes is a real problem, not lag.
+        TIMEOUT_SECONDS: '600'
+        POLL_SECONDS: '15'
+      run: bash "$GITHUB_WORKSPACE/.github/scripts/verify-feeds.sh"
 
     - name: Summary
       working-directory: ./csharp
@@ -183,9 +210,13 @@ jobs:
       env:
         TWINE_USERNAME: __token__
         TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+      # DELIBERATELY non-fatal, and not the same defect as the NuGet org-feed push above. Test
+      # PyPI is a scratch index nobody installs from: no consumer restores it, so a run that
+      # "succeeds" without it has not misled anyone. The authoritative PyPI upload is the next
+      # step and is already fatal. Leave this as it is.
+      continue-on-error: true
       run: |
         twine upload --repository testpypi dist/* --skip-existing
-      continue-on-error: true
 
     - name: Publish to PyPI
       working-directory: ./python
