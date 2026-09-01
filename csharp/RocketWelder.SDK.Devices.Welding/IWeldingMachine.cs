@@ -156,7 +156,7 @@ public interface IWeldingMachine : IDevice
     /// <summary>Wire-inch held level, shaped like <see cref="GasSignal"/>. Defaults to unsupported.</summary>
     WritableSignal<bool> WireInchSignal => throw new NotSupportedException();
 
-    /// <summary>Plain ergonomic surface that forwards to <see cref="WireInchSignal"/>.</summary>
+    /// <summary>Plain ergonomic surface. Defaults to unsupported (false / throws); an override forwards to <see cref="WireInchSignal"/>.</summary>
     bool WireInch { get => false; set => throw new NotSupportedException(); }
 
     /// <summary>Engage wire feed. Throws <see cref="NotSupportedException"/> when unsupported.</summary>
