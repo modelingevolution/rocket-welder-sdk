@@ -149,4 +149,19 @@ public interface IWeldingMachine : IDevice
 
     /// <summary>Close the shielding-gas valve. Returns when the hardware has acknowledged the command.</summary>
     ValueTask GasOff();
+
+    /// <summary>Whether this welder can feed wire out of the torch. UI gate; defaults to unsupported.</summary>
+    bool CanWireInch => false;
+
+    /// <summary>Wire-inch held level, shaped like <see cref="GasSignal"/>. Defaults to unsupported.</summary>
+    WritableSignal<bool> WireInchSignal => throw new NotSupportedException();
+
+    /// <summary>Plain ergonomic surface that forwards to <see cref="WireInchSignal"/>.</summary>
+    bool WireInch { get => false; set => throw new NotSupportedException(); }
+
+    /// <summary>Engage wire feed. Throws <see cref="NotSupportedException"/> when unsupported.</summary>
+    ValueTask WireInchOn() => throw new NotSupportedException();
+
+    /// <summary>Disengage wire feed. Idempotent and never throws, connected or not.</summary>
+    ValueTask WireInchOff() => ValueTask.CompletedTask;
 }
