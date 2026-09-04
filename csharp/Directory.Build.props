@@ -26,7 +26,7 @@
     <!-- Fallback version for any build that does NOT pass /p:Version (local dev, source/project
          references). Keep this >= every published release and every consumer's compiled reference
          so roll-forward always succeeds. Bump on each release alongside the git tag. -->
-    <Version Condition="'$(Version)' == ''">2.14.0</Version>
+    <Version Condition="'$(Version)' == ''">2.17.0</Version>
 
     <!-- AssemblyVersion / FileVersion track the package Version (strip any prerelease suffix such
          as -preview1; AssemblyVersion must be purely numeric). The CLR pads a 3-part value to
