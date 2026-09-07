@@ -25,4 +25,9 @@
     <ProjectReference Include="..\RocketWelder.SDK.Devices.Robot\RocketWelder.SDK.Devices.Robot.csproj" />
   </ItemGroup>
 
+  <!-- epic-092: see the note in RocketWelder.SDK.Automation.Tests.csproj -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\RocketWelder.SDK.Devices.Robot\IStoppableRobot.cs" LogicalName="RocketWelder.SDK.Devices.Robot.Tests.IStoppableRobot.cs" />
+  </ItemGroup>
+
 </Project>
