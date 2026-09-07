@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -118,6 +119,11 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         return body?.Etag ?? throw new InvalidOperationException("Server returned empty body for an edit that returns an etag.");
     }
 
+    // A bare (unquoted) value never parses as an ETag, so rw2's typed
+    // EntityTagHeaderValue accessor reads it as absent and the concurrency guard is
+    // silently bypassed. Send a spec-compliant quoted strong entity-tag.
+    private static EntityTagHeaderValue IfMatch(ProgramEtag etag) => new($"\"{etag}\"");
+
     private static string BlockUrl(Guid programId, BlockId blockId)
         => $"api/programs/{programId}/blocks/{Uri.EscapeDataString(blockId)}";
 
@@ -125,14 +131,14 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         where TBody : class
     {
         using var req = new HttpRequestMessage(method, url) { Content = JsonContent.Create(body, options: Json) };
-        req.Headers.TryAddWithoutValidation("If-Match", etag.ToString());
+        req.Headers.IfMatch.Add(IfMatch(etag));
         return await http.SendAsync(req, ct).ConfigureAwait(false);
     }
 
     private async Task<HttpResponseMessage> SendEditAsync(HttpMethod method, string url, ProgramEtag etag, CancellationToken ct)
     {
         using var req = new HttpRequestMessage(method, url);
-        req.Headers.TryAddWithoutValidation("If-Match", etag.ToString());
+        req.Headers.IfMatch.Add(IfMatch(etag));
         return await http.SendAsync(req, ct).ConfigureAwait(false);
     }
 

@@ -60,7 +60,7 @@ public class ProgramsAuthoringApiTests
 
         handler.Method.Should().Be(HttpMethod.Post);
         handler.RequestUri!.AbsolutePath.Should().Be($"/api/programs/{ProgramId}/blocks");
-        handler.IfMatch.Should().Be("sha256:v1");
+        handler.IfMatch.Should().Be("\"sha256:v1\"");
 
         var body = BodyOf(handler)!;
         body["type"]!.GetValue<string>().Should().Be("Point");
@@ -109,6 +109,19 @@ public class ProgramsAuthoringApiTests
             .Which.Block.Should().Be(new BlockId("ghost"));
     }
 
+    [Fact]
+    public async Task Edits_Should_Send_IfMatch_As_A_Quoted_EntityTag()
+    {
+        // A bare value reads as absent through rw2's typed EntityTagHeaderValue accessor,
+        // silently bypassing the concurrency guard — the header MUST be quoted.
+        var handler = new RecordingHandler(HttpStatusCode.OK, """{ "etag": "sha256:v2" }""");
+
+        await Api(handler).RemoveBlockAsync(ProgramId, new BlockId("blk-2"), V1);
+
+        handler.IfMatch.Should().Be("\"sha256:v1\"");
+        handler.IfMatch!.Should().StartWith("\"").And.EndWith("\"");
+    }
+
     // --- EditBlock ---
 
     [Fact]
@@ -121,7 +134,7 @@ public class ProgramsAuthoringApiTests
 
         handler.Method.Should().Be(HttpMethod.Patch);
         handler.RequestUri!.AbsolutePath.Should().Be($"/api/programs/{ProgramId}/blocks/blk-1");
-        handler.IfMatch.Should().Be("sha256:v1");
+        handler.IfMatch.Should().Be("\"sha256:v1\"");
         BodyOf(handler)!["properties"]!["seconds"]!.GetValue<int>().Should().Be(5);
         result.Block.Should().Be(new BlockId("blk-1"));
         result.Etag.Should().Be(new ProgramEtag("sha256:v2"));
@@ -155,7 +168,7 @@ public class ProgramsAuthoringApiTests
 
         handler.Method.Should().Be(HttpMethod.Delete);
         handler.RequestUri!.AbsolutePath.Should().Be($"/api/programs/{ProgramId}/blocks/blk-2");
-        handler.IfMatch.Should().Be("sha256:v1");
+        handler.IfMatch.Should().Be("\"sha256:v1\"");
         etag.Should().Be(new ProgramEtag("sha256:v2"));
     }
 
@@ -188,7 +201,7 @@ public class ProgramsAuthoringApiTests
 
         handler.Method.Should().Be(HttpMethod.Post);
         handler.RequestUri!.AbsolutePath.Should().Be($"/api/programs/{ProgramId}/blocks/blk-3/move");
-        handler.IfMatch.Should().Be("sha256:v1");
+        handler.IfMatch.Should().Be("\"sha256:v1\"");
         var body = BodyOf(handler)!;
         body["anchor"]!["kind"]!.GetValue<string>().Should().Be("Before");
         body["anchor"]!["ref"]!.GetValue<string>().Should().Be("blk-2");
