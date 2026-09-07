@@ -5,8 +5,8 @@ namespace RocketWelder.SDK.Devices.Robot.Tests;
 /// <summary>
 /// Pins the shape of <see cref="IStoppableRobot"/>, published in 2.18.0 (epic-092 design §3.6 step 1) so a
 /// plugin can drive a robot's emergency stop without referencing the host. It was an internal host interface
-/// before, and every host implementer (FairinoCobot, SimulatorRobot) now binds to THIS declaration — a rename
-/// or an added member is a breaking change and must be deliberate.
+/// before, and every host adapter that implements it now binds to THIS declaration — a rename or an added
+/// member is a breaking change and must be deliberate.
 ///
 /// <para>The "no vendor name" test is the SDK half of NFR-1 / RES-7 (test-scenarios §6): the source is
 /// embedded by the test csproj, so the test cannot pass by reading the wrong file.</para>
