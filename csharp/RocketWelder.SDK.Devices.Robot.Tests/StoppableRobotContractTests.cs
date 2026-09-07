@@ -61,7 +61,9 @@ public sealed class StoppableRobotContractTests
         var name = asm.GetManifestResourceNames().Single(n => n.EndsWith(".IStoppableRobot.cs", StringComparison.Ordinal));
         using var s = asm.GetManifestResourceStream(name)!;
         new StreamReader(s).ReadToEnd()
-            .Should().NotContainEquivalentOf("fairino",
+            .Should().Contain("public interface IStoppableRobot",
+                "positive anchor: an empty or truncated resource would satisfy the NotContain below for free")
+            .And.NotContainEquivalentOf("fairino",
                 "NFR-1: the published stop seam is vendor-neutral (test-scenarios §6 RES-7)");
     }
 }

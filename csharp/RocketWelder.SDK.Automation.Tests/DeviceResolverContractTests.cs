@@ -65,7 +65,9 @@ public sealed class DeviceResolverContractTests
     public void TheSourceNamesNoVendor()
     {
         EmbeddedSource.Read("IDeviceResolver.cs")
-            .Should().NotContainEquivalentOf("fairino",
+            .Should().Contain("public interface IDeviceResolver",
+                "positive anchor: an empty or truncated resource would satisfy the NotContain below for free")
+            .And.NotContainEquivalentOf("fairino",
                 "NFR-1: the instance-lookup seam is vendor-neutral (test-scenarios §6 RES-7)");
     }
 }
