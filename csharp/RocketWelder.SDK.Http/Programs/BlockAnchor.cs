@@ -1,19 +1,23 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json.Serialization;
-using ModelingEvolution.JsonParsableConverter;
 
 namespace RocketWelder.SDK.Http.Programs;
 
 /// <summary>
-/// Position for an inserted or moved block, expressed relative to a
-/// <see cref="BlockId"/> (<c>after:</c>/<c>before:</c>) or at the tail. Sent on
-/// the wire as a string (<c>"tail"</c>, <c>"after:&lt;id&gt;"</c>,
-/// <c>"before:&lt;id&gt;"</c>); the server resolves it to an index.
+/// Position for an inserted or moved block, relative to a <see cref="BlockId"/>
+/// (<see cref="AnchorKind.After"/>/<see cref="AnchorKind.Before"/>) or at the tail.
 /// </summary>
-[JsonConverter(typeof(JsonParsableConverter<BlockAnchor>))]
+/// <remarks>
+/// On the wire it is a JSON object — <c>{ "kind": "After", "ref": "&lt;blockId&gt;" }</c>
+/// (<c>ref</c> omitted for <see cref="AnchorKind.Tail"/>) — matching the rw2 REST
+/// contract. <see cref="IParsable{T}"/> is retained for a compact string form
+/// (<c>"tail"</c>/<c>"after:&lt;id&gt;"</c>/<c>"before:&lt;id&gt;"</c>) usable from CLI/MCP
+/// arguments; that string is NOT the JSON wire shape.
+/// </remarks>
 public readonly record struct BlockAnchor : IParsable<BlockAnchor>
 {
-    private BlockAnchor(AnchorKind kind, BlockId? reference) => (Kind, Ref) = (kind, reference);
+    [JsonConstructor]
+    public BlockAnchor(AnchorKind kind, BlockId? @ref) => (Kind, Ref) = (kind, @ref);
 
     /// <summary>Placement mode relative to <see cref="Ref"/>.</summary>
     public AnchorKind Kind { get; }
@@ -30,6 +34,7 @@ public readonly record struct BlockAnchor : IParsable<BlockAnchor>
     /// <summary>Insert immediately before <paramref name="reference"/>.</summary>
     public static BlockAnchor Before(BlockId reference) => new(AnchorKind.Before, reference);
 
+    /// <summary>Compact string form for CLI/MCP arguments — NOT the JSON wire shape.</summary>
     public override string ToString() => Kind switch
     {
         AnchorKind.Tail => "tail",

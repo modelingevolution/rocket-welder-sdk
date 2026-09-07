@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace RocketWelder.SDK.Http.Programs;
 
@@ -8,8 +9,12 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
 {
     // JsonContent.Create defaults to PascalCase (unlike Post/GetAsJsonAsync which use
     // web defaults), so the manually-built edit requests carry these explicitly to
-    // stay camelCase-consistent with the rest of the SDK's wire shape.
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
+    // stay camelCase-consistent with the rw2 wire shape. WhenWritingNull keeps the
+    // move body a clean anchor-XOR-delta and drops the null ref on a Tail anchor.
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
 
     public async Task<IReadOnlyList<ProgramInfo>> ListAsync(Guid? repositoryId = null, CancellationToken ct = default)
     {
@@ -86,7 +91,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         using var res = await SendEditAsync(HttpMethod.Delete, BlockUrl(programId, blockId), etag, ct).ConfigureAwait(false);
         ThrowIfEditError(res, programId, blockId, etag);
         res.EnsureSuccessStatusCode();
-        return await res.Content.ReadFromJsonAsync<ProgramEtag>(ct).ConfigureAwait(false);
+        return await ReadEtagAsync(res, ct).ConfigureAwait(false);
     }
 
     public async Task<ProgramEtag> MoveBlockAsync(Guid programId, BlockId blockId, MoveBlockRequest request, ProgramEtag etag, CancellationToken ct = default)
@@ -95,7 +100,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         using var res = await SendEditAsync(HttpMethod.Post, $"{BlockUrl(programId, blockId)}/move", etag, request, ct).ConfigureAwait(false);
         ThrowIfEditError(res, programId, blockId, etag);
         res.EnsureSuccessStatusCode();
-        return await res.Content.ReadFromJsonAsync<ProgramEtag>(ct).ConfigureAwait(false);
+        return await ReadEtagAsync(res, ct).ConfigureAwait(false);
     }
 
     public async Task<CapturePointResult> CapturePointAsync(Guid programId, CapturePointRequest request, CancellationToken ct = default)
@@ -105,6 +110,12 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         res.EnsureSuccessStatusCode();
         return await res.Content.ReadFromJsonAsync<CapturePointResult>(ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Server returned empty body for POST /api/programs/{id}/capture.");
+    }
+
+    private static async Task<ProgramEtag> ReadEtagAsync(HttpResponseMessage res, CancellationToken ct)
+    {
+        var body = await res.Content.ReadFromJsonAsync<EtagResponse>(ct).ConfigureAwait(false);
+        return body?.Etag ?? throw new InvalidOperationException("Server returned empty body for an edit that returns an etag.");
     }
 
     private static string BlockUrl(Guid programId, BlockId blockId)

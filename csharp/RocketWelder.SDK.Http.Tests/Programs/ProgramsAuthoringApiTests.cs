@@ -64,7 +64,8 @@ public class ProgramsAuthoringApiTests
 
         var body = BodyOf(handler)!;
         body["type"]!.GetValue<string>().Should().Be("Point");
-        body["anchor"]!.GetValue<string>().Should().Be("after:blk-1");
+        body["anchor"]!["kind"]!.GetValue<string>().Should().Be("After");
+        body["anchor"]!["ref"]!.GetValue<string>().Should().Be("blk-1");
         body["properties"]!["name"]!.GetValue<string>().Should().Be("weld-start");
 
         result.Block.Should().Be(new BlockId("blk-3"));
@@ -79,7 +80,9 @@ public class ProgramsAuthoringApiTests
 
         await Api(handler).AddBlockAsync(ProgramId, request, V1);
 
-        BodyOf(handler)!["anchor"]!.GetValue<string>().Should().Be("tail");
+        var anchor = BodyOf(handler)!["anchor"]!.AsObject();
+        anchor["kind"]!.GetValue<string>().Should().Be("Tail");
+        anchor.ContainsKey("ref").Should().BeFalse();
     }
 
     [Fact]
@@ -146,7 +149,7 @@ public class ProgramsAuthoringApiTests
     [Fact]
     public async Task RemoveBlockAsync_Should_DELETE_With_IfMatch_And_Return_New_Etag()
     {
-        var handler = new RecordingHandler(HttpStatusCode.OK, "\"sha256:v2\"");
+        var handler = new RecordingHandler(HttpStatusCode.OK, """{ "etag": "sha256:v2" }""");
 
         var etag = await Api(handler).RemoveBlockAsync(ProgramId, new BlockId("blk-2"), V1);
 
@@ -178,7 +181,7 @@ public class ProgramsAuthoringApiTests
     [Fact]
     public async Task MoveBlockAsync_Should_POST_Move_With_IfMatch_And_Body_And_Return_New_Etag()
     {
-        var handler = new RecordingHandler(HttpStatusCode.OK, "\"sha256:v2\"");
+        var handler = new RecordingHandler(HttpStatusCode.OK, """{ "etag": "sha256:v2" }""");
         var request = new MoveBlockRequest(BlockAnchor.Before(new BlockId("blk-2")), Delta: null);
 
         var etag = await Api(handler).MoveBlockAsync(ProgramId, new BlockId("blk-3"), request, V1);
@@ -186,19 +189,24 @@ public class ProgramsAuthoringApiTests
         handler.Method.Should().Be(HttpMethod.Post);
         handler.RequestUri!.AbsolutePath.Should().Be($"/api/programs/{ProgramId}/blocks/blk-3/move");
         handler.IfMatch.Should().Be("sha256:v1");
-        BodyOf(handler)!["anchor"]!.GetValue<string>().Should().Be("before:blk-2");
+        var body = BodyOf(handler)!;
+        body["anchor"]!["kind"]!.GetValue<string>().Should().Be("Before");
+        body["anchor"]!["ref"]!.GetValue<string>().Should().Be("blk-2");
+        body.AsObject().ContainsKey("delta").Should().BeFalse();
         etag.Should().Be(new ProgramEtag("sha256:v2"));
     }
 
     [Fact]
-    public async Task MoveBlockAsync_Should_Serialize_Signed_Delta()
+    public async Task MoveBlockAsync_Should_Serialize_Signed_Delta_And_Omit_Anchor()
     {
-        var handler = new RecordingHandler(HttpStatusCode.OK, "\"sha256:v2\"");
+        var handler = new RecordingHandler(HttpStatusCode.OK, """{ "etag": "sha256:v2" }""");
         var request = new MoveBlockRequest(Anchor: null, Delta: -2);
 
         await Api(handler).MoveBlockAsync(ProgramId, new BlockId("blk-3"), request, V1);
 
-        BodyOf(handler)!["delta"]!.GetValue<int>().Should().Be(-2);
+        var body = BodyOf(handler)!;
+        body["delta"]!.GetValue<int>().Should().Be(-2);
+        body.AsObject().ContainsKey("anchor").Should().BeFalse();
     }
 
     [Fact]

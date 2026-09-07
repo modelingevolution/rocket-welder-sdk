@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using FluentAssertions;
 using RocketWelder.SDK.Http.Programs;
 
@@ -40,13 +41,52 @@ public class AuthoringValueTypeTests
     [InlineData("tail")]
     [InlineData("after:blk-1")]
     [InlineData("before:blk-9")]
-    public void BlockAnchor_Should_RoundTrip_Its_Wire_String(string wire)
+    public void BlockAnchor_Should_RoundTrip_Its_Compact_Parsable_String(string compact)
     {
-        var anchor = BlockAnchor.Parse(wire);
+        // IParsable is the CLI/MCP string form, distinct from the JSON wire shape.
+        var anchor = BlockAnchor.Parse(compact);
+        anchor.ToString().Should().Be(compact);
+    }
 
-        anchor.ToString().Should().Be(wire);
-        JsonSerializer.Serialize(anchor).Should().Be($"\"{wire}\"");
-        JsonSerializer.Deserialize<BlockAnchor>($"\"{wire}\"").Should().Be(anchor);
+    [Fact]
+    public void BlockAnchor_Should_Serialize_As_Object_With_Kind_And_Ref()
+    {
+        var json = JsonSerializer.Serialize(
+            BlockAnchor.After(new BlockId("blk-1")),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            {
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+            });
+
+        var node = JsonNode.Parse(json)!;
+        node["kind"]!.GetValue<string>().Should().Be("After");
+        node["ref"]!.GetValue<string>().Should().Be("blk-1");
+    }
+
+    [Fact]
+    public void BlockAnchor_Tail_Should_Omit_Ref_On_The_Wire()
+    {
+        var json = JsonSerializer.Serialize(
+            BlockAnchor.Tail,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web)
+            {
+                DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+            });
+
+        var node = JsonNode.Parse(json)!;
+        node["kind"]!.GetValue<string>().Should().Be("Tail");
+        node.AsObject().ContainsKey("ref").Should().BeFalse();
+    }
+
+    [Fact]
+    public void BlockAnchor_Should_Deserialize_From_Object_Shape()
+    {
+        var anchor = JsonSerializer.Deserialize<BlockAnchor>(
+            """{ "kind": "Before", "ref": "blk-9" }""",
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        anchor.Kind.Should().Be(AnchorKind.Before);
+        anchor.Ref.Should().Be(new BlockId("blk-9"));
     }
 
     [Fact]
