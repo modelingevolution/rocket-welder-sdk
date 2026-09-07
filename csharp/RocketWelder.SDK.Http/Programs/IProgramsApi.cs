@@ -43,4 +43,54 @@ public interface IProgramsApi
     /// program is actively emitting.
     /// </summary>
     Task<IReadOnlyList<ActiveProgramStream>> GetActiveStreamsAsync(CancellationToken ct = default);
+
+    // --- Program authoring (epic-035): BlockId-keyed, etag-guarded edits over the
+    //     TeachV2 block tree. Read the tree, then carry its etag into each edit. ---
+
+    /// <summary>
+    /// <c>GET /api/programs/{id}/tree</c> — the program's ordered block tree plus the
+    /// current etag. Read-only; the contract every edit is written against.
+    /// </summary>
+    Task<ProgramTreeDto> GetTreeAsync(Guid programId, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>POST /api/programs/{id}/blocks</c> — insert a block at a position relative to
+    /// an existing block or at the tail. Sends <c>If-Match: <paramref name="etag"/></c>.
+    /// </summary>
+    /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
+    /// <exception cref="BlockNotFoundException">The anchor reference block is unknown (HTTP 404).</exception>
+    Task<BlockEditResult> AddBlockAsync(Guid programId, AddBlockRequest request, ProgramEtag etag, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>PATCH /api/programs/{id}/blocks/{blockId}</c> — replace a block's properties,
+    /// preserving its id. Sends <c>If-Match: <paramref name="etag"/></c>.
+    /// </summary>
+    /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
+    /// <exception cref="BlockNotFoundException">The block id is unknown (HTTP 404).</exception>
+    Task<BlockEditResult> EditBlockAsync(Guid programId, BlockId blockId, EditBlockRequest request, ProgramEtag etag, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>DELETE /api/programs/{id}/blocks/{blockId}</c> — remove a block (a point
+    /// removal also drops adaptation claims on its name). Sends
+    /// <c>If-Match: <paramref name="etag"/></c>. Returns the tree's new etag.
+    /// </summary>
+    /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
+    /// <exception cref="BlockNotFoundException">The block id is unknown (HTTP 404).</exception>
+    Task<ProgramEtag> RemoveBlockAsync(Guid programId, BlockId blockId, ProgramEtag etag, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>POST /api/programs/{id}/blocks/{blockId}/move</c> — reposition a block by
+    /// anchor or signed delta. Sends <c>If-Match: <paramref name="etag"/></c>. Returns
+    /// the tree's new etag.
+    /// </summary>
+    /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
+    /// <exception cref="BlockNotFoundException">The block id (or anchor reference) is unknown (HTTP 404).</exception>
+    Task<ProgramEtag> MoveBlockAsync(Guid programId, BlockId blockId, MoveBlockRequest request, ProgramEtag etag, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>POST /api/programs/{id}/capture</c> (FR-6) — capture rocket-welder2's own
+    /// <c>IRobot</c> pose into the program's taught-points store, so a subsequently
+    /// added point block can bake it. Not a tree edit, so it carries no etag.
+    /// </summary>
+    Task<CapturePointResult> CapturePointAsync(Guid programId, CapturePointRequest request, CancellationToken ct = default);
 }
