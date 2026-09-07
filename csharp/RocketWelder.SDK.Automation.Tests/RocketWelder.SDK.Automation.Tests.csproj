@@ -29,4 +29,10 @@
     <ProjectReference Include="..\RocketWelder.SDK.Automation\RocketWelder.SDK.Automation.csproj" />
   </ItemGroup>
 
+  <!-- epic-092: the contract test reads the seam's own source; embedding it here means a renamed or
+       moved file fails THIS build instead of silently skipping the vendor-name check. -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\RocketWelder.SDK.Automation.Abstractions\IDeviceResolver.cs" LogicalName="RocketWelder.SDK.Automation.Tests.IDeviceResolver.cs" />
+  </ItemGroup>
+
 </Project>
