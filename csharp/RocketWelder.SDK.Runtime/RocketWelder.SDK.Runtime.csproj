@@ -18,6 +18,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.7" />
     <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.8.75" />
+    <!-- Epic 091: IProgramContext.Signal hands programs a WritableSignal<float>. Same version the device
+         packages (Devices.Welding, Devices.Motion) already carry; the host lists this assembly among its
+         shared-prefix (off-TPA) assemblies, so the type is identical on both sides of a program's ALC. -->
+    <PackageReference Include="ModelingEvolution.Signals" Version="2.0.1.1" />
   </ItemGroup>
 
   <ItemGroup>

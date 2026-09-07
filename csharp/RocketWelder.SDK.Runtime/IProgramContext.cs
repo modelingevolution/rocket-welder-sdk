@@ -1,5 +1,7 @@
 using RocketWelder.SDK.Abstractions;
 using Microsoft.Extensions.Logging;
+using ModelingEvolution.Drawing;
+using ModelingEvolution.Signals;
 using RocketWelder.SDK.Hmi;
 
 namespace RocketWelder.SDK.Runtime;
@@ -141,4 +143,33 @@ public interface IProgramContext
                     Lifetime lifetime = Lifetime.Permanent,
                     ShareMode share = ShareMode.Global)
         => false;
+
+    /// <summary>
+    /// Declares — or re-opens — a program-owned signal channel and returns the sink the program writes into.
+    /// The host publishes the channel to its signal catalog, so it can be plotted on the Live Scope next to
+    /// the welder's current, recorded with the run, and replayed afterwards (Epic 091).
+    /// </summary>
+    /// <param name="name">
+    /// Channel name: 1–64 characters of letters, digits, <c>-</c>, <c>.</c>, <c>_</c> or <c>~</c>, starting with a
+    /// letter or digit (see <see cref="ProgramSignalName"/>). It becomes the last segment of the channel's URI,
+    /// <c>program://{programId}/{name}</c>, and is shown on the scope.
+    /// </param>
+    /// <param name="unit">Engineering unit shown on the scope — <c>"px"</c>, <c>"mm"</c>, <c>"A"</c> — or null.</param>
+    /// <param name="cadence">Nominal sample rate, advisory only. Null means event-driven (samples only on change).</param>
+    /// <returns>
+    /// A float sink. <c>Set(value)</c> is cheap, thread-safe and never blocks; the timestamp is minted from the
+    /// host's monotonic clock at the moment of the call. Idempotent per name: declaring the same channel again
+    /// — even on every loop iteration — returns the same sink.
+    /// </returns>
+    /// <exception cref="ArgumentException">
+    /// The name is not addressable (illegal characters, too long, <c>.</c> or <c>..</c>), or the host's
+    /// per-program channel limit is reached.
+    /// </exception>
+    /// <remarks>
+    /// Default interface implementation so that programs authored before this member existed keep compiling,
+    /// and a program using it on an OLDER host still runs: the default returns a working but unregistered
+    /// channel — writes latch and go nowhere, nothing throws. Hosts that publish program signals override it.
+    /// </remarks>
+    ISignalSink<float> Signal(string name, string? unit = null, Frequency<float>? cadence = null)
+        => ProgramSignalFallback.GetOrCreate(this, name, unit, cadence);
 }
