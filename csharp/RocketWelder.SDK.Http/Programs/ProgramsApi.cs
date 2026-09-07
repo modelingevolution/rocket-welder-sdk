@@ -99,7 +99,11 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
     {
         ArgumentNullException.ThrowIfNull(request);
         using var res = await SendEditAsync(HttpMethod.Post, $"{BlockUrl(programId, blockId)}/move", etag, request, ct).ConfigureAwait(false);
-        ThrowIfEditError(res, programId, blockId, etag);
+        // A move carrying an anchor ref has two possible unknown ids (the moved block
+        // or the ref); the 404 alone can't say which, so don't misattribute it to the
+        // moved block — leave it unnamed. A delta/tail move can only be the moved block.
+        var unresolved = request.Anchor?.Ref is null ? blockId : (BlockId?)null;
+        ThrowIfEditError(res, programId, unresolved, etag);
         res.EnsureSuccessStatusCode();
         return await ReadEtagAsync(res, ct).ConfigureAwait(false);
     }
@@ -116,7 +120,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
     private static async Task<ProgramEtag> ReadEtagAsync(HttpResponseMessage res, CancellationToken ct)
     {
         var body = await res.Content.ReadFromJsonAsync<EtagResponse>(ct).ConfigureAwait(false);
-        return body?.Etag ?? throw new InvalidOperationException("Server returned empty body for an edit that returns an etag.");
+        return body?.Etag ?? throw new InvalidOperationException("Server returned no etag for an edit that returns one.");
     }
 
     // A bare (unquoted) value never parses as an ETag, so rw2's typed

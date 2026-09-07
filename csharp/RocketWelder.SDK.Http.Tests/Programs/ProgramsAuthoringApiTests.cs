@@ -173,6 +173,15 @@ public class ProgramsAuthoringApiTests
     }
 
     [Fact]
+    public async Task RemoveBlockAsync_Should_Throw_On_A_Null_Etag_Body()
+    {
+        // Fail fast at the boundary rather than carry a null-backed etag into the next edit.
+        var handler = new RecordingHandler(HttpStatusCode.OK, """{ "etag": null }""");
+        var act = () => Api(handler).RemoveBlockAsync(ProgramId, new BlockId("blk-2"), V1);
+        await act.Should().ThrowAsync<InvalidOperationException>();
+    }
+
+    [Fact]
     public async Task RemoveBlockAsync_Should_Throw_Mismatch_On_409()
     {
         var handler = new RecordingHandler(HttpStatusCode.Conflict);
@@ -195,7 +204,7 @@ public class ProgramsAuthoringApiTests
     public async Task MoveBlockAsync_Should_POST_Move_With_IfMatch_And_Body_And_Return_New_Etag()
     {
         var handler = new RecordingHandler(HttpStatusCode.OK, """{ "etag": "sha256:v2" }""");
-        var request = new MoveBlockRequest(BlockAnchor.Before(new BlockId("blk-2")), Delta: null);
+        var request = new MoveBlockRequest(BlockAnchor.Before(new BlockId("blk-2")), null);
 
         var etag = await Api(handler).MoveBlockAsync(ProgramId, new BlockId("blk-3"), request, V1);
 
@@ -213,7 +222,7 @@ public class ProgramsAuthoringApiTests
     public async Task MoveBlockAsync_Should_Serialize_Signed_Delta_And_Omit_Anchor()
     {
         var handler = new RecordingHandler(HttpStatusCode.OK, """{ "etag": "sha256:v2" }""");
-        var request = new MoveBlockRequest(Anchor: null, Delta: -2);
+        var request = new MoveBlockRequest(null, -2);
 
         await Api(handler).MoveBlockAsync(ProgramId, new BlockId("blk-3"), request, V1);
 
@@ -231,12 +240,33 @@ public class ProgramsAuthoringApiTests
     }
 
     [Fact]
-    public async Task MoveBlockAsync_Should_Throw_NotFound_On_404()
+    public async Task MoveBlockAsync_Should_Throw_NotFound_On_404_Naming_The_Moved_Block_For_A_Delta_Move()
     {
         var handler = new RecordingHandler(HttpStatusCode.NotFound);
-        var act = () => Api(handler).MoveBlockAsync(ProgramId, new BlockId("blk-3"), new MoveBlockRequest(BlockAnchor.Tail, null), V1);
+        var act = () => Api(handler).MoveBlockAsync(ProgramId, new BlockId("blk-3"), new MoveBlockRequest(null, -1), V1);
         (await act.Should().ThrowAsync<BlockNotFoundException>())
             .Which.Block.Should().Be(new BlockId("blk-3"));
+    }
+
+    [Fact]
+    public async Task MoveBlockAsync_404_On_An_Anchor_Move_Should_Not_Misattribute_The_Moved_Block()
+    {
+        // Either the moved block or the anchor ref could be the unknown id; the SDK
+        // can't tell from a 404 alone, so it must not name the (valid) moved block.
+        var handler = new RecordingHandler(HttpStatusCode.NotFound);
+        var request = new MoveBlockRequest(BlockAnchor.Before(new BlockId("ghost")), null);
+        var act = () => Api(handler).MoveBlockAsync(ProgramId, new BlockId("blk-3"), request, V1);
+        (await act.Should().ThrowAsync<BlockNotFoundException>())
+            .Which.Block.Should().BeNull();
+    }
+
+    [Fact]
+    public void MoveBlockRequest_Should_Reject_Neither_Or_Both_Targets()
+    {
+        var neither = () => new MoveBlockRequest(null, null);
+        var both = () => new MoveBlockRequest(BlockAnchor.Tail, 1);
+        neither.Should().Throw<ArgumentException>();
+        both.Should().Throw<ArgumentException>();
     }
 
     // --- CapturePoint (FR-6) ---
