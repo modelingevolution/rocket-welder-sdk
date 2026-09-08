@@ -16,7 +16,9 @@ public static partial class ProgramSignalName
     /// <summary>Longest accepted name.</summary>
     public const int MaxLength = 64;
 
-    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._~-]{0,63}$")]
+    // \z, not $: in .NET `$` also matches before a trailing newline, so "gap\n" would pass, build the same
+    // Uri as "gap" (System.Uri trims it) and silently replace that channel's catalog row.
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._~-]{0,63}\z")]
     private static partial Regex Pattern();
 
     /// <summary>

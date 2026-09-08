@@ -73,6 +73,8 @@ public class ProgramSignalTests
     [InlineData("-leading-dash")]
     [InlineData("a/b")]
     [InlineData("übergang")]
+    [InlineData("gap\n")]      // `$` would accept this; it maps to the same Uri as "gap"
+    [InlineData("gap\r\n")]
     public void An_unaddressable_name_is_refused_at_declaration(string name)
     {
         IProgramContext ctx = new DefaultContext();
@@ -102,9 +104,12 @@ public class ProgramSignalTests
     [InlineData("a")]
     [InlineData("x.y_z~1")]
     [InlineData("A0")]
-    public void Addressable_names_pass(string name)
+    public void Addressable_names_pass(string name) => Assert.True(ProgramSignalName.IsValid(name));
+
+    [Fact]
+    public void Sixty_four_characters_is_the_longest_accepted_name()
     {
-        Assert.True(ProgramSignalName.IsValid(name));
         Assert.True(ProgramSignalName.IsValid(new string('z', 64)));
+        Assert.False(ProgramSignalName.IsValid(new string('z', 65)));
     }
 }
