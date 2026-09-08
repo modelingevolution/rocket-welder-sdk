@@ -71,8 +71,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
     {
         ArgumentNullException.ThrowIfNull(request);
         using var res = await SendEditAsync(HttpMethod.Post, $"api/programs/{programId}/blocks", etag, request, ct).ConfigureAwait(false);
-        ThrowIfEditError(res, programId, request.Anchor.Ref, etag);
-        res.EnsureSuccessStatusCode();
+        await ThrowIfEditErrorAsync(res, programId, request.Anchor.Ref, etag, $"Add block to program '{programId}'", ct).ConfigureAwait(false);
         return await res.Content.ReadFromJsonAsync<BlockEditResult>(ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Server returned empty body for POST /api/programs/{id}/blocks.");
     }
@@ -81,8 +80,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
     {
         ArgumentNullException.ThrowIfNull(request);
         using var res = await SendEditAsync(HttpMethod.Patch, BlockUrl(programId, blockId), etag, request, ct).ConfigureAwait(false);
-        ThrowIfEditError(res, programId, blockId, etag);
-        res.EnsureSuccessStatusCode();
+        await ThrowIfEditErrorAsync(res, programId, blockId, etag, $"Edit block '{blockId}' in program '{programId}'", ct).ConfigureAwait(false);
         return await res.Content.ReadFromJsonAsync<BlockEditResult>(ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Server returned empty body for PATCH /api/programs/{id}/blocks/{blockId}.");
     }
@@ -90,8 +88,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
     public async Task<ProgramEtag> RemoveBlockAsync(Guid programId, BlockId blockId, ProgramEtag etag, CancellationToken ct = default)
     {
         using var res = await SendEditAsync(HttpMethod.Delete, BlockUrl(programId, blockId), etag, ct).ConfigureAwait(false);
-        ThrowIfEditError(res, programId, blockId, etag);
-        res.EnsureSuccessStatusCode();
+        await ThrowIfEditErrorAsync(res, programId, blockId, etag, $"Remove block '{blockId}' from program '{programId}'", ct).ConfigureAwait(false);
         return await ReadEtagAsync(res, ct).ConfigureAwait(false);
     }
 
@@ -103,8 +100,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         // or the ref); the 404 alone can't say which, so don't misattribute it to the
         // moved block — leave it unnamed. A delta/tail move can only be the moved block.
         var unresolved = request.Anchor?.Ref is null ? blockId : (BlockId?)null;
-        ThrowIfEditError(res, programId, unresolved, etag);
-        res.EnsureSuccessStatusCode();
+        await ThrowIfEditErrorAsync(res, programId, unresolved, etag, $"Move block '{blockId}' in program '{programId}'", ct).ConfigureAwait(false);
         return await ReadEtagAsync(res, ct).ConfigureAwait(false);
     }
 
@@ -146,7 +142,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         return await http.SendAsync(req, ct).ConfigureAwait(false);
     }
 
-    private static void ThrowIfEditError(HttpResponseMessage res, Guid programId, BlockId? block, ProgramEtag etag)
+    private static async Task ThrowIfEditErrorAsync(HttpResponseMessage res, Guid programId, BlockId? block, ProgramEtag etag, string action, CancellationToken ct)
     {
         switch (res.StatusCode)
         {
@@ -155,5 +151,27 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
             case HttpStatusCode.NotFound:
                 throw new BlockNotFoundException(programId, block);
         }
+        await EnsureSuccessAsync(res, action, ct).ConfigureAwait(false);
+    }
+
+    // Preserve the server's descriptive body (e.g. "point has no taught pose") in a
+    // typed HttpRequestException carrying the status, rather than swallowing it or
+    // discarding it through EnsureSuccessStatusCode.
+    private static async Task EnsureSuccessAsync(HttpResponseMessage res, string action, CancellationToken ct)
+    {
+        if (res.IsSuccessStatusCode)
+            return;
+        var body = await BodyAsync(res, ct).ConfigureAwait(false);
+        var detail = string.IsNullOrWhiteSpace(body) ? string.Empty : $" {body}";
+        throw new HttpRequestException(
+            $"{action} failed: HTTP {(int)res.StatusCode} ({res.StatusCode}).{detail}",
+            inner: null,
+            statusCode: res.StatusCode);
+    }
+
+    private static async Task<string?> BodyAsync(HttpResponseMessage res, CancellationToken ct)
+    {
+        var body = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        return string.IsNullOrWhiteSpace(body) ? null : body;
     }
 }
