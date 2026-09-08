@@ -41,7 +41,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
     {
         var body = new { dryRun };
         using var res = await http.PostAsJsonAsync($"api/programs/{programId}/run", body, ct).ConfigureAwait(false);
-        res.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(res, $"Run program '{programId}'", ct).ConfigureAwait(false);
         return await res.Content.ReadFromJsonAsync<RunResult>(ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Server returned empty body for POST /api/programs/{id}/run.");
     }
@@ -108,7 +108,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
     {
         ArgumentNullException.ThrowIfNull(request);
         using var res = await http.PostAsJsonAsync($"api/programs/{programId}/capture", request, ct).ConfigureAwait(false);
-        res.EnsureSuccessStatusCode();
+        await EnsureSuccessAsync(res, $"Capture point in program '{programId}'", ct).ConfigureAwait(false);
         return await res.Content.ReadFromJsonAsync<CapturePointResult>(ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Server returned empty body for POST /api/programs/{id}/capture.");
     }

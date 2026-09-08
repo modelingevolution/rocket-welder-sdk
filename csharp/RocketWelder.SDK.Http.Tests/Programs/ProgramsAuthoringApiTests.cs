@@ -331,4 +331,31 @@ public class ProgramsAuthoringApiTests
         BodyOf(handler)!["name"]!.GetValue<string>().Should().Be("weld-start");
         result.Name.Should().Be("weld-start");
     }
+
+    [Fact]
+    public async Task CapturePointAsync_Should_Throw_HttpRequestException_On_422_With_Body_Preserved()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.UnprocessableEntity, "point has no taught pose");
+        var request = new CapturePointRequest("weld-start");
+
+        var act = () => Api(handler).CapturePointAsync(ProgramId, request);
+
+        var ex = (await act.Should().ThrowAsync<HttpRequestException>()).Which;
+        ex.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        ex.Message.Should().Contain("point has no taught pose");
+    }
+
+    // --- Run ---
+
+    [Fact]
+    public async Task RunAsync_Should_Throw_HttpRequestException_On_422_With_Body_Preserved()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.UnprocessableEntity, "point has no taught pose");
+
+        var act = () => Api(handler).RunAsync(ProgramId, dryRun: false);
+
+        var ex = (await act.Should().ThrowAsync<HttpRequestException>()).Which;
+        ex.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        ex.Message.Should().Contain("point has no taught pose");
+    }
 }
