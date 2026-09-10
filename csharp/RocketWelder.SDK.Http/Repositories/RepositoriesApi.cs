@@ -5,6 +5,20 @@ namespace RocketWelder.SDK.Http.Repositories;
 
 internal sealed class RepositoriesApi(HttpClient http) : IRepositoriesApi
 {
+    public async Task<IReadOnlyList<RepositoryInfo>> ListAsync(CancellationToken ct = default)
+    {
+        var list = await http.GetFromJsonAsync<RepositoryInfo[]>("api/repositories", ct).ConfigureAwait(false);
+        return list ?? Array.Empty<RepositoryInfo>();
+    }
+
+    public async Task DeleteAsync(Guid repositoryId, CancellationToken ct = default)
+    {
+        using var res = await http.DeleteAsync($"api/repositories/{repositoryId}", ct).ConfigureAwait(false);
+        if (res.StatusCode == HttpStatusCode.NotFound)
+            throw new RepositoryNotFoundException(repositoryId, await BodyAsync(res, ct).ConfigureAwait(false));
+        await EnsureSuccessAsync(res, $"Delete repository '{repositoryId}'", ct).ConfigureAwait(false);
+    }
+
     public async Task<Guid> CreateAsync(string name, CancellationToken ct = default)
     {
         using var res = await http.PostAsJsonAsync("api/repositories", new { name }, ct).ConfigureAwait(false);
