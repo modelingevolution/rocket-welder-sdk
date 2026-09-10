@@ -26,9 +26,11 @@ public interface IPipelinesApi
     Task StopAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>
-    /// <c>DELETE /api/pipeline/{id}</c> — stop the pipeline if it is running, then remove
-    /// it. Leaves no orphaned state.
+    /// <c>DELETE /api/pipeline/{id}</c> — remove a STOPPED pipeline. The server never force-stops
+    /// as a side effect: an active pipeline (Running or starting) is refused with HTTP 409. To delete
+    /// a running pipeline, call <see cref="StopAsync"/> first and wait until <see cref="GetAsync"/>
+    /// reports <see cref="PipelineState.Stopped"/>, then delete.
     /// </summary>
-    /// <exception cref="HttpRequestException">The id was rejected (HTTP 400) or unknown (HTTP 404), or the server failed otherwise.</exception>
+    /// <exception cref="HttpRequestException">The pipeline is active (HTTP 409), the id was rejected (HTTP 400) or unknown (HTTP 404), or the server failed otherwise.</exception>
     Task DeleteAsync(Guid id, CancellationToken ct = default);
 }
