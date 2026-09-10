@@ -18,6 +18,78 @@ public class RepositoriesApiTests
 
     private static JsonNode? BodyOf(RecordingHandler handler) => JsonNode.Parse(handler.Body!);
 
+    // --- ListAsync ---
+
+    [Fact]
+    public async Task ListAsync_Should_GET_Repositories_And_Parse_The_Rows()
+    {
+        var json = $$"""
+        [
+          { "id": "{{RepoId}}", "name": "seams", "repositoryUrl": "", "status": "Local", "currentBranch": "main", "errorMessage": null },
+          { "id": "{{NewRepoId}}", "name": "welds", "repositoryUrl": "https://git/welds.git", "status": "Synced", "currentBranch": "dev", "errorMessage": null }
+        ]
+        """;
+        var handler = new RecordingHandler(HttpStatusCode.OK, json);
+
+        var repos = await Api(handler).ListAsync();
+
+        handler.Method.Should().Be(HttpMethod.Get);
+        handler.RequestUri!.AbsolutePath.Should().Be("/api/repositories");
+        repos.Should().HaveCount(2);
+        repos[0].Id.Should().Be(RepoId);
+        repos[0].Name.Should().Be("seams");
+        repos[0].Status.Should().Be("Local");
+        repos[1].Id.Should().Be(NewRepoId);
+        repos[1].RepositoryUrl.Should().Be("https://git/welds.git");
+    }
+
+    [Fact]
+    public async Task ListAsync_Should_Return_Empty_On_A_Null_Body()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, "null");
+
+        var repos = await Api(handler).ListAsync();
+
+        repos.Should().BeEmpty();
+    }
+
+    // --- DeleteAsync ---
+
+    [Fact]
+    public async Task DeleteAsync_Should_DELETE_The_Repository_By_Id()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.NoContent);
+
+        await Api(handler).DeleteAsync(RepoId);
+
+        handler.Method.Should().Be(HttpMethod.Delete);
+        handler.RequestUri!.AbsolutePath.Should().Be($"/api/repositories/{RepoId}");
+    }
+
+    [Fact]
+    public async Task DeleteAsync_Should_Throw_RepositoryNotFound_On_404()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.NotFound, $"Repository {RepoId} not found");
+
+        var act = () => Api(handler).DeleteAsync(RepoId);
+
+        (await act.Should().ThrowAsync<RepositoryNotFoundException>())
+            .Which.RepositoryId.Should().Be(RepoId);
+    }
+
+    [Fact]
+    public async Task DeleteAsync_Should_Throw_HttpRequestException_On_400()
+    {
+        // Control: 400 is the generic path, distinct from the typed 404 mapping.
+        var handler = new RecordingHandler(HttpStatusCode.BadRequest, "Invalid repository ID format");
+
+        var act = () => Api(handler).DeleteAsync(RepoId);
+
+        var ex = (await act.Should().ThrowAsync<HttpRequestException>()).Which;
+        ex.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        ex.Message.Should().Contain("Invalid repository ID format");
+    }
+
     // --- CreateAsync ---
 
     [Fact]

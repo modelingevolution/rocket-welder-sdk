@@ -52,6 +52,14 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         res.EnsureSuccessStatusCode();
     }
 
+    public async Task DeleteAsync(Guid programId, CancellationToken ct = default)
+    {
+        using var res = await http.DeleteAsync($"api/programs/{programId}", ct).ConfigureAwait(false);
+        if (res.StatusCode == HttpStatusCode.Conflict)
+            throw new ProgramRunningException(programId, await BodyAsync(res, ct).ConfigureAwait(false));
+        await EnsureSuccessAsync(res, $"Delete program '{programId}'", ct).ConfigureAwait(false);
+    }
+
     public Task<ProgramStatus?> GetStatusAsync(Guid programId, CancellationToken ct = default)
         => http.GetFromJsonAsync<ProgramStatus>($"api/programs/{programId}/status", ct);
 

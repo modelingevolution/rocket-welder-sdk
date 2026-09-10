@@ -24,4 +24,11 @@ public interface IPipelinesApi
     /// <see cref="PipelineState.Stopped"/>.
     /// </summary>
     Task StopAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>DELETE /api/pipeline/{id}</c> — stop the pipeline if it is running, then remove
+    /// it. Leaves no orphaned state.
+    /// </summary>
+    /// <exception cref="HttpRequestException">The id was rejected (HTTP 400) or unknown (HTTP 404), or the server failed otherwise.</exception>
+    Task DeleteAsync(Guid id, CancellationToken ct = default);
 }
