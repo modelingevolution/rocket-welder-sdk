@@ -14,11 +14,17 @@ public interface IRepositoriesApi
 
     /// <summary>
     /// <c>DELETE /api/repositories/{repositoryId}</c> — deregister a repository and remove
-    /// its working tree from the welder's disk, leaving no orphaned state.
+    /// its working tree from the welder's disk.
+    /// <para>
+    /// Does NOT cascade-delete the programs in the repository: their entries remain in
+    /// <c>GET /api/programs</c> (now pointing at a removed working tree) until cleaned up via
+    /// <see cref="Programs.IProgramsApi.DeleteAsync"/>. A caller that needs a clean state should
+    /// delete the programs first (the e2e reset does).
+    /// </para>
     /// </summary>
     /// <param name="repositoryId">The repository to delete (from <see cref="ListAsync"/> or <see cref="CreateAsync"/>).</param>
     /// <exception cref="RepositoryNotFoundException">The repository is unknown (HTTP 404).</exception>
-    /// <exception cref="HttpRequestException">The id was rejected (HTTP 400) or the server failed otherwise.</exception>
+    /// <exception cref="HttpRequestException">A program in the repository is running (HTTP 409), the id was rejected (HTTP 400), or the server failed otherwise.</exception>
     Task DeleteAsync(Guid repositoryId, CancellationToken ct = default);
 
     /// <summary>
