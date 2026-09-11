@@ -9,7 +9,7 @@
     <PackageId>RocketWelder.SDK.Abstractions</PackageId>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
-    <Description>Core device-identity abstractions for the RocketWelder SDK (IDevice, DeviceId, RunId, Lifetime, ShareMode).</Description>
+    <Description>Core device-identity abstractions for the RocketWelder SDK (IDevice, DeviceId, RunId, Lifetime, ShareMode) and the optional fault capabilities (IFaultReporting, IFaultResettable, DeviceFault).</Description>
     <PackageTags>rocketwelder;abstractions;sdk</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/modelingevolution/rocket-welder-sdk</RepositoryUrl>
