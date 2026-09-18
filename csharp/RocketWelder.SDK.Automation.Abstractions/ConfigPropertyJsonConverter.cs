@@ -139,8 +139,14 @@ public class ConfigPropertyJsonConverter : JsonConverterFactory
             if (result != null) return result;
         }
 
-        var concreteType = GetRegisteredType(name)
-            ?? throw new JsonException($"Unknown config property name: '{name}'");
+        // An unknown NAME is not a malformed document. Whoever owns that name — a plugin that is not
+        // loaded here, an adapter from a newer build, a key that has since been renamed — simply is not
+        // present in this process. Throwing put the failure in the worst possible place: inside a read
+        // model's subscription, which died, retried every 30 s on the same event, and never caught up.
+        // Keep it verbatim instead; the device shows the value it was given and the stream keeps flowing.
+        var concreteType = GetRegisteredType(name);
+        if (concreteType is null)
+            return new UnrecognizedProperty(name, rawValue);
 
         return CreateInstance(concreteType, rawValue);
     }
@@ -162,7 +168,9 @@ public class ConfigPropertyJsonConverter : JsonConverterFactory
         }
         else
         {
-            writer.WriteString("Name", ConfigProperty.GetName(type));
+            writer.WriteString("Name", value is IConfigPropertyInstance keyed
+                ? ConfigProperty.GetName(keyed)
+                : ConfigProperty.GetName(type));
             var valueProperty = GetValueProperty(type);
             if (valueProperty != null)
             {
