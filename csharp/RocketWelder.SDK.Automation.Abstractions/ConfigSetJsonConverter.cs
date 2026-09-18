@@ -29,9 +29,9 @@ public class ConfigSetJsonConverter : JsonConverter<ConfigSet>
                 case ValueTuple<string, IConfigPropertyInstance> tuple:
                     set.Add(tuple.Item1, tuple.Item2);
                     break;
-                // Standard typed property — derive key from type
+                // Typed property — keyed by its type; a dynamically keyed one (an unrecognized name) by its own
                 case IConfigPropertyInstance instance:
-                    set.Add(ConfigProperty.GetName(instance.GetType()), instance);
+                    set.Add(ConfigProperty.GetName(instance), instance);
                     break;
             }
         }

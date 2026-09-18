@@ -14,6 +14,15 @@ public static class ConfigProperty
     /// <summary>Returns the static <c>Name</c> for a typed config property.</summary>
     public static string GetName<T>() where T : IConfigProperty<T>, IConfigPropertyInstance => T.Name;
 
+    /// <summary>
+    /// The key an INSTANCE is stored under: its own <see cref="IConfigTypePropertyInstance.Name"/> when it is
+    /// dynamically keyed, otherwise its type's static name. The one statement of that rule — the set, its JSON
+    /// converter and the item writer all key through here, so a dynamically keyed item cannot be handled by one
+    /// of them and thrown on by another.
+    /// </summary>
+    public static string GetName(IConfigPropertyInstance instance) =>
+        instance is IConfigTypePropertyInstance dynamic ? dynamic.Name : GetName(instance.GetType());
+
     /// <summary>Returns the static <c>Name</c> for a config property type resolved at runtime.</summary>
     public static string GetName(Type t)
     {
@@ -71,6 +80,32 @@ public abstract record ConfigProperty<T, TSelf>(T Value) : IConfigPropertyInstan
 
 /// <summary>IPv4 address (e.g., for <c>IpProperty</c> / <c>IRobot.Address</c> host).</summary>
 [JsonConverter(typeof(ConfigPropertyJsonConverter))]
+/// <summary>
+/// A config item whose <c>Name</c> this build does not recognise, kept VERBATIM instead of rejected.
+///
+/// <para>
+/// Config property names are contributed by whoever owns them — the host, an adapter, or a plugin — so a
+/// store written by a cell with one plugin set is routinely read by a process with another. Historic events
+/// also outlive renames. Deserialization must therefore be TOTAL: the previous behaviour threw
+/// <see cref="System.Text.Json.JsonException"/> on an unknown name, and because the throw happened inside a
+/// read model's subscription it killed that subscription, which retried every 30 s on the same event and
+/// never caught up again — one unrecognised string permanently blinded the devices page, with nothing in
+/// the UI to say why.
+/// </para>
+///
+/// <para>
+/// Carrying <see cref="Name"/> at runtime makes it round-trip: <c>ConfigSet</c> already keys
+/// <see cref="IConfigTypePropertyInstance"/> items by their own name, so an unknown property is written
+/// back exactly as it arrived and is not silently dropped on the next save.
+/// </para>
+/// </summary>
+public sealed record UnrecognizedProperty(string Name, string Value)
+    : IConfigTypePropertyInstance, IConfigPropertyInstance<string>
+{
+    string IConfigPropertyInstance<string>.Value => Value;
+    object IConfigPropertyInstance.Value => Value;
+}
+
 public record IpProperty(Ipv4Address Value) : ConfigProperty<Ipv4Address, IpProperty>(Value), IConfigProperty<IpProperty>
 {
     public static string Name => "Ip";

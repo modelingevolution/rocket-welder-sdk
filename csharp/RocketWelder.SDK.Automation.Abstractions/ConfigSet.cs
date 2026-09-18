@@ -31,10 +31,7 @@ public class ConfigSet : IEnumerable<(string Name, IConfigPropertyInstance Value
     {
         foreach (var item in items)
         {
-            var key = item is IConfigTypePropertyInstance dynamic
-                ? dynamic.Name
-                : ConfigProperty.GetName(item.GetType());
-            _items[key] = item;
+            _items[ConfigProperty.GetName(item)] = item;
         }
     }
 
