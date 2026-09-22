@@ -139,9 +139,58 @@ public class StageWriterGrowthTests
     }
 
     [Fact]
+    public void DrawPolygon_Beyond_The_Initial_Layer_Buffer_Grows_By_Its_Point_Count()
+    {
+        // The polygon bound scales with the point count (1 + 5 + n × 10); an 80 000-point polygon is ~320 KB in one op.
+        var sink = new CapturingSink();
+        using var stageSink = new StageSink(sink, ownsSink: false);
+        var polygon = new SkiaSharp.SKPoint[80_000];
+        for (var i = 0; i < polygon.Length; i++)
+            polygon[i] = new SkiaSharp.SKPoint(i % 2 == 0 ? 0 : 1900, i % 3 == 0 ? 0 : 1000); // large deltas → 2-byte varints
+
+        using (var writer = stageSink.CreateWriter(1))
+        {
+            writer.Layer(0).SetStroke(new RgbColor(1, 1, 1));
+            writer.Layer(0).DrawPolygon(polygon);
+        }
+
+        var frame = Assert.Single(sink.Frames);
+        Assert.True(frame.Length > InitialLayerBytes, $"frame is {frame.Length} B");
+        Assert.Equal(2u, ReadHead(frame).opCount);
+        AssertEndMarker(frame);
+    }
+
+    [Fact]
+    public void Multi_Byte_Text_Straddling_The_Growth_Boundary_Is_Encoded_Intact()
+    {
+        // The text bound uses the UTF-8 byte count, not the char count: surrogate pairs (4 B) and Polish letters (2 B)
+        // must be counted as bytes when the op is the one that crosses the boundary.
+        var sink = new CapturingSink();
+        using var stageSink = new StageSink(sink, ownsSink: false);
+        const string label = "łącze 😀 ż"; // 2×3 multi-byte + one surrogate pair
+        var expectedLast = new byte[64];
+        var expectedLen = VectorGraphicsEncoderV2.WriteDrawText(expectedLast, label, 7, 8);
+
+        using (var writer = stageSink.CreateWriter(1))
+        {
+            var layer = writer.Layer(0);
+            // Fill to just under the 256 KB rent with 1-byte ops, then cross it with the multi-byte text.
+            var fill = InitialLayerBytes - 16 - 4;
+            for (var i = 0; i < fill; i++) layer.Save();
+            layer.DrawText(label, 7, 8);
+        }
+
+        var frame = Assert.Single(sink.Frames);
+        Assert.Equal(expectedLast.AsSpan(0, expectedLen).ToArray(),
+            frame.AsSpan(frame.Length - 2 - expectedLen, expectedLen).ToArray());
+        AssertEndMarker(frame);
+    }
+
+    [Fact]
     public void A_Frame_Within_The_Initial_Buffers_Is_Byte_Identical_To_Before()
     {
-        // The growth path must not change the encoding of an ordinary frame.
+        // The growth path must not change the encoding of an ordinary frame. This pins SDK↔encoder consistency
+        // (the expectation is built with the same encoder); the pre-fix bytes were the same sequence.
         var sink = new CapturingSink();
         using var stageSink = new StageSink(sink, ownsSink: false);
 
@@ -171,7 +220,7 @@ public class StageWriterGrowthTests
     {
         var sink = new CapturingSink();
         using var stageSink = new StageSink(sink, ownsSink: false);
-        var tooBig = new byte[64 * 1024 * 1024 + 1];
+        var tooBig = new byte[StageSink.MaxLayerBytes + 1];
 
         using var writer = stageSink.CreateWriter(1);
         var ex = Assert.Throws<InvalidOperationException>(() => writer.Layer(0).DrawJpeg(tooBig, 0, 0, 1, 1));
