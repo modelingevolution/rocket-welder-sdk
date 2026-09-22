@@ -167,7 +167,10 @@ public class StageWriterGrowthTests
         // must be counted as bytes when the op is the one that crosses the boundary.
         var sink = new CapturingSink();
         using var stageSink = new StageSink(sink, ownsSink: false);
-        const string label = "łącze 😀 ż"; // 2×3 multi-byte + one surrogate pair
+        // 22 chars but 44 UTF-8 bytes: a bound computed from the CHAR count would reserve 22 bytes too few, more
+        // than the 12 bytes of varint headroom at small x/y, so the sliced span would throw.
+        var label = new string('ż', 20) + "😀";
+        Assert.Equal(44, System.Text.Encoding.UTF8.GetByteCount(label));
         var expectedLast = new byte[64];
         var expectedLen = VectorGraphicsEncoderV2.WriteDrawText(expectedLast, label, 7, 8);
 
@@ -181,6 +184,7 @@ public class StageWriterGrowthTests
         }
 
         var frame = Assert.Single(sink.Frames);
+        Assert.True(frame.Length > InitialLayerBytes, $"frame is {frame.Length} B — the text op must have crossed the rent");
         Assert.Equal(expectedLast.AsSpan(0, expectedLen).ToArray(),
             frame.AsSpan(frame.Length - 2 - expectedLen, expectedLen).ToArray());
         AssertEndMarker(frame);

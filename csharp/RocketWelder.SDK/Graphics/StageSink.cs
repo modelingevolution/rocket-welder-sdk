@@ -155,7 +155,8 @@ internal sealed class StageWriter : IStageWriter
             _buffer = grown;
         }
 
-        var span = _buffer.AsSpan();
+        // Sliced to the computed bound, like the layer buffers: an under-estimate fails here, not at an array end.
+        var span = _buffer.AsSpan(0, required);
         int offset = 0;
 
         // Write message header
@@ -268,9 +269,9 @@ internal sealed class StageWriter : IStageWriter
         /// deterministically (in the unit tests) instead of only at an array boundary in the field. Growth doubles
         /// (at least to the required size) so a big frame re-rents O(log n) times; the data so far is copied across.
         /// </summary>
-        private Span<byte> Reserve(int maxOpBytes)
+        private Span<byte> Reserve(long maxOpBytes)
         {
-            long requiredBytes = (long)_dataOffset + maxOpBytes;
+            long requiredBytes = _dataOffset + maxOpBytes;
             if (requiredBytes > StageSink.MaxLayerBytes)
                 throw new InvalidOperationException(
                     $"Layer {_layerId} would exceed {StageSink.MaxLayerBytes / (1024 * 1024)} MB of encoded vector graphics "
@@ -285,7 +286,7 @@ internal sealed class StageWriter : IStageWriter
                 ArrayPool<byte>.Shared.Return(_layerBuffer);
                 _layerBuffer = grown;
             }
-            return _layerBuffer.AsSpan(_dataOffset, maxOpBytes);
+            return _layerBuffer.AsSpan(_dataOffset, (int)maxOpBytes);
         }
 
         /// <summary>
@@ -426,13 +427,13 @@ internal sealed class StageWriter : IStageWriter
 
         public void DrawPolygon(ReadOnlySpan<SKPoint> points)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteDrawPolygon(Reserve(OpHeaderBytes + VarintMaxBytes + points.Length * PointMaxBytes), points);
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawPolygon(Reserve(OpHeaderBytes + VarintMaxBytes + (long)points.Length * PointMaxBytes), points);
             _operationCount++;
         }
 
         public void DrawText(string text, int x, int y)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteDrawText(Reserve(OpHeaderBytes + 3 * VarintMaxBytes + System.Text.Encoding.UTF8.GetByteCount(text)), text, x, y);
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawText(Reserve(OpHeaderBytes + 3 * VarintMaxBytes + (long)System.Text.Encoding.UTF8.GetByteCount(text)), text, x, y);
             _operationCount++;
         }
 
@@ -456,7 +457,7 @@ internal sealed class StageWriter : IStageWriter
 
         public void DrawJpeg(ReadOnlySpan<byte> jpegData, int x, int y, int width, int height)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteDrawJpeg(Reserve(OpHeaderBytes + 5 * VarintMaxBytes + jpegData.Length), jpegData, x, y, width, height);
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawJpeg(Reserve(OpHeaderBytes + 5 * VarintMaxBytes + (long)jpegData.Length), jpegData, x, y, width, height);
             _operationCount++;
         }
 
