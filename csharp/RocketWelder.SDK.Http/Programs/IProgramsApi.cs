@@ -30,6 +30,14 @@ public interface IProgramsApi
     Task CancelAsync(Guid programId, CancellationToken ct = default);
 
     /// <summary>
+    /// <c>DELETE /api/programs/{programId}</c> — deregister a program and remove its
+    /// on-disk directory. Refused with 409 while the program is running.
+    /// </summary>
+    /// <exception cref="ProgramRunningException">The program is running and cannot be deleted (HTTP 409).</exception>
+    /// <exception cref="HttpRequestException">The id was rejected (HTTP 400) or unknown (HTTP 404), or the server failed otherwise.</exception>
+    Task DeleteAsync(Guid programId, CancellationToken ct = default);
+
+    /// <summary>
     /// <c>GET /api/programs/{programId}/status</c> — current execution state plus last-run
     /// summary. Null if the program id is unknown.
     /// </summary>

@@ -11,7 +11,7 @@ namespace RocketWelder.SDK.Robotics.Core;
 /// Each agent/user needs their own instance. Not thread-safe.
 /// MoveLin/MoveJoint update internal state instantaneously (no simulated motion time).
 /// </summary>
-public sealed class SimulatedRobot : IRobot
+public sealed class SimulatedRobot : IRobot, IWeavingRobot
 {
     private const double MaxStepDegrees = 5.0;
 
@@ -27,6 +27,7 @@ public sealed class SimulatedRobot : IRobot
     private bool _isDisposed;
     private Uri _address = new("sim://localhost");
     private bool _jointMode;
+    private WeaveProfile? _activeWeaveProfile;
 
     /// <summary>
     /// Creates a SimulatedRobot at the model's home position. When <paramref name="environment"/>
@@ -222,6 +223,33 @@ public sealed class SimulatedRobot : IRobot
         _isConnected = false;
         _poseSubject.OnCompleted();
         _poseSubject.Dispose();
+    }
+
+    #endregion
+
+    #region IWeavingRobot Implementation
+
+    /// <summary>True while a weave is active (between <see cref="BeginWeave"/> and <see cref="EndWeave"/>).</summary>
+    public bool IsWeaving => _activeWeaveProfile is not null;
+
+    /// <summary>The profile passed to the last <see cref="BeginWeave"/>, or null when weaving is off.</summary>
+    public WeaveProfile? ActiveWeaveProfile => _activeWeaveProfile;
+
+    /// <summary>Records the profile and turns weaving on. Simulation only — no motion is generated here.</summary>
+    public int BeginWeave(WeaveProfile profile)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(profile);
+        _activeWeaveProfile = profile;
+        return 0;
+    }
+
+    /// <summary>Turns weaving off. A no-op when weaving is already off (benign).</summary>
+    public int EndWeave(WeaveInstruction family)
+    {
+        ThrowIfDisposed();
+        _activeWeaveProfile = null;
+        return 0;
     }
 
     #endregion

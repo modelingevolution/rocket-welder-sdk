@@ -5,6 +5,7 @@ using RocketWelder.SDK.Http.GstElements;
 using RocketWelder.SDK.Http.Modbus;
 using RocketWelder.SDK.Http.Pipelines;
 using RocketWelder.SDK.Http.Programs;
+using RocketWelder.SDK.Http.Repositories;
 using RocketWelder.SDK.Http.Robots;
 using RocketWelder.SDK.Http.Skills;
 
@@ -23,6 +24,7 @@ public sealed class RocketWelderClient : IRocketWelderClient
         Devices = new DevicesApi(http);
         Pipelines = new PipelinesApi(http);
         Programs = new ProgramsApi(http);
+        Repositories = new RepositoriesApi(http);
         Robots = new RobotsApi(http);
         Cameras = new CamerasApi(http);
         DistanceSensors = new DistanceSensorsApi(http);
@@ -34,6 +36,7 @@ public sealed class RocketWelderClient : IRocketWelderClient
     public IDevicesApi Devices { get; }
     public IPipelinesApi Pipelines { get; }
     public IProgramsApi Programs { get; }
+    public IRepositoriesApi Repositories { get; }
     public IRobotsApi Robots { get; }
     public ICamerasApi Cameras { get; }
     public IDistanceSensorsApi DistanceSensors { get; }

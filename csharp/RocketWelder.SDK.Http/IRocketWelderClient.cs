@@ -5,6 +5,7 @@ using RocketWelder.SDK.Http.GstElements;
 using RocketWelder.SDK.Http.Modbus;
 using RocketWelder.SDK.Http.Pipelines;
 using RocketWelder.SDK.Http.Programs;
+using RocketWelder.SDK.Http.Repositories;
 using RocketWelder.SDK.Http.Robots;
 using RocketWelder.SDK.Http.Skills;
 
@@ -36,6 +37,9 @@ public interface IRocketWelderClient
 
     /// <summary>Operations under <c>/api/programs</c> + <c>/api/repositories/{id}/compile</c>.</summary>
     IProgramsApi Programs { get; }
+
+    /// <summary>Operations under <c>/api/repositories</c> — create repositories and programs.</summary>
+    IRepositoriesApi Repositories { get; }
 
     /// <summary>Operations under <c>/api/robots/{name?}/...</c>.</summary>
     IRobotsApi Robots { get; }

@@ -110,6 +110,19 @@ public class ProgramsAuthoringApiTests
     }
 
     [Fact]
+    public async Task AddBlockAsync_Should_Throw_HttpRequestException_On_422_With_Body_Preserved()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.UnprocessableEntity, "point has no taught pose");
+        var request = new AddBlockRequest("Point", Props("p"), BlockAnchor.Tail);
+
+        var act = () => Api(handler).AddBlockAsync(ProgramId, request, V1);
+
+        var ex = (await act.Should().ThrowAsync<HttpRequestException>()).Which;
+        ex.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        ex.Message.Should().Contain("point has no taught pose");
+    }
+
+    [Fact]
     public async Task Edits_Should_Send_IfMatch_As_A_Quoted_EntityTag()
     {
         // A bare value reads as absent through rw2's typed EntityTagHeaderValue accessor,
@@ -157,6 +170,17 @@ public class ProgramsAuthoringApiTests
             .Which.Block.Should().Be(new BlockId("blk-1"));
     }
 
+    [Fact]
+    public async Task EditBlockAsync_Should_Throw_HttpRequestException_On_422_With_Body_Preserved()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.UnprocessableEntity, "point has no taught pose");
+        var act = () => Api(handler).EditBlockAsync(ProgramId, new BlockId("blk-1"), new EditBlockRequest(Props("p")), V1);
+
+        var ex = (await act.Should().ThrowAsync<HttpRequestException>()).Which;
+        ex.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        ex.Message.Should().Contain("point has no taught pose");
+    }
+
     // --- RemoveBlock ---
 
     [Fact]
@@ -196,6 +220,17 @@ public class ProgramsAuthoringApiTests
         var act = () => Api(handler).RemoveBlockAsync(ProgramId, new BlockId("blk-2"), V1);
         (await act.Should().ThrowAsync<BlockNotFoundException>())
             .Which.Block.Should().Be(new BlockId("blk-2"));
+    }
+
+    [Fact]
+    public async Task RemoveBlockAsync_Should_Throw_HttpRequestException_On_422_With_Body_Preserved()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.UnprocessableEntity, "point has no taught pose");
+        var act = () => Api(handler).RemoveBlockAsync(ProgramId, new BlockId("blk-2"), V1);
+
+        var ex = (await act.Should().ThrowAsync<HttpRequestException>()).Which;
+        ex.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        ex.Message.Should().Contain("point has no taught pose");
     }
 
     // --- MoveBlock ---
@@ -261,6 +296,17 @@ public class ProgramsAuthoringApiTests
     }
 
     [Fact]
+    public async Task MoveBlockAsync_Should_Throw_HttpRequestException_On_422_With_Body_Preserved()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.UnprocessableEntity, "point has no taught pose");
+        var act = () => Api(handler).MoveBlockAsync(ProgramId, new BlockId("blk-3"), new MoveBlockRequest(BlockAnchor.Tail, null), V1);
+
+        var ex = (await act.Should().ThrowAsync<HttpRequestException>()).Which;
+        ex.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        ex.Message.Should().Contain("point has no taught pose");
+    }
+
+    [Fact]
     public void MoveBlockRequest_Should_Reject_Neither_Or_Both_Targets()
     {
         var neither = () => new MoveBlockRequest(null, null);
@@ -284,5 +330,32 @@ public class ProgramsAuthoringApiTests
         handler.IfMatchPresent.Should().BeFalse();
         BodyOf(handler)!["name"]!.GetValue<string>().Should().Be("weld-start");
         result.Name.Should().Be("weld-start");
+    }
+
+    [Fact]
+    public async Task CapturePointAsync_Should_Throw_HttpRequestException_On_422_With_Body_Preserved()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.UnprocessableEntity, "point has no taught pose");
+        var request = new CapturePointRequest("weld-start");
+
+        var act = () => Api(handler).CapturePointAsync(ProgramId, request);
+
+        var ex = (await act.Should().ThrowAsync<HttpRequestException>()).Which;
+        ex.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        ex.Message.Should().Contain("point has no taught pose");
+    }
+
+    // --- Run ---
+
+    [Fact]
+    public async Task RunAsync_Should_Throw_HttpRequestException_On_422_With_Body_Preserved()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.UnprocessableEntity, "point has no taught pose");
+
+        var act = () => Api(handler).RunAsync(ProgramId, dryRun: false);
+
+        var ex = (await act.Should().ThrowAsync<HttpRequestException>()).Which;
+        ex.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        ex.Message.Should().Contain("point has no taught pose");
     }
 }

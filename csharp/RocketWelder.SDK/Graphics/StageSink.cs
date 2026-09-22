@@ -16,6 +16,15 @@ namespace RocketWelder.SDK.Graphics;
 /// </summary>
 public sealed class StageSink : IStageSink
 {
+    /// <summary>
+    /// Hard ceiling for one layer's encoded bytes (bug 021). Far above any legitimate frame (a 4K JPEG is ~2 MB; the
+    /// program overlay that overflowed the old fixed 256 KB was ~0.5 MB) — it exists so a runaway caller, or one
+    /// oversized <c>DrawJpeg</c>, fails with an <see cref="InvalidOperationException"/> naming the layer instead of
+    /// exhausting memory. Note the browser side of rw2 receives frames into an 8 MB buffer; a frame between that and
+    /// this ceiling encodes fine here and is the receiver's problem.
+    /// </summary>
+    public const int MaxLayerBytes = 64 * 1024 * 1024;
+
     private readonly IFrameSink _frameSink;
     private readonly bool _ownsSink;
     private readonly int _bufferSize;
@@ -73,7 +82,7 @@ internal sealed class StageWriter : IStageWriter
 {
     private readonly ulong _frameId;
     private readonly IFrameSink _frameSink;
-    private readonly byte[] _buffer;
+    private byte[] _buffer;
     private readonly int _bufferSize;
     private readonly Dictionary<byte, LayerEncoderImpl> _layers = new();
     private readonly List<byte> _activeLayerIds = new();
@@ -129,7 +138,25 @@ internal sealed class StageWriter : IStageWriter
         if (_activeLayerIds.Count == 0)
             return;
 
-        var span = _buffer.AsSpan();
+        // Bug 021: the frame buffer is sized from what the layers actually hold, so a frame larger than the
+        // initial rent (a big program overlay, a JPEG) is sent whole instead of throwing from a Span copy.
+        long requiredBytes = MessageHeaderMaxBytes + EndMarkerMaxBytes;
+        foreach (var layerId in _activeLayerIds)
+            requiredBytes += _layers[layerId].MaxEncodedBytes;
+        if (requiredBytes > Array.MaxLength)
+            throw new InvalidOperationException(
+                $"Frame {_frameId} would be {requiredBytes} bytes across {_activeLayerIds.Count} layers; that cannot be sent.");
+        var required = (int)requiredBytes;
+        if (_buffer.Length < required)
+        {
+            // Rent first, return second: a failed rent must not leave a pooled array referenced by this writer.
+            var grown = ArrayPool<byte>.Shared.Rent(required);
+            ArrayPool<byte>.Shared.Return(_buffer);
+            _buffer = grown;
+        }
+
+        // Sliced to the computed bound, like the layer buffers: an under-estimate fails here, not at an array end.
+        var span = _buffer.AsSpan(0, required);
         int offset = 0;
 
         // Write message header
@@ -154,19 +181,25 @@ internal sealed class StageWriter : IStageWriter
         if (_disposed) return;
         _disposed = true;
 
-        // Auto-flush on dispose (same pattern as other writers)
-        Flush();
-
-        // Return layer buffers to pool
-        foreach (var layer in _layers.Values)
+        try
         {
-            layer.ReturnBuffer();
+            // Auto-flush on dispose (same pattern as other writers)
+            Flush();
         }
-        _layers.Clear();
-        _activeLayerIds.Clear();
+        finally
+        {
+            // Return the buffers even when the flush failed — the pooled arrays must not be lost on the
+            // repeated-failure path a caller may keep surviving.
+            foreach (var layer in _layers.Values)
+            {
+                layer.ReturnBuffer();
+            }
+            _layers.Clear();
+            _activeLayerIds.Clear();
 
-        // Return main buffer to pool
-        ArrayPool<byte>.Shared.Return(_buffer);
+            // Return main buffer to pool
+            ArrayPool<byte>.Shared.Return(_buffer);
+        }
     }
 
     public ValueTask DisposeAsync()
@@ -175,12 +208,23 @@ internal sealed class StageWriter : IStageWriter
         return ValueTask.CompletedTask;
     }
 
+    // WriteMessageHeader = 8 (frame id) + 1 (layer count); WriteEndMarker = 2. Kept as upper bounds.
+    private const int MessageHeaderMaxBytes = 16;
+    private const int EndMarkerMaxBytes = 4;
+
     /// <summary>
     /// Internal layer encoder that writes operations directly to buffer.
     /// </summary>
+    /// <remarks>
+    /// Bug 021: the buffer GROWS. Every op first reserves an upper bound of the bytes the V2 encoder can emit for
+    /// it (<see cref="VectorGraphicsEncoderV2"/> writes into a Span with no bounds check of its own, so an op that
+    /// did not fit surfaced as <c>ArgumentException: Destination is too short</c> / <c>IndexOutOfRangeException</c>
+    /// from inside the caller's draw code). The initial rent is still 256 KB; a frame that needs more re-rents a
+    /// larger pooled array and copies, so a big overlay costs one extra copy rather than a failed frame.
+    /// </remarks>
     private sealed class LayerEncoderImpl : ILayerCanvas
     {
-        private readonly byte[] _layerBuffer;
+        private byte[] _layerBuffer;
         private readonly byte _layerId;
         private FrameType _frameType = FrameType.Master;
         private int _operationCount;
@@ -190,6 +234,18 @@ internal sealed class StageWriter : IStageWriter
         private const int HeaderReserve = 16;
         private const int LayerBufferSize = 256 * 1024;
 
+        // Upper bounds of what VectorGraphicsEncoderV2 emits per op. A varint is at most 5 bytes for a 32-bit
+        // value; SetContext ops are 3 bytes of header + payload; a matrix is 3 + 6 floats.
+        private const int VarintMaxBytes = 5;
+        private const int OpHeaderBytes = 1;
+        private const int ContextOpHeaderBytes = 3;
+        private const int ColorOpMaxBytes = ContextOpHeaderBytes + 4;
+        private const int ScalarOpMaxBytes = ContextOpHeaderBytes + VarintMaxBytes;
+        private const int PairOpMaxBytes = ContextOpHeaderBytes + 2 * VarintMaxBytes;
+        private const int FloatOpMaxBytes = ContextOpHeaderBytes + 2 * VarintMaxBytes;
+        private const int MatrixOpMaxBytes = ContextOpHeaderBytes + 6 * 4;
+        private const int PointMaxBytes = 2 * VarintMaxBytes;
+
         public byte LayerId => _layerId;
 
         public LayerEncoderImpl(byte layerId)
@@ -198,6 +254,39 @@ internal sealed class StageWriter : IStageWriter
             // 256KB per layer to accommodate JPEG frames
             _layerBuffer = ArrayPool<byte>.Shared.Rent(LayerBufferSize);
             _dataOffset = HeaderReserve;
+        }
+
+        /// <summary>
+        /// Upper bound of the bytes <see cref="CopyEncodedData"/> will write: the layer header (≤ HeaderReserve) plus
+        /// the op data. The writer sizes its frame buffer from the sum over all layers.
+        /// </summary>
+        public int MaxEncodedBytes => _dataOffset;
+
+        /// <summary>
+        /// Reserves room for one op of at most <paramref name="maxOpBytes"/> bytes and returns exactly that window,
+        /// growing the pooled buffer first when the remaining space is smaller. The window is sliced to the
+        /// reservation on purpose: an encoder that ever emits more than the declared bound fails loudly and
+        /// deterministically (in the unit tests) instead of only at an array boundary in the field. Growth doubles
+        /// (at least to the required size) so a big frame re-rents O(log n) times; the data so far is copied across.
+        /// </summary>
+        private Span<byte> Reserve(long maxOpBytes)
+        {
+            long requiredBytes = _dataOffset + maxOpBytes;
+            if (requiredBytes > StageSink.MaxLayerBytes)
+                throw new InvalidOperationException(
+                    $"Layer {_layerId} would exceed {StageSink.MaxLayerBytes / (1024 * 1024)} MB of encoded vector graphics "
+                    + $"({_operationCount} ops so far, next op up to {maxOpBytes} bytes); the caller is emitting "
+                    + "an unbounded number of draw operations or one oversized image.");
+            var required = (int)requiredBytes;
+            if (required > _layerBuffer.Length)
+            {
+                int newSize = Math.Max(required, Math.Min(_layerBuffer.Length * 2, StageSink.MaxLayerBytes));
+                var grown = ArrayPool<byte>.Shared.Rent(newSize);
+                _layerBuffer.AsSpan(0, _dataOffset).CopyTo(grown);
+                ArrayPool<byte>.Shared.Return(_layerBuffer);
+                _layerBuffer = grown;
+            }
+            return _layerBuffer.AsSpan(_dataOffset, (int)maxOpBytes);
         }
 
         /// <summary>
@@ -236,8 +325,6 @@ internal sealed class StageWriter : IStageWriter
             return offset;
         }
 
-        private Span<byte> GetWriteSpan() => _layerBuffer.AsSpan(_dataOffset);
-
         #region Frame Type
 
         public void Master() => _frameType = FrameType.Master;
@@ -250,31 +337,31 @@ internal sealed class StageWriter : IStageWriter
 
         public void SetStroke(RgbColor color)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteSetStroke(GetWriteSpan(), color);
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetStroke(Reserve(ColorOpMaxBytes), color);
             _operationCount++;
         }
 
         public void SetFill(RgbColor color)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteSetFill(GetWriteSpan(), color);
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetFill(Reserve(ColorOpMaxBytes), color);
             _operationCount++;
         }
 
         public void SetThickness(int width)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteSetThickness(GetWriteSpan(), width);
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetThickness(Reserve(ScalarOpMaxBytes), width);
             _operationCount++;
         }
 
         public void SetFontSize(int size)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteSetFontSize(GetWriteSpan(), size);
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetFontSize(Reserve(ScalarOpMaxBytes), size);
             _operationCount++;
         }
 
         public void SetFontColor(RgbColor color)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteSetFontColor(GetWriteSpan(), color);
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetFontColor(Reserve(ColorOpMaxBytes), color);
             _operationCount++;
         }
 
@@ -284,31 +371,31 @@ internal sealed class StageWriter : IStageWriter
 
         public void Translate(float dx, float dy)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteSetOffset(GetWriteSpan(), dx, dy);
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetOffset(Reserve(PairOpMaxBytes), dx, dy);
             _operationCount++;
         }
 
         public void Rotate(float degrees)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteSetRotation(GetWriteSpan(), degrees);
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetRotation(Reserve(FloatOpMaxBytes), degrees);
             _operationCount++;
         }
 
         public void Scale(float sx, float sy)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteSetScale(GetWriteSpan(), sx, sy);
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetScale(Reserve(PairOpMaxBytes), sx, sy);
             _operationCount++;
         }
 
         public void Skew(float kx, float ky)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteSetSkew(GetWriteSpan(), kx, ky);
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetSkew(Reserve(PairOpMaxBytes), kx, ky);
             _operationCount++;
         }
 
         public void SetMatrix(SKMatrix matrix)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteSetMatrix(GetWriteSpan(), matrix);
+            _dataOffset += VectorGraphicsEncoderV2.WriteSetMatrix(Reserve(MatrixOpMaxBytes), matrix);
             _operationCount++;
         }
 
@@ -318,19 +405,19 @@ internal sealed class StageWriter : IStageWriter
 
         public void Save()
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteSaveContext(GetWriteSpan());
+            _dataOffset += VectorGraphicsEncoderV2.WriteSaveContext(Reserve(OpHeaderBytes));
             _operationCount++;
         }
 
         public void Restore()
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteRestoreContext(GetWriteSpan());
+            _dataOffset += VectorGraphicsEncoderV2.WriteRestoreContext(Reserve(OpHeaderBytes));
             _operationCount++;
         }
 
         public void ResetContext()
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteResetContext(GetWriteSpan());
+            _dataOffset += VectorGraphicsEncoderV2.WriteResetContext(Reserve(OpHeaderBytes));
             _operationCount++;
         }
 
@@ -340,37 +427,37 @@ internal sealed class StageWriter : IStageWriter
 
         public void DrawPolygon(ReadOnlySpan<SKPoint> points)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteDrawPolygon(GetWriteSpan(), points);
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawPolygon(Reserve(OpHeaderBytes + VarintMaxBytes + (long)points.Length * PointMaxBytes), points);
             _operationCount++;
         }
 
         public void DrawText(string text, int x, int y)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteDrawText(GetWriteSpan(), text, x, y);
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawText(Reserve(OpHeaderBytes + 3 * VarintMaxBytes + (long)System.Text.Encoding.UTF8.GetByteCount(text)), text, x, y);
             _operationCount++;
         }
 
         public void DrawCircle(int centerX, int centerY, int radius)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteDrawCircle(GetWriteSpan(), centerX, centerY, radius);
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawCircle(Reserve(OpHeaderBytes + 3 * VarintMaxBytes), centerX, centerY, radius);
             _operationCount++;
         }
 
         public void DrawRectangle(int x, int y, int width, int height)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteDrawRect(GetWriteSpan(), x, y, width, height);
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawRect(Reserve(OpHeaderBytes + 4 * VarintMaxBytes), x, y, width, height);
             _operationCount++;
         }
 
         public void DrawLine(int x1, int y1, int x2, int y2)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteDrawLine(GetWriteSpan(), x1, y1, x2, y2);
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawLine(Reserve(OpHeaderBytes + 4 * VarintMaxBytes), x1, y1, x2, y2);
             _operationCount++;
         }
 
         public void DrawJpeg(ReadOnlySpan<byte> jpegData, int x, int y, int width, int height)
         {
-            _dataOffset += VectorGraphicsEncoderV2.WriteDrawJpeg(GetWriteSpan(), jpegData, x, y, width, height);
+            _dataOffset += VectorGraphicsEncoderV2.WriteDrawJpeg(Reserve(OpHeaderBytes + 5 * VarintMaxBytes + (long)jpegData.Length), jpegData, x, y, width, height);
             _operationCount++;
         }
 
