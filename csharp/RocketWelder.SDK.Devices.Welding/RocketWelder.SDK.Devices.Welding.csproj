@@ -6,6 +6,9 @@
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <IsPackable>true</IsPackable>
+    <!-- epic-110 PL-2: plugins ship this package and a 2.27 host rides up to it, so 2.28 must stay additive over 2.27.0. -->
+    <EnablePackageValidation>true</EnablePackageValidation>
+    <PackageValidationBaselineVersion>2.27.0</PackageValidationBaselineVersion>
     <PackageId>RocketWelder.SDK.Devices.Welding</PackageId>
     <Authors>ModelingEvolution</Authors>
     <Company>ModelingEvolution</Company>
