@@ -72,9 +72,24 @@ jobs:
             RocketWelder.SDK.AdaptivePoints.Tests
             RocketWelder.SDK.Devices.Robot.Tests
             RocketWelder.SDK.Robotics.Core.Tests
+            RocketWelder.SDK.Devices.Welding.Tests     # epic-110: job-catalog contract pins (enum ordinals, D-9 scan, signatures)
           )
           for p in "${projects[@]}"; do
             echo "::group::$p"
             dotnet test "$p/$p.csproj" --configuration Release --no-build --nologo
+            echo "::endgroup::"
+          done
+
+      - name: Package validation (PL-2)
+        working-directory: ./csharp
+        # epic-110 PL-2: these three packages carry EnablePackageValidation against the 2.27.0 baseline, but
+        # validation only runs inside `dotnet pack`, which otherwise happens only in the publish workflows — after
+        # the release tag is pushed. Packing here (to a throwaway directory, nothing is pushed) surfaces a breaking
+        # API change on the PR instead. The publish workflows are unchanged.
+        run: |
+          set -euo pipefail
+          for p in RocketWelder.SDK.Abstractions RocketWelder.SDK.Devices.Welding RocketWelder.SDK.Automation.Abstractions; do
+            echo "::group::$p"
+            dotnet pack "$p/$p.csproj" --configuration Release --no-build --nologo -o "$RUNNER_TEMP/package-validation"
             echo "::endgroup::"
           done
