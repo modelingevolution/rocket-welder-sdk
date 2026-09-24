@@ -23,4 +23,10 @@ public enum WeldingMode
 
     /// <summary>MMA (stick) welding.</summary>
     Mma,
+
+    /// <summary>
+    /// Constant-current / constant-voltage welding (Fronius "CC/CV", F008 = 5): current, wire feed and voltage are direct
+    /// setpoints. Appended (ordinal 6) for the epic-110 hardware check; hosts persist this enum by ordinal, append only.
+    /// </summary>
+    CcCv,
 }

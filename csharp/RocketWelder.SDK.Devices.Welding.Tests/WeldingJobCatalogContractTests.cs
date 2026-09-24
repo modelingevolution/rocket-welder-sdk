@@ -25,11 +25,11 @@ public sealed class WeldingJobCatalogContractTests
     }
 
     [Fact]
-    public void WeldingMode_IsUnchanged_NoCcCv()
+    public void WeldingMode_AppendsCcCv_AtOrdinal6()
     {
-        // design.md §1 "WeldingMode is unchanged [rev 4]"; decisions.md D-17.
-        Enum.GetNames<WeldingMode>().Should().Equal("Unknown", "MigMagStandard", "MigMagSynergic", "Job", "Tig", "Mma");
-        Enum.GetValues<WeldingMode>().Select(m => (int)m).Should().Equal(0, 1, 2, 3, 4, 5);
+        // 2026-09-24: CcCv appended for the epic-110 hardware check (owner request); ordinals are persisted, append only.
+        Enum.GetNames<WeldingMode>().Should().Equal("Unknown", "MigMagStandard", "MigMagSynergic", "Job", "Tig", "Mma", "CcCv");
+        Enum.GetValues<WeldingMode>().Select(m => (int)m).Should().Equal(0, 1, 2, 3, 4, 5, 6);
     }
 
     [Fact]
