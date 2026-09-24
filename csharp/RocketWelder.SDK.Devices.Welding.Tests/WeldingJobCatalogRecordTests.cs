@@ -1,4 +1,3 @@
-using System.Collections.Immutable;
 using FluentAssertions;
 
 namespace RocketWelder.SDK.Devices.Welding.Tests;
@@ -59,108 +58,14 @@ public sealed class WeldingJobCatalogRecordTests
     }
 
     [Fact]
-    public void WeldingRecipe_WithReplacesNameKeepingIdentity()
+    public void WeldingJobEntry_Unprobed_Unnamed()
     {
-        // SaveRecipeAsync: same Id = replace (rename).
-        var setpoints = new Dictionary<string, float> { ["WireFeed"] = 8.0f };
-        var recipe = new WeldingRecipe(Guid.NewGuid(), "Fillet 3mm", WeldingMode.MigMagSynergic, setpoints, null);
-
-        var renamed = recipe with { Name = "Fillet 3 mm" };
-
-        renamed.Id.Should().Be(recipe.Id);
-        renamed.Mode.Should().Be(WeldingMode.MigMagSynergic);
-        renamed.Setpoints.Should().BeSameAs(setpoints);
-        renamed.LinkedJobNumber.Should().BeNull();
-        renamed.Should().NotBe(recipe);
-    }
-
-    [Fact]
-    public void WeldingRecipe_SameSetpointsInstance_AreEqual()
-    {
-        var id = Guid.NewGuid();
-        var setpoints = new Dictionary<string, float> { ["Current"] = 150f };
-
-        new WeldingRecipe(id, "R", WeldingMode.MigMagStandard, setpoints, 12)
-            .Should().Be(new WeldingRecipe(id, "R", WeldingMode.MigMagStandard, setpoints, 12));
-    }
-
-    // Review m2: Setpoints is compared by content, order-independent — a recipe rebuilt from captured setpoints equals
-    // the stored one when nothing changed.
-    [Fact]
-    public void WeldingRecipe_EqualSetpointsInDifferentInstancesAndOrder_AreEqualWithEqualHash()
-    {
-        var id = Guid.NewGuid();
-        var a = new WeldingRecipe(id, "Fillet", WeldingMode.MigMagSynergic,
-            new Dictionary<string, float> { ["WireFeed"] = 8.0f, ["ArcLength"] = -1.5f }, 7);
-        var b = new WeldingRecipe(id, "Fillet", WeldingMode.MigMagSynergic,
-            ImmutableDictionary<string, float>.Empty.Add("ArcLength", -1.5f).Add("WireFeed", 8.0f), 7);
-
-        a.Setpoints.Should().NotBeSameAs(b.Setpoints);
-        a.Equals(b).Should().BeTrue();
-        (a == b).Should().BeTrue();
-        (a != b).Should().BeFalse();
-        a.GetHashCode().Should().Be(b.GetHashCode());
-        new HashSet<WeldingRecipe> { a, b }.Should().HaveCount(1);
-    }
-
-    [Theory]
-    [InlineData("WireFeed", 8.5f)]   // different value
-    [InlineData("Wire", 8.0f)]       // different key
-    public void WeldingRecipe_DifferentSetpointContent_AreNotEqual(string key, float value)
-    {
-        var id = Guid.NewGuid();
-        var a = new WeldingRecipe(id, "R", WeldingMode.MigMagSynergic, new Dictionary<string, float> { ["WireFeed"] = 8.0f }, null);
-        var b = new WeldingRecipe(id, "R", WeldingMode.MigMagSynergic, new Dictionary<string, float> { [key] = value }, null);
-
-        a.Should().NotBe(b);
-        (a == b).Should().BeFalse();
-    }
-
-    [Fact]
-    public void WeldingRecipe_ExtraSetpoint_AreNotEqual()
-    {
-        var id = Guid.NewGuid();
-        var a = new WeldingRecipe(id, "R", WeldingMode.MigMagSynergic, new Dictionary<string, float> { ["WireFeed"] = 8.0f }, null);
-        var b = a with { Setpoints = new Dictionary<string, float> { ["WireFeed"] = 8.0f, ["ArcLength"] = 0f } };
-
-        a.Should().NotBe(b);
-        b.Should().NotBe(a);
-    }
-
-    [Fact]
-    public void WeldingRecipe_EveryOtherMember_TakesPartInEquality()
-    {
-        var a = new WeldingRecipe(Guid.NewGuid(), "R", WeldingMode.MigMagSynergic, new Dictionary<string, float> { ["WireFeed"] = 8.0f }, 3);
-
-        a.Should().NotBe(a with { Id = Guid.NewGuid() });
-        a.Should().NotBe(a with { Name = "r" });
-        a.Should().NotBe(a with { Mode = WeldingMode.MigMagStandard });
-        a.Should().NotBe(a with { LinkedJobNumber = null });
-        a.Equals(null).Should().BeFalse();
-        (a == null).Should().BeFalse();
-    }
-
-    [Fact]
-    public void WeldingJobEntry_WithEqualContentRecipes_AreEqual()
-    {
-        // The entry's record equality goes through WeldingRecipe.Equals, so it inherits content equality.
-        var id = Guid.NewGuid();
-        WeldingRecipe Recipe() => new(id, "R", WeldingMode.MigMagStandard, new Dictionary<string, float> { ["Current"] = 150f }, 42);
-
-        new WeldingJobEntry(42, "Root", false, null, Recipe())
-            .Should().Be(new WeldingJobEntry(42, "Root", false, null, Recipe()));
-    }
-
-    [Fact]
-    public void WeldingJobEntry_Unprobed_Unnamed_Unlinked()
-    {
-        var entry = new WeldingJobEntry(57, null, false, null, null);
+        var entry = new WeldingJobEntry(57, null, false, null);
 
         entry.JobNumber.Should().Be(57);
         entry.Name.Should().BeNull();
         entry.Hidden.Should().BeFalse();
         entry.LastProbe.Should().BeNull();
-        entry.LinkedRecipe.Should().BeNull();
     }
 
     [Fact]
@@ -168,8 +73,8 @@ public sealed class WeldingJobCatalogRecordTests
     {
         var probe = new WeldingJobProbeRecord(57, WeldingJobProbeOutcome.Unreadable, default, At);
 
-        new WeldingJobEntry(57, "Root pass", true, probe, null)
-            .Should().Be(new WeldingJobEntry(57, "Root pass", true, probe, null));
+        new WeldingJobEntry(57, "Root pass", true, probe)
+            .Should().Be(new WeldingJobEntry(57, "Root pass", true, probe));
     }
 
     [Fact]

@@ -27,7 +27,7 @@ public sealed class WeldingJobCatalogContractTests
     [Fact]
     public void WeldingMode_IsUnchanged_NoCcCv()
     {
-        // design.md §1 "WeldingMode is unchanged [rev 4]"; decisions.md D-17. Recipes persist it by ordinal.
+        // design.md §1 "WeldingMode is unchanged [rev 4]"; decisions.md D-17.
         Enum.GetNames<WeldingMode>().Should().Equal("Unknown", "MigMagStandard", "MigMagSynergic", "Job", "Tig", "Mma");
         Enum.GetValues<WeldingMode>().Select(m => (int)m).Should().Equal(0, 1, 2, 3, 4, 5);
     }
@@ -42,17 +42,13 @@ public sealed class WeldingJobCatalogContractTests
             .ToArray();
 
         methods.Should().Equal(
-            "DeleteRecipeAsync",
             "Groups",
             "HideJobAsync",
             "Job",
             "Jobs",
-            "LinkRecipeAsync",
             "NameGroupAsync",
             "NameJobAsync",
-            "Recipes",
-            "RecordProbesAsync",
-            "SaveRecipeAsync");
+            "RecordProbesAsync");
     }
 
     [Fact]
@@ -69,14 +65,10 @@ public sealed class WeldingJobCatalogContractTests
     [InlineData("Groups", typeof(IReadOnlyList<WeldingJobGroup>), new[] { typeof(DeviceId) })]
     [InlineData("Jobs", typeof(IReadOnlyList<WeldingJobEntry>), new[] { typeof(DeviceId), typeof(int) })]
     [InlineData("Job", typeof(WeldingJobEntry), new[] { typeof(DeviceId), typeof(int) })]
-    [InlineData("Recipes", typeof(IReadOnlyList<WeldingRecipe>), new[] { typeof(DeviceId) })]
     [InlineData("NameGroupAsync", typeof(Task), new[] { typeof(DeviceId), typeof(int), typeof(string), typeof(CancellationToken) })]
     [InlineData("NameJobAsync", typeof(Task), new[] { typeof(DeviceId), typeof(int), typeof(string), typeof(CancellationToken) })]
     [InlineData("HideJobAsync", typeof(Task), new[] { typeof(DeviceId), typeof(int), typeof(bool), typeof(CancellationToken) })]
     [InlineData("RecordProbesAsync", typeof(Task), new[] { typeof(DeviceId), typeof(IReadOnlyList<WeldingJobProbeRecord>), typeof(CancellationToken) })]
-    [InlineData("SaveRecipeAsync", typeof(Task), new[] { typeof(DeviceId), typeof(WeldingRecipe), typeof(CancellationToken) })]
-    [InlineData("LinkRecipeAsync", typeof(Task), new[] { typeof(DeviceId), typeof(Guid), typeof(int?), typeof(CancellationToken) })]
-    [InlineData("DeleteRecipeAsync", typeof(Task), new[] { typeof(DeviceId), typeof(Guid), typeof(CancellationToken) })]
     public void IWeldingJobCatalog_MethodSignatureMatchesDesign(string name, Type returnType, Type[] parameters)
     {
         var method = typeof(IWeldingJobCatalog).GetMethod(name, parameters);
@@ -90,9 +82,6 @@ public sealed class WeldingJobCatalogContractTests
     [InlineData("NameJobAsync")]
     [InlineData("HideJobAsync")]
     [InlineData("RecordProbesAsync")]
-    [InlineData("SaveRecipeAsync")]
-    [InlineData("LinkRecipeAsync")]
-    [InlineData("DeleteRecipeAsync")]
     public void IWeldingJobCatalog_WriteMethods_CancellationTokenIsOptional(string name)
     {
         var ct = typeof(IWeldingJobCatalog).GetMethod(name)!.GetParameters().Last();
