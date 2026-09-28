@@ -107,4 +107,20 @@ public enum MotionError
     /// without clearing it simply fails again.
     /// </para></summary>
     SafetyStop = 14,
+
+    /// <summary>The PLC answered, but what it answered is not this protocol: a map version the
+    /// driver does not implement, machine limits published but not sane (min ≥ max, zero velocity),
+    /// a state value outside the protocol, a register the PLC must not write that changed.
+    ///
+    /// <para><b>Deliberately not <see cref="CommunicationLost"/>.</b> The cable, the socket and the
+    /// Modbus stack are fine — the two sides disagree about the contract. Reporting it as a
+    /// communication error sends someone to check a link that works (owner 2026-09-29). The message
+    /// carries the register and the value that was read.</para></summary>
+    ProtocolMismatch = 15,
+
+    /// <summary>The transport is healthy and the command was written, but the PLC did not echo the
+    /// command sequence into its acknowledge register within the protocol's deadline. The PLC program
+    /// is not executing the handshake (or is stalled) — not a link fault. The message carries the
+    /// sequence written, the acknowledge read back and the State read back.</summary>
+    NotAcknowledged = 16,
 }
