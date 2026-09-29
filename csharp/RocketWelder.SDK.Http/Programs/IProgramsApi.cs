@@ -89,7 +89,7 @@ public interface IProgramsApi
     /// <summary>
     /// <c>POST /api/programs/{id}/blocks/{blockId}/move</c> — reposition a block by
     /// anchor or signed delta. Sends <c>If-Match: <paramref name="etag"/></c>. Returns
-    /// the tree's new etag.
+    /// the tree's new etag and any history warning.
     /// </summary>
     /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
     /// <exception cref="BlockNotFoundException">The block id (or anchor reference) is unknown (HTTP 404).</exception>
