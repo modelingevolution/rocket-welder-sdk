@@ -93,14 +93,14 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
             ?? throw new InvalidOperationException("Server returned empty body for PATCH /api/programs/{id}/blocks/{blockId}.");
     }
 
-    public async Task<ProgramEtag> RemoveBlockAsync(Guid programId, BlockId blockId, ProgramEtag etag, CancellationToken ct = default)
+    public async Task<EtagEditResult> RemoveBlockAsync(Guid programId, BlockId blockId, ProgramEtag etag, CancellationToken ct = default)
     {
         using var res = await SendEditAsync(HttpMethod.Delete, BlockUrl(programId, blockId), etag, ct).ConfigureAwait(false);
         await ThrowIfEditErrorAsync(res, programId, blockId, etag, $"Remove block '{blockId}' from program '{programId}'", ct).ConfigureAwait(false);
         return await ReadEtagAsync(res, ct).ConfigureAwait(false);
     }
 
-    public async Task<ProgramEtag> MoveBlockAsync(Guid programId, BlockId blockId, MoveBlockRequest request, ProgramEtag etag, CancellationToken ct = default)
+    public async Task<EtagEditResult> MoveBlockAsync(Guid programId, BlockId blockId, MoveBlockRequest request, ProgramEtag etag, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
         using var res = await SendEditAsync(HttpMethod.Post, $"{BlockUrl(programId, blockId)}/move", etag, request, ct).ConfigureAwait(false);
@@ -121,10 +121,11 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
             ?? throw new InvalidOperationException("Server returned empty body for POST /api/programs/{id}/capture.");
     }
 
-    private static async Task<ProgramEtag> ReadEtagAsync(HttpResponseMessage res, CancellationToken ct)
+    private static async Task<EtagEditResult> ReadEtagAsync(HttpResponseMessage res, CancellationToken ct)
     {
         var body = await res.Content.ReadFromJsonAsync<EtagResponse>(ct).ConfigureAwait(false);
-        return body?.Etag ?? throw new InvalidOperationException("Server returned no etag for an edit that returns one.");
+        var etag = body?.Etag ?? throw new InvalidOperationException("Server returned no etag for an edit that returns one.");
+        return new EtagEditResult(etag, body.HistoryWarning);
     }
 
     // A bare (unquoted) value never parses as an ETag, so rw2's typed

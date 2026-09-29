@@ -188,12 +188,12 @@ public class ProgramsAuthoringApiTests
     {
         var handler = new RecordingHandler(HttpStatusCode.OK, """{ "etag": "sha256:v2" }""");
 
-        var etag = await Api(handler).RemoveBlockAsync(ProgramId, new BlockId("blk-2"), V1);
+        var result = await Api(handler).RemoveBlockAsync(ProgramId, new BlockId("blk-2"), V1);
 
         handler.Method.Should().Be(HttpMethod.Delete);
         handler.RequestUri!.AbsolutePath.Should().Be($"/api/programs/{ProgramId}/blocks/blk-2");
         handler.IfMatch.Should().Be("\"sha256:v1\"");
-        etag.Should().Be(new ProgramEtag("sha256:v2"));
+        result.Etag.Should().Be(new ProgramEtag("sha256:v2"));
     }
 
     [Fact]
@@ -241,7 +241,7 @@ public class ProgramsAuthoringApiTests
         var handler = new RecordingHandler(HttpStatusCode.OK, """{ "etag": "sha256:v2" }""");
         var request = new MoveBlockRequest(BlockAnchor.Before(new BlockId("blk-2")), null);
 
-        var etag = await Api(handler).MoveBlockAsync(ProgramId, new BlockId("blk-3"), request, V1);
+        var result = await Api(handler).MoveBlockAsync(ProgramId, new BlockId("blk-3"), request, V1);
 
         handler.Method.Should().Be(HttpMethod.Post);
         handler.RequestUri!.AbsolutePath.Should().Be($"/api/programs/{ProgramId}/blocks/blk-3/move");
@@ -250,7 +250,7 @@ public class ProgramsAuthoringApiTests
         body["anchor"]!["kind"]!.GetValue<string>().Should().Be("Before");
         body["anchor"]!["ref"]!.GetValue<string>().Should().Be("blk-2");
         body.AsObject().ContainsKey("delta").Should().BeFalse();
-        etag.Should().Be(new ProgramEtag("sha256:v2"));
+        result.Etag.Should().Be(new ProgramEtag("sha256:v2"));
     }
 
     [Fact]
