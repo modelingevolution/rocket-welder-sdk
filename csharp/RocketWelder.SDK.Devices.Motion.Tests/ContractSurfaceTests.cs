@@ -74,7 +74,7 @@ public class ContractSurfaceTests
     }
 
     [Fact]
-    public void MotionError_HasFifteenMembersWithFrozenOrdinals_SoAnAdditionCannotReinterpretAStoredValue()
+    public void MotionError_HasSeventeenMembersWithFrozenOrdinals_SoAnAdditionCannotReinterpretAStoredValue()
     {
         // Names AND numbers, which is why this is the only MotionError surface test: a rename, an
         // addition, a removal, a reorder and a renumber-without-reorder all fail here, and the last
@@ -86,9 +86,10 @@ public class ContractSurfaceTests
         // different failure, and "reset the drive" for what was an open guard is exactly the wrong
         // thing to tell an operator.
         //
-        // Fifteen: architecture.md's original block froze twelve, plus the owner approvals of
-        // 2026-08-22 (MotionFailed, HomeLatchFailed) and 2026-08-25 (SafetyStop). Pinned from the
-        // real enum rather than a remembered count, which is the point.
+        // Seventeen: architecture.md's original block froze twelve, plus the owner approvals of
+        // 2026-08-22 (MotionFailed, HomeLatchFailed), 2026-08-25 (SafetyStop) and 2026-09-28
+        // (ProtocolMismatch, NotAcknowledged; generic-axis ADR-12). Pinned from the real enum
+        // rather than a remembered count, which is the point.
         var actual = Enum.GetValues<MotionError>()
                          .ToDictionary(e => e.ToString(), e => (int)e);
 
@@ -109,6 +110,8 @@ public class ContractSurfaceTests
             ["MotionFailed"] = 12,
             ["HomeLatchFailed"] = 13,
             ["SafetyStop"] = 14,
+            ["ProtocolMismatch"] = 15,
+            ["NotAcknowledged"] = 16,
         });
     }
 
