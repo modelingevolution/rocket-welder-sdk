@@ -80,20 +80,20 @@ public interface IProgramsApi
     /// <summary>
     /// <c>DELETE /api/programs/{id}/blocks/{blockId}</c> — remove a block (a point
     /// removal also drops adaptation claims on its name). Sends
-    /// <c>If-Match: <paramref name="etag"/></c>. Returns the tree's new etag.
+    /// <c>If-Match: <paramref name="etag"/></c>. Returns the tree's new etag and any history warning.
     /// </summary>
     /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
     /// <exception cref="BlockNotFoundException">The block id is unknown (HTTP 404).</exception>
-    Task<ProgramEtag> RemoveBlockAsync(Guid programId, BlockId blockId, ProgramEtag etag, CancellationToken ct = default);
+    Task<EtagEditResult> RemoveBlockAsync(Guid programId, BlockId blockId, ProgramEtag etag, CancellationToken ct = default);
 
     /// <summary>
     /// <c>POST /api/programs/{id}/blocks/{blockId}/move</c> — reposition a block by
     /// anchor or signed delta. Sends <c>If-Match: <paramref name="etag"/></c>. Returns
-    /// the tree's new etag.
+    /// the tree's new etag and any history warning.
     /// </summary>
     /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
     /// <exception cref="BlockNotFoundException">The block id (or anchor reference) is unknown (HTTP 404).</exception>
-    Task<ProgramEtag> MoveBlockAsync(Guid programId, BlockId blockId, MoveBlockRequest request, ProgramEtag etag, CancellationToken ct = default);
+    Task<EtagEditResult> MoveBlockAsync(Guid programId, BlockId blockId, MoveBlockRequest request, ProgramEtag etag, CancellationToken ct = default);
 
     /// <summary>
     /// <c>POST /api/programs/{id}/capture</c> (FR-6) — capture rocket-welder2's own
