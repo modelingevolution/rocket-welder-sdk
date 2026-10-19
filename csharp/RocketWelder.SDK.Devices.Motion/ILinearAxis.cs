@@ -35,6 +35,19 @@ public interface ILinearAxis : IMotionAxis
     /// <summary>The in-position tolerance a move settles within.</summary>
     Length<double, Millimetre<double>> Tolerance { get; }
 
+    /// <summary>
+    /// How much the reported position may change between two readings taken at standstill before a
+    /// capture is refused. A servo holding position moves in its last digits, so exact equality is
+    /// not a rest test.
+    ///
+    /// <para>
+    /// <b>Default 0.1 mm</b> — the owner's ruling of 2026-10-19 (bug-034). An axis whose drive holds a
+    /// quantised register (it does not dither at standstill) may return 0, which means exact equality.
+    /// The value is never negative.
+    /// </para>
+    /// </summary>
+    Length<double, Millimetre<double>> RestTolerance => new(0.1);
+
     /// <summary>The lowest speed the axis can actually deliver. A request below it is rejected with
     /// <see cref="MotionError.UnreachableSpeed"/>, never raised to the floor (FR-5).</summary>
     Speed<double, MillimetrePerSecond<double>> MinSpeed { get; }

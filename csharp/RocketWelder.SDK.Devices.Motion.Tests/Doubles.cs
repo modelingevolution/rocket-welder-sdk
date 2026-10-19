@@ -33,7 +33,7 @@ internal abstract class AxisDouble : IMotionAxis
 /// <summary>An axis that implements the base and NO typed leaf — outside the contract's closed set.</summary>
 internal sealed class LeaflessAxisDouble : AxisDouble;
 
-internal sealed class RotaryAxisDouble : AxisDouble, IRotaryAxis
+internal class RotaryAxisDouble : AxisDouble, IRotaryAxis
 {
     public Degree<double>? Angle => null;
     public Degree<double> Min => Degree<double>.Create(0);
@@ -54,7 +54,7 @@ internal sealed class RotaryAxisDouble : AxisDouble, IRotaryAxis
         CancellationToken ct = default) => throw new NotSupportedException();
 }
 
-internal sealed class LinearAxisDouble : AxisDouble, ILinearAxis
+internal class LinearAxisDouble : AxisDouble, ILinearAxis
 {
     public Length<double, Millimetre<double>>? Offset => null;
     public Length<double, Millimetre<double>> Min => new(0);
@@ -73,6 +73,18 @@ internal sealed class LinearAxisDouble : AxisDouble, ILinearAxis
         CancellationToken ct = default) => throw new NotSupportedException();
     public Task MoveVelocityAsync(Speed<double, MillimetrePerSecond<double>> velocity,
         CancellationToken ct = default) => throw new NotSupportedException();
+}
+
+/// <summary>A linear axis that declares its own rest tolerance instead of taking the SDK default.</summary>
+internal sealed class RestTolerantLinearAxisDouble(double restToleranceMm) : LinearAxisDouble, ILinearAxis
+{
+    public Length<double, Millimetre<double>> RestTolerance => new(restToleranceMm);
+}
+
+/// <summary>A rotary axis that declares its own rest tolerance instead of taking the SDK default.</summary>
+internal sealed class RestTolerantRotaryAxisDouble(double restToleranceDeg) : RotaryAxisDouble, IRotaryAxis
+{
+    public Degree<double> RestTolerance => Degree<double>.Create(restToleranceDeg);
 }
 
 internal class MotionDeviceDouble : IMotionDevice
