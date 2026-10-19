@@ -43,7 +43,7 @@ public interface ILinearAxis : IMotionAxis
     /// <para>
     /// <b>Default 0.1 mm</b> — the owner's ruling of 2026-10-19 (bug-034). An axis whose drive holds a
     /// quantised register (it does not dither at standstill) may return 0, which means exact equality.
-    /// The value is never negative.
+    /// Implementations return 0 or a positive value; the host treats anything else as 0.
     /// </para>
     /// </summary>
     Length<double, Millimetre<double>> RestTolerance => new(0.1);

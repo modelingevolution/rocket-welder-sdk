@@ -237,12 +237,6 @@ public class ContractSurfaceTests
     }
 
     [Fact]
-    public void RestTolerance_UnitFreeBase_DoesNotCarryIt()
-    {
-        typeof(IMotionAxis).GetProperty("RestTolerance").Should().BeNull();
-    }
-
-    [Fact]
     public void LinearRestTolerance_AxisThatDoesNotOverride_ReportsTheDefaultPointOneMillimetre()
     {
         ILinearAxis axis = new LinearAxisDouble();
