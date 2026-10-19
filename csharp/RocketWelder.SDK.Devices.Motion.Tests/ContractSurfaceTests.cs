@@ -1,5 +1,7 @@
 using System.Reflection;
 using FluentAssertions;
+using ModelingEvolution.Drawing;
+using ModelingEvolution.Drawing.Units;
 
 namespace RocketWelder.SDK.Devices.Motion.Tests;
 
@@ -216,5 +218,57 @@ public class ContractSurfaceTests
         // lands on the base, IMotionDevice.Axes stops being able to hold both kinds.
         typeof(IMotionAxis).GetProperties().Select(p => p.Name)
             .Should().BeEquivalentTo("Name", "DisplayName", "State", "Capabilities", "Status", "Kind");
+    }
+
+    [Theory]
+    [InlineData(typeof(ILinearAxis), typeof(Length<double, Millimetre<double>>))]
+    [InlineData(typeof(IRotaryAxis), typeof(Degree<double>))]
+    public void RestTolerance_IsAGetOnlyDefaultMemberOnEachLeaf_InTheLeafsUnit(Type leaf, Type unit)
+    {
+        // bug-034: the rest tolerance lives next to Tolerance on the typed leaves (the base stays
+        // unit-free). It is a DEFAULT interface member so an axis compiled against an older SDK
+        // still loads and reports the default.
+        var property = leaf.GetProperty("RestTolerance");
+
+        property.Should().NotBeNull();
+        property!.PropertyType.Should().Be(unit);
+        property.CanWrite.Should().BeFalse();
+        property.GetMethod!.IsAbstract.Should().BeFalse("an existing implementation must not be forced to declare it");
+    }
+
+    [Fact]
+    public void LinearRestTolerance_AxisThatDoesNotOverride_ReportsTheDefaultPointOneMillimetre()
+    {
+        ILinearAxis axis = new LinearAxisDouble();
+
+        axis.RestTolerance.Value.Should().Be(0.1);
+    }
+
+    [Fact]
+    public void RotaryRestTolerance_AxisThatDoesNotOverride_ReportsTheDefaultPointOneDegree()
+    {
+        IRotaryAxis axis = new RotaryAxisDouble();
+
+        ((double)axis.RestTolerance).Should().Be(0.1);
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(0.25)]
+    public void LinearRestTolerance_AxisThatOverrides_ReportsItsOwnValue(double mm)
+    {
+        ILinearAxis axis = new RestTolerantLinearAxisDouble(mm);
+
+        axis.RestTolerance.Value.Should().Be(mm);
+    }
+
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(0.5)]
+    public void RotaryRestTolerance_AxisThatOverrides_ReportsItsOwnValue(double deg)
+    {
+        IRotaryAxis axis = new RestTolerantRotaryAxisDouble(deg);
+
+        ((double)axis.RestTolerance).Should().Be(deg);
     }
 }

@@ -37,6 +37,19 @@ public interface IRotaryAxis : IMotionAxis
     /// <summary>The in-position tolerance a move settles within.</summary>
     Degree<double> Tolerance { get; }
 
+    /// <summary>
+    /// How much the reported position may change between two readings taken at standstill before a
+    /// capture is refused. A servo holding position moves in its last digits, so exact equality is
+    /// not a rest test.
+    ///
+    /// <para>
+    /// <b>Default 0.1°</b> — the owner's ruling of 2026-10-19 (bug-034). An axis whose drive holds a
+    /// quantised register (it does not dither at standstill) may return 0, which means exact equality.
+    /// Implementations return 0 or a positive value; the host treats anything else as 0.
+    /// </para>
+    /// </summary>
+    Degree<double> RestTolerance => Degree<double>.Create(0.1);
+
     /// <summary>The lowest speed the axis can actually deliver. A request below it is rejected with
     /// <see cref="MotionError.UnreachableSpeed"/>, never raised to the floor (FR-5).</summary>
     AngularSpeed<double, DegreePerSecond<double>> MinSpeed { get; }
