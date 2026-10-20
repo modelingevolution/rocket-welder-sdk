@@ -8,10 +8,10 @@ namespace RocketWelder.SDK.Http.Programs;
 /// <param name="Attempt">The adaptation attempt the judgement belongs to (a re-adapt increments it).</param>
 /// <param name="Offset">Measured offset in mm; <see langword="null"/> when not measured.</param>
 /// <param name="OffsetBand">The resolved offset band.</param>
-/// <param name="OffsetLayer">Where the offset band comes from: <c>block</c>, <c>program</c>, <c>station</c> or <c>builtIn</c>.</param>
+/// <param name="OffsetLayer">Where the offset band comes from: <c>block</c>, <c>program</c> or <c>builtIn</c>.</param>
 /// <param name="Path">Measured path deviation in mm; <see langword="null"/> when not measured.</param>
 /// <param name="PathBand">The resolved path band.</param>
-/// <param name="PathLayer">Where the path band comes from.</param>
+/// <param name="PathLayer">Where the path band comes from: <c>block</c>, <c>program</c> or <c>builtIn</c>.</param>
 /// <param name="Verdict"><c>accept</c>, <c>review</c> or <c>block</c>.</param>
 /// <param name="Trigger">Which quality decided the verdict, e.g. <c>path</c>; <see langword="null"/> when none is named.</param>
 public sealed record AdaptationJudgement(
