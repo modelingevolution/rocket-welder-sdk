@@ -101,4 +101,52 @@ public interface IProgramsApi
     /// added point block can bake it. Not a tree edit, so it carries no etag.
     /// </summary>
     Task<CapturePointResult> CapturePointAsync(Guid programId, CapturePointRequest request, CancellationToken ct = default);
+
+    // --- Values (epic-029 feature-011, design.md §12.2–§12.3): bands as canonical "accept:review" text in mm. ---
+
+    /// <summary>
+    /// <c>GET /api/programs/{id}/blocks/{blockId}/values[?robot={robotId}]</c> — the block's value keys: what is stored
+    /// on the block and what the run resolves, with the layer it comes from. <paramref name="robotId"/> picks the robot
+    /// whose defaults fill the robot layer; omitted, the server uses the current robot.
+    /// </summary>
+    /// <exception cref="BlockNotFoundException">The program or block is unknown (HTTP 404).</exception>
+    Task<BlockValues> GetBlockValuesAsync(Guid programId, BlockId blockId, string? robotId = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>PUT /api/programs/{id}/blocks/{blockId}/values/{key}</c> — store a value on the block. No recompile, no etag
+    /// (last writer wins).
+    /// </summary>
+    /// <exception cref="ValueRefusedException">The value does not parse (HTTP 400); <see cref="ValueRefusedException.Reason"/> is rw2's sentence.</exception>
+    /// <exception cref="BlockNotFoundException">The program or block is unknown, or the block has no such key (HTTP 404).</exception>
+    Task<BlockValues> SetBlockValueAsync(Guid programId, BlockId blockId, string key, string value, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>DELETE /api/programs/{id}/blocks/{blockId}/values/{key}</c> — clear the block's value; the key inherits again.
+    /// </summary>
+    /// <exception cref="BlockNotFoundException">The program or block is unknown, or the block has no such key (HTTP 404).</exception>
+    Task<BlockValues> ClearBlockValueAsync(Guid programId, BlockId blockId, string key, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>GET /api/programs/{id}/defaults[?robot={robotId}]</c> — the program's default values, their resolution and
+    /// the program's etag.
+    /// </summary>
+    /// <exception cref="HttpRequestException">The program is unknown (HTTP 404), or the server failed otherwise.</exception>
+    Task<ProgramDefaults> GetProgramDefaultsAsync(Guid programId, string? robotId = null, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>PUT /api/programs/{id}/defaults/{key}</c> — store a program default. Recompiles the program; sends
+    /// <c>If-Match: <paramref name="etag"/></c> and returns the new etag.
+    /// </summary>
+    /// <exception cref="ValueRefusedException">The value does not parse (HTTP 400).</exception>
+    /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
+    /// <exception cref="HttpRequestException">The program or key is unknown (HTTP 404), or the server failed otherwise.</exception>
+    Task<ProgramDefaults> SetProgramDefaultAsync(Guid programId, string key, string value, ProgramEtag etag, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>DELETE /api/programs/{id}/defaults/{key}</c> — clear a program default. Recompiles the program; sends
+    /// <c>If-Match: <paramref name="etag"/></c> and returns the new etag.
+    /// </summary>
+    /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
+    /// <exception cref="HttpRequestException">The program or key is unknown (HTTP 404), or the server failed otherwise.</exception>
+    Task<ProgramDefaults> ClearProgramDefaultAsync(Guid programId, string key, ProgramEtag etag, CancellationToken ct = default);
 }

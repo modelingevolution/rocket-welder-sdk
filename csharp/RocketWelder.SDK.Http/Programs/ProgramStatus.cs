@@ -13,4 +13,11 @@ public sealed record ProgramStatus(
     ProgramExecutionState State,
     Guid? CurrentRunId,
     DateTime? LastRunFinishedAtUtc,
-    string? LastError);
+    string? LastError)
+{
+    /// <summary>
+    /// Latest judgement per adaptation block of the current or last run (epic-029 feature-011, design.md §12.5);
+    /// <see langword="null"/> from a server that does not report judgements.
+    /// </summary>
+    public IReadOnlyList<AdaptationJudgement>? Adaptations { get; init; }
+}
