@@ -175,6 +175,21 @@ public class ToleranceDtoRoundTripTests
         ex.Message.Should().Be(OrderRefusal);
     }
 
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SetBlockValueAsync_On400WithAnEmptyBody_ReasonIsAFixedTextNamingTheStatus(string body)
+    {
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "text/plain"),
+        });
+
+        var act = () => Programs(handler).SetBlockValueAsync(ProgramId, Adapt, "offsetTolerance", "1:2");
+
+        (await act.Should().ThrowAsync<ValueRefusedException>()).Which.Reason.Should().Be("HTTP 400 (BadRequest) with no reason.");
+    }
+
     [Fact]
     public async Task SetBlockValueAsync_On400WithAPlainTextBody_ReasonIsTheRawBody()
     {

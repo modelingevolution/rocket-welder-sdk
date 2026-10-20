@@ -9,10 +9,14 @@ public sealed class ValueRefusedException(string reason) : Exception(reason)
     /// <summary>rw2's refusal sentence, e.g. "accept must not exceed review — write it as accept:review, e.g. 1.2:3.5."</summary>
     public string Reason { get; } = reason;
 
-    // A body that is not a JSON string (plain text from an older endpoint) is taken as written.
+    // design.md §12.6 message rule: the JSON-string sentence, else the raw body (plain text from an older endpoint),
+    // else a fixed text naming the status.
     internal static async Task<ValueRefusedException> FromAsync(HttpResponseMessage res, CancellationToken ct)
     {
         var (raw, sentence) = await ServerSentence.ReadAsync(res, ct).ConfigureAwait(false);
-        return new ValueRefusedException(sentence ?? raw);
+        var reason = sentence ?? raw;
+        return new ValueRefusedException(string.IsNullOrWhiteSpace(reason)
+            ? $"HTTP {(int)res.StatusCode} ({res.StatusCode}) with no reason."
+            : reason);
     }
 }
