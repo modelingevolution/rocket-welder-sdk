@@ -242,7 +242,24 @@ public class ToleranceDtoRoundTripTests
 
         var act = () => Programs(handler).GetBlockValuesAsync(ProgramId, Adapt);
 
-        (await act.Should().ThrowAsync<BlockNotFoundException>()).Which.Block.Should().Be(Adapt);
+        var ex = (await act.Should().ThrowAsync<BlockNotFoundException>()).Which;
+        ex.Block.Should().Be(Adapt);
+        ex.Message.Should().Be($"Block 'adapt-7f3c' was not found in program '{ProgramId}' (HTTP 404).",
+            "a 404 with no JSON-string body falls back to the existing message");
+    }
+
+    [Fact]
+    public async Task SetBlockValueAsync_On404WithAJsonStringBody_UsesTheServerSentenceAsTheMessage()
+    {
+        const string sentence = "Block adapt-7f3c (Move) has no value 'offsetTolerance'.";
+        var handler = new RecordingHandler(HttpStatusCode.NotFound, "\"Block adapt-7f3c (Move) has no value 'offsetTolerance'.\"");
+
+        var act = () => Programs(handler).SetBlockValueAsync(ProgramId, Adapt, "offsetTolerance", "1:2");
+
+        var ex = (await act.Should().ThrowAsync<BlockNotFoundException>()).Which;
+        ex.Message.Should().Be(sentence);
+        ex.Block.Should().Be(Adapt);
+        ex.ProgramId.Should().Be(ProgramId);
     }
 
     // ---- program defaults: GET / PUT / DELETE, If-Match on writes ----

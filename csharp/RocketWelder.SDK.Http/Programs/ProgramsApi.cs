@@ -185,7 +185,10 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
             case HttpStatusCode.Conflict when etag is { } expected:
                 throw new ProgramEtagMismatchException(programId, expected);
             case HttpStatusCode.NotFound when block is { } b:
-                throw new BlockNotFoundException(programId, b);
+                var (_, sentence) = await ServerSentence.ReadAsync(res, ct).ConfigureAwait(false);
+                throw sentence is null
+                    ? new BlockNotFoundException(programId, b)
+                    : new BlockNotFoundException(programId, b, sentence);
         }
         await EnsureSuccessAsync(res, action, ct).ConfigureAwait(false);
     }
