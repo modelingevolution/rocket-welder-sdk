@@ -44,8 +44,7 @@ public class ToleranceDtoRoundTripTests
           {"key":"DefaultPathTolerance","displayName":"Adaptation – how much the path is deformed by the correction (blank = inf:inf)","group":"Adaptation defaults","valueType":"tolerance-band","value":null}]}
         """;
 
-    // §12.5 — with "state" as the ordinal rw2 actually writes (ProgramExecutionState.Failed = 4): neither rw2's REST
-    // nor this client registers a string-enum converter, so the design example's "Failed" is not the wire.
+    // §12.5 — "state" is the ordinal rw2 writes (ProgramExecutionState.Failed = 4).
     private const string ProgramStatusJson = """
         {"programId":"0b5c0000-0000-0000-0000-000000000001","state":4,"currentRunId":null,"lastRunFinishedAtUtc":"2026-10-20T17:02:11Z",
          "lastError":"Adaptation adapt-7f3c blocked the run: path 3.6 mm is above 3 mm.",
@@ -223,14 +222,32 @@ public class ToleranceDtoRoundTripTests
     }
 
     [Fact]
-    public async Task SetBlockValueAsync_On404_ThrowsBlockNotFound()
+    public async Task SetBlockValueAsync_On400WithAPlainTextBody_ReasonIsTheRawBody()
     {
-        var handler = new RecordingHandler(HttpStatusCode.NotFound,
-            JsonSerializer.Serialize("Block adapt-7f3c (Move) has no value 'offsetTolerance'."));
+        const string body = "Unknown property 'X' for device type 'FairinoRobot'.";
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.BadRequest)
+        {
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "text/plain"),
+        });
+
+        var act = () => Programs(handler).SetBlockValueAsync(ProgramId, Adapt, "offsetTolerance", "1:2");
+
+        (await act.Should().ThrowAsync<ValueRefusedException>()).Which.Reason.Should().Be(body);
+    }
+
+    [Fact]
+    public async Task SetBlockValueAsync_On404WithAPlainTextBody_UsesTheRawBodyAsTheMessage()
+    {
+        const string body = "No block adapt-7f3c in this program.";
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        {
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "text/plain"),
+        });
 
         var act = () => Programs(handler).SetBlockValueAsync(ProgramId, Adapt, "offsetTolerance", "1:2");
 
         var ex = (await act.Should().ThrowAsync<BlockNotFoundException>()).Which;
+        ex.Message.Should().Be(body);
         ex.Block.Should().Be(Adapt);
         ex.ProgramId.Should().Be(ProgramId);
     }

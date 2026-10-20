@@ -85,6 +85,9 @@ public class ToleranceBandTests
     [InlineData("a:2")]
     [InlineData("NaN:2")]
     [InlineData("1:-inf")]
+    [InlineData("Infinity:inf")]   // only the token "inf" spells infinity
+    [InlineData("1:Infinity")]
+    [InlineData("1e400:2")]        // overflow to +inf is refused, not read as inf
     public void TryParse_BadLimit_RefusedWithTheLimitSentence(string text)
     {
         ToleranceBand.TryParse(text, out var band, out var refusal).Should().BeFalse();

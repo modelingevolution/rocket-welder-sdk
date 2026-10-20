@@ -185,10 +185,12 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
             case HttpStatusCode.Conflict when etag is { } expected:
                 throw new ProgramEtagMismatchException(programId, expected);
             case HttpStatusCode.NotFound when block is { } b:
-                var (_, sentence) = await ServerSentence.ReadAsync(res, ct).ConfigureAwait(false);
-                throw sentence is null
+                // Same fallback as 400: the JSON-string sentence, else the raw body; an empty body keeps the generic message.
+                var (raw, sentence) = await ServerSentence.ReadAsync(res, ct).ConfigureAwait(false);
+                var message = sentence ?? (raw.Length > 0 ? raw : null);
+                throw message is null
                     ? new BlockNotFoundException(programId, b)
-                    : new BlockNotFoundException(programId, b, sentence);
+                    : new BlockNotFoundException(programId, b, message);
         }
         await EnsureSuccessAsync(res, action, ct).ConfigureAwait(false);
     }
