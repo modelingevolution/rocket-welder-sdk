@@ -79,6 +79,16 @@ public class StationApiTests
     }
 
     [Fact]
+    public async Task SetProgrammingDefaultAsync_EscapesReservedCharactersInTheKey()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.OK, StationDefaultsJson);
+
+        await Station(handler).SetProgrammingDefaultAsync("Adaptation/Path Tolerance", "1:3");
+
+        handler.RequestUri!.AbsoluteUri.Should().EndWith($"{Route}/Adaptation%2FPath%20Tolerance");
+    }
+
+    [Fact]
     public async Task ClearProgrammingDefaultAsync_DELETEsTheKey()
     {
         var handler = new RecordingHandler(HttpStatusCode.OK, StationDefaultsJson);

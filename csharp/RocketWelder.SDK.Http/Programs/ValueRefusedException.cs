@@ -1,7 +1,7 @@
 namespace RocketWelder.SDK.Http.Programs;
 
 /// <summary>
-/// Thrown when rw2 refuses a value write (HTTP 400) — a band that does not parse, an unknown device property. The
+/// Thrown when rw2 refuses a value write (HTTP 400) — a value that does not parse, e.g. a band with accept above review. The
 /// <see cref="Reason"/> is rw2's one-sentence refusal, fit to show to the caller (design.md §12.1, §12.6).
 /// </summary>
 public sealed class ValueRefusedException(string reason) : Exception(reason)
@@ -11,12 +11,7 @@ public sealed class ValueRefusedException(string reason) : Exception(reason)
 
     // design.md §12.6 message rule: the JSON-string sentence, else the raw body (plain text from an older endpoint),
     // else a fixed text naming the status.
-    internal static async Task<ValueRefusedException> FromAsync(HttpResponseMessage res, CancellationToken ct)
-    {
-        var (raw, sentence) = await ServerSentence.ReadAsync(res, ct).ConfigureAwait(false);
-        var reason = sentence ?? raw;
-        return new ValueRefusedException(string.IsNullOrWhiteSpace(reason)
-            ? $"HTTP {(int)res.StatusCode} ({res.StatusCode}) with no reason."
-            : reason);
-    }
+    internal static async Task<ValueRefusedException> FromAsync(HttpResponseMessage res, CancellationToken ct) =>
+        new(await ServerSentence.MessageAsync(res, ct).ConfigureAwait(false)
+            ?? $"HTTP {(int)res.StatusCode} ({res.StatusCode}) with no reason.");
 }

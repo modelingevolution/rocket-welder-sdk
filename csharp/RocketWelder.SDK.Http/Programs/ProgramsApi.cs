@@ -123,7 +123,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
 
     public async Task<BlockValues> GetBlockValuesAsync(Guid programId, BlockId blockId, CancellationToken ct = default)
     {
-        using var res = await http.GetAsync($"{BlockValuesUrl(programId, blockId)}", ct).ConfigureAwait(false);
+        using var res = await http.GetAsync(BlockValuesUrl(programId, blockId), ct).ConfigureAwait(false);
         await ThrowIfValueErrorAsync(res, programId, blockId, etag: null, $"Read values of block '{blockId}' in program '{programId}'", ct).ConfigureAwait(false);
         return await ReadAsync<BlockValues>(res, "GET /api/programs/{id}/blocks/{blockId}/values", ct).ConfigureAwait(false);
     }
@@ -144,7 +144,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
 
     public async Task<ProgramDefaults> GetProgramDefaultsAsync(Guid programId, CancellationToken ct = default)
     {
-        using var res = await http.GetAsync($"{DefaultsUrl(programId)}", ct).ConfigureAwait(false);
+        using var res = await http.GetAsync(DefaultsUrl(programId), ct).ConfigureAwait(false);
         await ThrowIfValueErrorAsync(res, programId, block: null, etag: null, $"Read defaults of program '{programId}'", ct).ConfigureAwait(false);
         return await ReadAsync<ProgramDefaults>(res, "GET /api/programs/{id}/defaults", ct).ConfigureAwait(false);
     }
@@ -172,7 +172,7 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         ?? throw new InvalidOperationException($"Server returned empty body for {route}.");
 
     // design.md §12.6: 400 → the refusal sentence; 409 → stale etag (defaults writes only); 404 → unknown block on a
-    // block route; anything else keeps the server's body in an HttpRequestException.
+    // block route; any other failure → HttpRequestException with the status and the message, as StationApi.
     private static async Task ThrowIfValueErrorAsync(HttpResponseMessage res, Guid programId, BlockId? block, ProgramEtag? etag, string action, CancellationToken ct)
     {
         switch (res.StatusCode)
@@ -182,14 +182,14 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
             case HttpStatusCode.Conflict when etag is { } expected:
                 throw new ProgramEtagMismatchException(programId, expected);
             case HttpStatusCode.NotFound when block is { } b:
-                // Same fallback as 400: the JSON-string sentence, else the raw body; an empty body keeps the generic message.
-                var (raw, sentence) = await ServerSentence.ReadAsync(res, ct).ConfigureAwait(false);
-                var message = sentence ?? (raw.Length > 0 ? raw : null);
+                // Same message rule as 400; an empty body keeps the generic message.
+                var message = await ServerSentence.MessageAsync(res, ct).ConfigureAwait(false);
                 throw message is null
                     ? new BlockNotFoundException(programId, b)
                     : new BlockNotFoundException(programId, b, message);
         }
-        await EnsureSuccessAsync(res, action, ct).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode)
+            throw await ServerSentence.FailureAsync(res, action, ct).ConfigureAwait(false);
     }
 
     private static async Task<EtagEditResult> ReadEtagAsync(HttpResponseMessage res, CancellationToken ct)

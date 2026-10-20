@@ -33,19 +33,14 @@ internal sealed class StationApi(HttpClient http) : IStationApi
         await res.Content.ReadFromJsonAsync<StationDefaults>(ct).ConfigureAwait(false)
         ?? throw new InvalidOperationException($"Server returned empty body for {verb} /{Route}.");
 
-    // design.md §12.6: 400 → ValueRefusedException with the sentence; any other failure → HttpRequestException carrying
-    // the status and rw2's sentence (JSON string decoded, else the raw body).
+    // design.md §12.6: 400 → ValueRefusedException with the sentence; any other failure → HttpRequestException with the
+    // status and the message (ServerSentence.FailureAsync, shared with ProgramsApi).
     private static async Task ThrowIfErrorAsync(HttpResponseMessage res, string action, CancellationToken ct)
     {
         if (res.IsSuccessStatusCode)
             return;
         if (res.StatusCode == HttpStatusCode.BadRequest)
             throw await ValueRefusedException.FromAsync(res, ct).ConfigureAwait(false);
-        var (raw, sentence) = await ServerSentence.ReadAsync(res, ct).ConfigureAwait(false);
-        var detail = sentence ?? raw;
-        throw new HttpRequestException(
-            $"{action} failed: HTTP {(int)res.StatusCode} ({res.StatusCode}).{(detail.Length > 0 ? $" {detail}" : string.Empty)}",
-            inner: null,
-            statusCode: res.StatusCode);
+        throw await ServerSentence.FailureAsync(res, action, ct).ConfigureAwait(false);
     }
 }

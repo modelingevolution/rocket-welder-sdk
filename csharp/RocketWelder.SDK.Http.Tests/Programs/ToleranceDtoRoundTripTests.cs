@@ -321,6 +321,19 @@ public class ToleranceDtoRoundTripTests
         (await act.Should().ThrowExactlyAsync<HttpRequestException>()).Which.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
+    [Fact]
+    public async Task SetProgramDefaultAsync_On428_MessageCarriesTheDecodedSentence_AsStationApiDoes()
+    {
+        const string sentence = "If-Match is required.";
+        var handler = new RecordingHandler(HttpStatusCode.PreconditionRequired, JsonSerializer.Serialize(sentence));
+
+        var act = () => Programs(handler).SetProgramDefaultAsync(ProgramId, "Adaptation.OffsetTolerance", "5:20", V1);
+
+        var ex = (await act.Should().ThrowExactlyAsync<HttpRequestException>()).Which;
+        ex.StatusCode.Should().Be(HttpStatusCode.PreconditionRequired);
+        ex.Message.Should().EndWith("failed: HTTP 428 (PreconditionRequired). If-Match is required.");
+    }
+
     private static IProgramsApi Programs(RecordingHandler handler) =>
         new RocketWelderClient(RecordingHandler.Client(handler)).Programs;
 
