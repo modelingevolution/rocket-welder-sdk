@@ -142,10 +142,11 @@ public interface IProgramsApi
     Task<ProgramDefaults> SetProgramDefaultAsync(Guid programId, string key, string value, ProgramEtag etag, CancellationToken ct = default);
 
     /// <summary>
-    /// <c>DELETE /api/programs/{id}/defaults/{key}</c> — clear a program default. Recompiles the program; sends
-    /// <c>If-Match: <paramref name="etag"/></c> and returns the new etag.
+    /// <c>POST /api/programs/{id}/defaults/reset</c> — copy the station's current Programming defaults into the
+    /// program, replacing every program default (no program-level DELETE: the program layer holds values). Recompiles
+    /// the program; sends <c>If-Match: <paramref name="etag"/></c> and returns the new etag.
     /// </summary>
     /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
-    /// <exception cref="HttpRequestException">The program or key is unknown (HTTP 404), or the server failed otherwise.</exception>
-    Task<ProgramDefaults> ClearProgramDefaultAsync(Guid programId, string key, ProgramEtag etag, CancellationToken ct = default);
+    /// <exception cref="HttpRequestException">The If-Match is missing (HTTP 428), the program is unknown (HTTP 404), or the server failed otherwise.</exception>
+    Task<ProgramDefaults> ResetProgramDefaultsAsync(Guid programId, ProgramEtag etag, CancellationToken ct = default);
 }

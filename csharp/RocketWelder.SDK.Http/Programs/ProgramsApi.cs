@@ -156,11 +156,11 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         return await ReadAsync<ProgramDefaults>(res, "PUT /api/programs/{id}/defaults/{key}", ct).ConfigureAwait(false);
     }
 
-    public async Task<ProgramDefaults> ClearProgramDefaultAsync(Guid programId, string key, ProgramEtag etag, CancellationToken ct = default)
+    public async Task<ProgramDefaults> ResetProgramDefaultsAsync(Guid programId, ProgramEtag etag, CancellationToken ct = default)
     {
-        using var res = await SendEditAsync(HttpMethod.Delete, $"{DefaultsUrl(programId)}/{Uri.EscapeDataString(key)}", etag, ct).ConfigureAwait(false);
-        await ThrowIfValueErrorAsync(res, programId, block: null, etag, $"Clear default '{key}' of program '{programId}'", ct).ConfigureAwait(false);
-        return await ReadAsync<ProgramDefaults>(res, "DELETE /api/programs/{id}/defaults/{key}", ct).ConfigureAwait(false);
+        using var res = await SendEditAsync(HttpMethod.Post, $"{DefaultsUrl(programId)}/reset", etag, ct).ConfigureAwait(false);
+        await ThrowIfValueErrorAsync(res, programId, block: null, etag, $"Reset defaults of program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<ProgramDefaults>(res, "POST /api/programs/{id}/defaults/reset", ct).ConfigureAwait(false);
     }
 
     private static string BlockValuesUrl(Guid programId, BlockId blockId) => $"{BlockUrl(programId, blockId)}/values";

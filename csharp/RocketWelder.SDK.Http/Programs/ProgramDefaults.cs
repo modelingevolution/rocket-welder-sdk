@@ -7,7 +7,7 @@ namespace RocketWelder.SDK.Http.Programs;
 /// </summary>
 /// <param name="Etag">The program's etag after the read or write — carry it into the next edit.</param>
 /// <param name="Values">Every program-level value key.</param>
-public sealed record ProgramDefaults(ProgramEtag Etag, IReadOnlyList<EffectiveValue> Values)
+public sealed record ProgramDefaults(ProgramEtag Etag, IReadOnlyList<ProgramDefault> Values)
 {
     /// <summary>rw2's own text when the write landed but its history entry did not; <see langword="null"/> otherwise.</summary>
     public string? HistoryWarning { get; init; }

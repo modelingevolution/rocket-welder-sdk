@@ -28,11 +28,18 @@ public class ToleranceDtoRoundTripTests
           {"key":"pathTolerance","stored":"1:3","effective":"1:3","layer":"block","warning":null}]}
         """;
 
-    // §12.3 response
+    // §12.3 reset response (station: offset built-in, path 1:3)
     private const string ProgramDefaultsJson = """
         {"etag":"sha256:41a","values":[
-          {"key":"Adaptation.OffsetTolerance","stored":"5:20","effective":"5:20","layer":"program","warning":null},
-          {"key":"Adaptation.PathTolerance","stored":null,"effective":"1:3","layer":"station","warning":null}]}
+          {"key":"Adaptation.OffsetTolerance","stored":"10:10","effective":"10:10","layer":"program","station":"10:10","copied":true,"warning":null},
+          {"key":"Adaptation.PathTolerance","stored":"1:3","effective":"1:3","layer":"program","station":"1:3","copied":true,"warning":null}]}
+        """;
+
+    // §12.3 GET on a program created before this feature
+    private const string OldProgramDefaultsJson = """
+        {"etag":"sha256:9e1","values":[
+          {"key":"Adaptation.OffsetTolerance","stored":null,"effective":"10:10","layer":"builtIn","station":"10:10","copied":false,"warning":null},
+          {"key":"Adaptation.PathTolerance","stored":null,"effective":"inf:inf","layer":"builtIn","station":"1:3","copied":false,"warning":null}]}
         """;
 
     // §12.5 — "state" is the ordinal rw2 writes (ProgramExecutionState.Failed = 4).
@@ -69,14 +76,25 @@ public class ToleranceDtoRoundTripTests
     }
 
     [Fact]
-    public void ProgramDefaults_RoundTripsTheProgramDefaultsExample()
+    public void ProgramDefaults_RoundTripsTheResetExample()
     {
         var dto = JsonSerializer.Deserialize<ProgramDefaults>(ProgramDefaultsJson, Web)!;
 
         dto.Etag.Should().Be(new ProgramEtag("sha256:41a"));
-        dto.Values[0].Should().Be(new EffectiveValue("Adaptation.OffsetTolerance", "5:20", "5:20", "program", null));
-        dto.Values[1].Should().Be(new EffectiveValue("Adaptation.PathTolerance", null, "1:3", "station", null));
+        dto.Values[0].Should().Be(new ProgramDefault("Adaptation.OffsetTolerance", "10:10", "10:10", "program", "10:10", true, null));
+        dto.Values[1].Should().Be(new ProgramDefault("Adaptation.PathTolerance", "1:3", "1:3", "program", "1:3", true, null));
         ShouldSerialiseTo(dto, ProgramDefaultsJson, extraNulls: "historyWarning");
+    }
+
+    [Fact]
+    public void ProgramDefaults_RoundTripsTheOldProgramExample()
+    {
+        var dto = JsonSerializer.Deserialize<ProgramDefaults>(OldProgramDefaultsJson, Web)!;
+
+        dto.Etag.Should().Be(V1);
+        dto.Values[0].Should().Be(new ProgramDefault("Adaptation.OffsetTolerance", null, "10:10", "builtIn", "10:10", false, null));
+        dto.Values[1].Should().Be(new ProgramDefault("Adaptation.PathTolerance", null, "inf:inf", "builtIn", "1:3", false, null));
+        ShouldSerialiseTo(dto, OldProgramDefaultsJson, extraNulls: "historyWarning");
     }
 
     [Fact]
@@ -248,12 +266,12 @@ public class ToleranceDtoRoundTripTests
         ex.ProgramId.Should().Be(ProgramId);
     }
 
-    // ---- program defaults: GET / PUT / DELETE, If-Match on writes ----
+    // ---- program defaults: GET / PUT / POST reset, If-Match on writes ----
 
     [Fact]
     public async Task GetProgramDefaultsAsync_GETsTheDefaultsRoute()
     {
-        var handler = new RecordingHandler(HttpStatusCode.OK, ProgramDefaultsJson);
+        var handler = new RecordingHandler(HttpStatusCode.OK, OldProgramDefaultsJson);
 
         var result = await Programs(handler).GetProgramDefaultsAsync(ProgramId);
 
@@ -261,7 +279,8 @@ public class ToleranceDtoRoundTripTests
         handler.RequestUri!.AbsolutePath.Should().Be($"/api/programs/{ProgramId}/defaults");
         handler.RequestUri.Query.Should().BeEmpty();
         handler.IfMatchPresent.Should().BeFalse();
-        result.Etag.Should().Be(new ProgramEtag("sha256:41a"));
+        result.Etag.Should().Be(V1);
+        result.Values[1].Should().Be(new ProgramDefault("Adaptation.PathTolerance", null, "inf:inf", "builtIn", "1:3", false, null));
     }
 
     [Fact]
@@ -279,16 +298,28 @@ public class ToleranceDtoRoundTripTests
     }
 
     [Fact]
-    public async Task ClearProgramDefaultAsync_DELETEsWithIfMatch()
+    public async Task ResetProgramDefaultsAsync_POSTsResetWithIfMatch_AndNoBody()
     {
         var handler = new RecordingHandler(HttpStatusCode.OK, ProgramDefaultsJson);
 
-        var result = await Programs(handler).ClearProgramDefaultAsync(ProgramId, "Adaptation.OffsetTolerance", V1);
+        var result = await Programs(handler).ResetProgramDefaultsAsync(ProgramId, V1);
 
-        handler.Method.Should().Be(HttpMethod.Delete);
-        handler.RequestUri!.AbsolutePath.Should().Be($"/api/programs/{ProgramId}/defaults/Adaptation.OffsetTolerance");
+        handler.Method.Should().Be(HttpMethod.Post);
+        handler.RequestUri!.AbsolutePath.Should().Be($"/api/programs/{ProgramId}/defaults/reset");
         handler.IfMatch.Should().Be("\"sha256:9e1\"");
-        result.Values.Should().HaveCount(2);
+        handler.Body.Should().BeNull();
+        result.Etag.Should().Be(new ProgramEtag("sha256:41a"));
+        result.Values.Should().OnlyContain(v => v.Copied && v.Layer == "program");
+    }
+
+    [Fact]
+    public async Task ResetProgramDefaultsAsync_On409_ThrowsEtagMismatch()
+    {
+        var handler = new RecordingHandler(HttpStatusCode.Conflict, """{"error":"stale","etag":"sha256:41a"}""");
+
+        var act = () => Programs(handler).ResetProgramDefaultsAsync(ProgramId, V1);
+
+        (await act.Should().ThrowAsync<ProgramEtagMismatchException>()).Which.Expected.Should().Be(V1);
     }
 
     [Fact]
