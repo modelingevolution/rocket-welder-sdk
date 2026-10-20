@@ -8,6 +8,7 @@ using RocketWelder.SDK.Http.Programs;
 using RocketWelder.SDK.Http.Repositories;
 using RocketWelder.SDK.Http.Robots;
 using RocketWelder.SDK.Http.Skills;
+using RocketWelder.SDK.Http.Station;
 
 namespace RocketWelder.SDK.Http;
 
@@ -58,4 +59,7 @@ public interface IRocketWelderClient
 
     /// <summary>Operations under <c>/api/gst/elements</c> — GStreamer element catalog introspection.</summary>
     IGstElementsApi GstElements { get; }
+
+    /// <summary>Operations under <c>/api/station</c> — station Programming defaults.</summary>
+    IStationApi Station { get; }
 }

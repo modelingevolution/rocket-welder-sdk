@@ -121,9 +121,9 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
             ?? throw new InvalidOperationException("Server returned empty body for POST /api/programs/{id}/capture.");
     }
 
-    public async Task<BlockValues> GetBlockValuesAsync(Guid programId, BlockId blockId, string? robotId = null, CancellationToken ct = default)
+    public async Task<BlockValues> GetBlockValuesAsync(Guid programId, BlockId blockId, CancellationToken ct = default)
     {
-        using var res = await http.GetAsync($"{BlockValuesUrl(programId, blockId)}{RobotQuery(robotId)}", ct).ConfigureAwait(false);
+        using var res = await http.GetAsync($"{BlockValuesUrl(programId, blockId)}", ct).ConfigureAwait(false);
         await ThrowIfValueErrorAsync(res, programId, blockId, etag: null, $"Read values of block '{blockId}' in program '{programId}'", ct).ConfigureAwait(false);
         return await ReadAsync<BlockValues>(res, "GET /api/programs/{id}/blocks/{blockId}/values", ct).ConfigureAwait(false);
     }
@@ -142,9 +142,9 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         return await ReadAsync<BlockValues>(res, "DELETE /api/programs/{id}/blocks/{blockId}/values/{key}", ct).ConfigureAwait(false);
     }
 
-    public async Task<ProgramDefaults> GetProgramDefaultsAsync(Guid programId, string? robotId = null, CancellationToken ct = default)
+    public async Task<ProgramDefaults> GetProgramDefaultsAsync(Guid programId, CancellationToken ct = default)
     {
-        using var res = await http.GetAsync($"{DefaultsUrl(programId)}{RobotQuery(robotId)}", ct).ConfigureAwait(false);
+        using var res = await http.GetAsync($"{DefaultsUrl(programId)}", ct).ConfigureAwait(false);
         await ThrowIfValueErrorAsync(res, programId, block: null, etag: null, $"Read defaults of program '{programId}'", ct).ConfigureAwait(false);
         return await ReadAsync<ProgramDefaults>(res, "GET /api/programs/{id}/defaults", ct).ConfigureAwait(false);
     }
@@ -166,9 +166,6 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
     private static string BlockValuesUrl(Guid programId, BlockId blockId) => $"{BlockUrl(programId, blockId)}/values";
 
     private static string DefaultsUrl(Guid programId) => $"api/programs/{programId}/defaults";
-
-    private static string RobotQuery(string? robotId) =>
-        robotId is null ? string.Empty : $"?robot={Uri.EscapeDataString(robotId)}";
 
     private static async Task<T> ReadAsync<T>(HttpResponseMessage res, string route, CancellationToken ct) where T : class =>
         await res.Content.ReadFromJsonAsync<T>(Json, ct).ConfigureAwait(false)
