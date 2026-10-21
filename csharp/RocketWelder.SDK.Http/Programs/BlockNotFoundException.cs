@@ -16,6 +16,17 @@ public sealed class BlockNotFoundException : Exception
         Block = block;
     }
 
+    /// <summary>
+    /// A 404 that carries rw2's own sentence (e.g. "Block adapt-7f3c (Move) has no value 'offsetTolerance'."), which
+    /// becomes the message (epic-029 feature-011, the block-values routes).
+    /// </summary>
+    public BlockNotFoundException(Guid programId, BlockId? block, string serverMessage)
+        : base(serverMessage)
+    {
+        ProgramId = programId;
+        Block = block;
+    }
+
     /// <summary>The program the edit targeted.</summary>
     public Guid ProgramId { get; }
 

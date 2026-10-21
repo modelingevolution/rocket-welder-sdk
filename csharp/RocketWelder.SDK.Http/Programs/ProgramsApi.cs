@@ -121,6 +121,77 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
             ?? throw new InvalidOperationException("Server returned empty body for POST /api/programs/{id}/capture.");
     }
 
+    public async Task<BlockValues> GetBlockValuesAsync(Guid programId, BlockId blockId, CancellationToken ct = default)
+    {
+        using var res = await http.GetAsync(BlockValuesUrl(programId, blockId), ct).ConfigureAwait(false);
+        await ThrowIfValueErrorAsync(res, programId, blockId, etag: null, $"Read values of block '{blockId}' in program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<BlockValues>(res, "GET /api/programs/{id}/blocks/{blockId}/values", ct).ConfigureAwait(false);
+    }
+
+    public async Task<BlockValues> SetBlockValueAsync(Guid programId, BlockId blockId, string key, string value, CancellationToken ct = default)
+    {
+        using var res = await http.PutAsJsonAsync($"{BlockValuesUrl(programId, blockId)}/{Uri.EscapeDataString(key)}", new SetValueRequest(value), Json, ct).ConfigureAwait(false);
+        await ThrowIfValueErrorAsync(res, programId, blockId, etag: null, $"Set value '{key}' of block '{blockId}' in program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<BlockValues>(res, "PUT /api/programs/{id}/blocks/{blockId}/values/{key}", ct).ConfigureAwait(false);
+    }
+
+    public async Task<BlockValues> ClearBlockValueAsync(Guid programId, BlockId blockId, string key, CancellationToken ct = default)
+    {
+        using var res = await http.DeleteAsync($"{BlockValuesUrl(programId, blockId)}/{Uri.EscapeDataString(key)}", ct).ConfigureAwait(false);
+        await ThrowIfValueErrorAsync(res, programId, blockId, etag: null, $"Clear value '{key}' of block '{blockId}' in program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<BlockValues>(res, "DELETE /api/programs/{id}/blocks/{blockId}/values/{key}", ct).ConfigureAwait(false);
+    }
+
+    public async Task<ProgramDefaults> GetProgramDefaultsAsync(Guid programId, CancellationToken ct = default)
+    {
+        using var res = await http.GetAsync(DefaultsUrl(programId), ct).ConfigureAwait(false);
+        await ThrowIfValueErrorAsync(res, programId, block: null, etag: null, $"Read defaults of program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<ProgramDefaults>(res, "GET /api/programs/{id}/defaults", ct).ConfigureAwait(false);
+    }
+
+    public async Task<ProgramDefaults> SetProgramDefaultAsync(Guid programId, string key, string value, ProgramEtag etag, CancellationToken ct = default)
+    {
+        using var res = await SendEditAsync(HttpMethod.Put, $"{DefaultsUrl(programId)}/{Uri.EscapeDataString(key)}", etag, new SetValueRequest(value), ct).ConfigureAwait(false);
+        await ThrowIfValueErrorAsync(res, programId, block: null, etag, $"Set default '{key}' of program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<ProgramDefaults>(res, "PUT /api/programs/{id}/defaults/{key}", ct).ConfigureAwait(false);
+    }
+
+    public async Task<ProgramDefaults> ResetProgramDefaultsAsync(Guid programId, ProgramEtag etag, CancellationToken ct = default)
+    {
+        using var res = await SendEditAsync(HttpMethod.Post, $"{DefaultsUrl(programId)}/reset", etag, ct).ConfigureAwait(false);
+        await ThrowIfValueErrorAsync(res, programId, block: null, etag, $"Reset defaults of program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<ProgramDefaults>(res, "POST /api/programs/{id}/defaults/reset", ct).ConfigureAwait(false);
+    }
+
+    private static string BlockValuesUrl(Guid programId, BlockId blockId) => $"{BlockUrl(programId, blockId)}/values";
+
+    private static string DefaultsUrl(Guid programId) => $"api/programs/{programId}/defaults";
+
+    private static async Task<T> ReadAsync<T>(HttpResponseMessage res, string route, CancellationToken ct) where T : class =>
+        await res.Content.ReadFromJsonAsync<T>(Json, ct).ConfigureAwait(false)
+        ?? throw new InvalidOperationException($"Server returned empty body for {route}.");
+
+    // design.md §12.6: 400 → the refusal sentence; 409 → stale etag (defaults writes only); 404 → unknown block on a
+    // block route; any other failure → HttpRequestException with the status and the message, as StationApi.
+    private static async Task ThrowIfValueErrorAsync(HttpResponseMessage res, Guid programId, BlockId? block, ProgramEtag? etag, string action, CancellationToken ct)
+    {
+        switch (res.StatusCode)
+        {
+            case HttpStatusCode.BadRequest:
+                throw await ValueRefusedException.FromAsync(res, ct).ConfigureAwait(false);
+            case HttpStatusCode.Conflict when etag is { } expected:
+                throw new ProgramEtagMismatchException(programId, expected);
+            case HttpStatusCode.NotFound when block is { } b:
+                // Same message rule as 400; an empty body keeps the generic message.
+                var message = await ServerSentence.MessageAsync(res, ct).ConfigureAwait(false);
+                throw message is null
+                    ? new BlockNotFoundException(programId, b)
+                    : new BlockNotFoundException(programId, b, message);
+        }
+        if (!res.IsSuccessStatusCode)
+            throw await ServerSentence.FailureAsync(res, action, ct).ConfigureAwait(false);
+    }
+
     private static async Task<EtagEditResult> ReadEtagAsync(HttpResponseMessage res, CancellationToken ct)
     {
         var body = await res.Content.ReadFromJsonAsync<EtagResponse>(ct).ConfigureAwait(false);

@@ -8,6 +8,7 @@ using RocketWelder.SDK.Http.Programs;
 using RocketWelder.SDK.Http.Repositories;
 using RocketWelder.SDK.Http.Robots;
 using RocketWelder.SDK.Http.Skills;
+using RocketWelder.SDK.Http.Station;
 
 namespace RocketWelder.SDK.Http;
 
@@ -31,6 +32,7 @@ public sealed class RocketWelderClient : IRocketWelderClient
         Modbus = new ModbusApi(http);
         Skills = new SkillsApi(http);
         GstElements = new GstElementsApi(http);
+        Station = new StationApi(http);
     }
 
     public IDevicesApi Devices { get; }
@@ -43,4 +45,5 @@ public sealed class RocketWelderClient : IRocketWelderClient
     public IModbusApi Modbus { get; }
     public ISkillsApi Skills { get; }
     public IGstElementsApi GstElements { get; }
+    public IStationApi Station { get; }
 }
