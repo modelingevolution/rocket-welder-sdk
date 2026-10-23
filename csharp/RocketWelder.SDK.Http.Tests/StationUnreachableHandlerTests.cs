@@ -87,6 +87,27 @@ public class StationUnreachableHandlerTests
     }
 
     [Fact]
+    public async Task ACallWhoseHeadersArriveButWhoseBodyStalls_IsCutByTheTimeout_MayHaveBeenApplied_F001_U_014()
+    {
+        // Review F-1: HttpClient.Timeout is infinite under AddRocketWelderClient, so only the handler's timer reading the
+        // body bounds this call. Without it the call hangs, and the WaitAsync guard fails the test instead.
+        var baseAddress = new Uri("http://h:5000/");
+        using var services = Provider(http =>
+        {
+            http.BaseAddress = baseAddress;
+            http.Timeout = TimeSpan.FromMilliseconds(100);
+        }, primary: new HeadersThenStall());
+        var client = services.GetRequiredService<IRocketWelderClient>();
+
+        var act = () => client.Programs.GetPointsAsync(ProgramId).WaitAsync(TimeSpan.FromSeconds(10));
+
+        var ex = (await act.Should().ThrowAsync<StationUnreachableException>()).Which;
+        ex.MayHaveBeenApplied.Should().BeTrue();
+        ex.Station.Should().Be(baseAddress);
+        ex.Message.Should().Contain("may or may not have been applied");
+    }
+
+    [Fact]
     public async Task ACallCancelledByTheCaller_StaysAnOperationCanceledException_F001_U_014()
     {
         using var services = Provider(http => http.BaseAddress = new Uri("http://h:5000/"), primary: new NeverAnswers());
@@ -136,6 +157,41 @@ public class StationUnreachableHandlerTests
             await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
             throw new InvalidOperationException("unreachable");
         }
+    }
+
+    // 200 with its headers at once, then a body whose first read never completes until it is cancelled.
+    private sealed class HeadersThenStall : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var content = new StreamContent(new StalledStream());
+            content.Headers.ContentType = new("application/json");
+            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
+        }
+    }
+
+    private sealed class StalledStream : Stream
+    {
+        public override bool CanRead => true;
+        public override bool CanSeek => false;
+        public override bool CanWrite => false;
+        public override long Length => throw new NotSupportedException();
+        public override long Position { get => throw new NotSupportedException(); set => throw new NotSupportedException(); }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
+            return 0;
+        }
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            ReadAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException("synchronous read");
+        public override void Flush() { }
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
     }
 
     private sealed class Answers(string json) : HttpMessageHandler

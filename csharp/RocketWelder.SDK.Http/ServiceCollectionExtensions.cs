@@ -13,8 +13,8 @@ public static class ServiceCollectionExtensions
     /// <c>http://localhost:9001</c> so a host running rocket-welder2 in-process
     /// calls itself with zero configuration; override via <paramref name="configure"/>
     /// for remote scenarios (terminal MCP, Modellution IDE, external services).
-    /// A connection failure or a timeout throws <see cref="StationUnreachableException"/> naming the base address
-    /// (<see cref="StationUnreachableHandler"/>).
+    /// A connection failure or a timeout throws <see cref="StationUnreachableException"/> naming the base address; the
+    /// configured <see cref="HttpClient.Timeout"/> bounds the whole exchange, the response body included.
     /// </summary>
     /// <example>
     /// <code>

@@ -15,7 +15,8 @@ namespace RocketWelder.SDK.Http.Programs;
 /// <param name="EndedAt">When the run ended; <see langword="null"/> while it runs.</param>
 /// <param name="DurationSeconds"><paramref name="EndedAt"/> − <paramref name="StartedAt"/> in seconds; <see langword="null"/>
 /// while it runs.</param>
-/// <param name="ArcOnSeconds">The sum over each ArcOn → ArcOff pair of ArcOff start − ArcOn end, in seconds.</param>
+/// <param name="ArcOnSeconds">The sum over each ArcOn → ArcOff pair of ArcOff start − ArcOn end, in seconds. An ArcOn
+/// whose ArcOff never started counts until the run ended, or until now while the run is running (ADR-8).</param>
 /// <param name="Blocks">Every block in program order.</param>
 public sealed record RunProgress(
     Guid ProgramId,

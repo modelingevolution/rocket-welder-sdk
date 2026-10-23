@@ -19,26 +19,13 @@ namespace RocketWelder.SDK.Http;
 /// <see cref="HttpClient.Timeout"/> and sets the client's own to infinite. The handler buffers the response body inside
 /// that timeout, so the whole exchange is bounded as before.
 /// </remarks>
-public sealed class StationUnreachableHandler : DelegatingHandler
+internal sealed class StationUnreachableHandler(StationClientSettings settings) : DelegatingHandler
 {
-    private readonly StationClientSettings _settings;
-
-    /// <summary>A handler for a hand-built <see cref="HttpClient"/>.</summary>
-    /// <param name="baseAddress">The station's base address, named in the message; <see langword="null"/> names the
-    /// request's scheme, host and port.</param>
-    /// <param name="timeout">The time the station has to answer; <see langword="null"/> leaves timeouts to
-    /// <see cref="HttpClient.Timeout"/> (then only connection failures are mapped).</param>
-    public StationUnreachableHandler(Uri? baseAddress = null, TimeSpan? timeout = null)
-        : this(new StationClientSettings { BaseAddress = baseAddress, Timeout = timeout })
-    {
-    }
-
-    internal StationUnreachableHandler(StationClientSettings settings) => _settings = settings;
-
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        var station = _settings.BaseAddress ?? Authority(request.RequestUri);
-        var timeout = _settings.Timeout is { } t && t != Timeout.InfiniteTimeSpan ? t : (TimeSpan?)null;
+        var current = settings.Current; // one read: base address and timeout from the same configuration
+        var station = current.BaseAddress ?? Authority(request.RequestUri);
+        var timeout = current.Timeout is { } t && t != Timeout.InfiniteTimeSpan ? t : (TimeSpan?)null;
 
         using var timer = timeout is { } limit ? new CancellationTokenSource(limit) : new CancellationTokenSource();
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timer.Token);
@@ -71,19 +58,25 @@ public sealed class StationUnreachableHandler : DelegatingHandler
         requestUri is { IsAbsoluteUri: true } uri ? new Uri(uri.GetLeftPart(UriPartial.Authority) + "/") : new Uri("unknown:/");
 }
 
-/// <summary>What <see cref="StationUnreachableHandler"/> names and enforces: the client's base address and timeout.</summary>
+/// <summary>One configuration of the client: the base address the handler names and the timeout it enforces.</summary>
+internal sealed record StationEndpoint(Uri? BaseAddress, TimeSpan? Timeout);
+
+/// <summary>
+/// What <see cref="StationUnreachableHandler"/> names and enforces. Each configured client publishes one immutable
+/// <see cref="StationEndpoint"/>, swapped by reference, so a handler never reads a base address from one configuration
+/// and a timeout from another.
+/// </summary>
 internal sealed class StationClientSettings
 {
-    public Uri? BaseAddress { get; set; }
+    private StationEndpoint _current = new(null, null);
 
-    public TimeSpan? Timeout { get; set; }
+    public StationEndpoint Current => Volatile.Read(ref _current);
 
     /// <summary>Takes over a configured client's base address and timeout; the client's own timeout becomes infinite so the
     /// handler alone decides a timeout (see <see cref="StationUnreachableHandler"/> remarks).</summary>
     public void TakeOver(HttpClient http)
     {
-        BaseAddress = http.BaseAddress;
-        Timeout = http.Timeout;
+        Volatile.Write(ref _current, new StationEndpoint(http.BaseAddress, http.Timeout));
         http.Timeout = System.Threading.Timeout.InfiniteTimeSpan;
     }
 }

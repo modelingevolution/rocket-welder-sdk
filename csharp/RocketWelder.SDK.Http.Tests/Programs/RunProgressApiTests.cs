@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Net;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -34,6 +33,9 @@ public class RunProgressApiTests
 
     private static IProgramsApi Api(RecordingHandler handler) =>
         new RocketWelderClient(RecordingHandler.Client(handler)).Programs;
+
+    private static IProgramsApi Api(HttpMessageHandler handler, TimeProvider clock) =>
+        new ProgramsApi(new HttpClient(handler) { BaseAddress = new Uri("http://welder.test/") }, clock);
 
     private static string Progress(ProgramExecutionState state) => $$"""
         {"programId":"{{ProgramId}}","runId":"{{RunId}}","state":"{{state}}","dryRun":false,
@@ -96,36 +98,100 @@ public class RunProgressApiTests
         ex.Message.Should().Contain(sentence);
     }
 
-    // ---- F001-U-007: the wait returns the first answer that is not Running ----
+    // ---- F001-U-007: the wait polls once a second and returns the first answer that is not Running ----
 
     [Fact]
-    public async Task WaitForRunAsync_ReturnsTheFinishedAnswer_AfterTheThirdRequest_F001_U_007()
+    public async Task WaitForRunAsync_PollsEverySecond_AndReturnsTheFinishedAnswer_AfterTheThirdRequest_F001_U_007()
     {
-        var requests = 0;
-        var handler = new RecordingHandler(_ => Json(Interlocked.Increment(ref requests) < 3
-            ? Progress(ProgramExecutionState.Running)
-            : Progress(ProgramExecutionState.Finished)));
+        var clock = new ManualClock();
+        var start = clock.GetUtcNow();
+        var sentAt = new List<TimeSpan>();
+        var marks = new List<int>();
+        using var requested = new SemaphoreSlim(0);
+        var handler = new RecordingHandler(_ =>
+        {
+            sentAt.Add(clock.GetUtcNow() - start);
+            marks.Add(clock.TimersCreated);
+            requested.Release();
+            return Json(sentAt.Count < 3 ? Progress(ProgramExecutionState.Running) : Progress(ProgramExecutionState.Finished));
+        });
 
-        var result = await Api(handler).WaitForRunAsync(ProgramId, RunId, TimeSpan.FromSeconds(10));
+        var wait = Api(handler, clock).WaitForRunAsync(ProgramId, RunId, TimeSpan.FromSeconds(10));
+        for (var poll = 0; poll < 2; poll++)
+        {
+            await requested.WaitAsync(TimeSpan.FromSeconds(10));
+            await clock.TimerCreatedAsync(TimeSpan.FromSeconds(1), after: marks[poll]);   // the 1 s poll delay after this answer
+            clock.Advance(TimeSpan.FromSeconds(1));
+        }
+        var result = await wait.WaitAsync(TimeSpan.FromSeconds(10));
 
         result.State.Should().Be(ProgramExecutionState.Finished);
-        requests.Should().Be(3);
+        sentAt.Should().Equal(TimeSpan.Zero, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
         handler.RequestUri!.AbsolutePath.Should().Be($"/api/programs/{ProgramId}/runs/{RunId}/progress");
     }
 
     // ---- F001-U-008: the wait returns Running when the timeout passes, and throws nothing ----
 
     [Fact]
-    public async Task WaitForRunAsync_ReturnsRunning_WithinTheTimeoutPlusOnePoll_F001_U_008()
+    public async Task WaitForRunAsync_ReturnsRunning_WhenTheTimeoutPasses_WithOnePollPerSecond_F001_U_008()
     {
-        var handler = new RecordingHandler(_ => Json(Progress(ProgramExecutionState.Running)));
-        var clock = Stopwatch.StartNew();
+        var clock = new ManualClock();
+        var start = clock.GetUtcNow();
+        var sentAt = new List<TimeSpan>();
+        var marks = new List<int>();
+        using var requested = new SemaphoreSlim(0);
+        var handler = new RecordingHandler(_ =>
+        {
+            sentAt.Add(clock.GetUtcNow() - start);
+            marks.Add(clock.TimersCreated);
+            requested.Release();
+            return Json(Progress(ProgramExecutionState.Running));
+        });
 
-        var result = await Api(handler).WaitForRunAsync(ProgramId, RunId, TimeSpan.FromSeconds(2));
+        var wait = Api(handler, clock).WaitForRunAsync(ProgramId, RunId, TimeSpan.FromSeconds(2));
+        for (var poll = 0; poll < 2; poll++)
+        {
+            await requested.WaitAsync(TimeSpan.FromSeconds(10));
+            await clock.TimerCreatedAsync(TimeSpan.FromSeconds(1), after: marks[poll]);   // the 1 s poll delay after this answer
+            clock.Advance(TimeSpan.FromSeconds(1));
+        }
+        var result = await wait.WaitAsync(TimeSpan.FromSeconds(10));
 
-        clock.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(3));
-        clock.Elapsed.Should().BeGreaterThanOrEqualTo(TimeSpan.FromSeconds(1.9));
         result.State.Should().Be(ProgramExecutionState.Running);
+        sentAt.Should().Equal(TimeSpan.Zero, TimeSpan.FromSeconds(1));
+        (clock.GetUtcNow() - start).Should().Be(TimeSpan.FromSeconds(2), "it returns at the timeout, not one poll later");
+    }
+
+    [Fact]
+    public async Task WaitForRunAsync_CutsALatePollToTheTimeLeft_AndReturnsTheLastAnswer_F001_U_008()
+    {
+        // design.md §2.7 / review F-7: a poll that starts 1 s before a 3 s deadline gets 2 s, not the client's whole timeout.
+        var clock = new ManualClock();
+        var handler = new SecondPollHangs(Progress(ProgramExecutionState.Running));
+
+        var wait = Api(handler, clock).WaitForRunAsync(ProgramId, RunId, TimeSpan.FromSeconds(3));
+        await clock.TimerCreatedAsync(TimeSpan.FromSeconds(1));       // the poll delay after the first answer
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await clock.TimerCreatedAsync(TimeSpan.FromSeconds(2));       // the second poll's bound: the time left
+        clock.Advance(TimeSpan.FromSeconds(2));
+        var result = await wait.WaitAsync(TimeSpan.FromSeconds(10));
+
+        result.State.Should().Be(ProgramExecutionState.Running);
+        handler.Requests.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task WaitForRunAsync_CancelledByTheCaller_ThrowsOperationCanceled_F001_U_008()
+    {
+        var clock = new ManualClock();
+        var handler = new RecordingHandler(_ => Json(Progress(ProgramExecutionState.Running)));
+        using var cts = new CancellationTokenSource();
+
+        var wait = Api(handler, clock).WaitForRunAsync(ProgramId, RunId, TimeSpan.FromSeconds(10), cts.Token);
+        await clock.TimerCreatedAsync(TimeSpan.FromSeconds(1));
+        cts.Cancel();
+
+        await FluentActions.Awaiting(() => wait.WaitAsync(TimeSpan.FromSeconds(10))).Should().ThrowAsync<OperationCanceledException>();
     }
 
     // ---- F001-U-009: a timeout outside 1–600 s is refused before any request ----
@@ -141,6 +207,22 @@ public class RunProgressApiTests
 
         await act.Should().ThrowAsync<ArgumentOutOfRangeException>();
         handler.RequestUri.Should().BeNull("no request is sent");
+    }
+
+    // Answers the first poll, then never answers until the request is cancelled.
+    private sealed class SecondPollHangs(string first) : HttpMessageHandler
+    {
+        private int _requests;
+
+        public int Requests => Volatile.Read(ref _requests);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (Interlocked.Increment(ref _requests) == 1)
+                return Json(first);
+            await Task.Delay(Timeout.InfiniteTimeSpan, cancellationToken).ConfigureAwait(false);
+            throw new InvalidOperationException("unreachable");
+        }
     }
 
     private static HttpResponseMessage Json(string json) =>

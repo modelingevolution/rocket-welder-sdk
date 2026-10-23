@@ -6,8 +6,11 @@ using System.Text.Json.Serialization;
 
 namespace RocketWelder.SDK.Http.Programs;
 
-internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
+// clock: the wait's poll delay and deadline (ADR-9); TimeProvider.System unless a test supplies one.
+internal sealed class ProgramsApi(HttpClient http, TimeProvider? clock = null) : IProgramsApi
 {
+    private readonly TimeProvider _clock = clock ?? TimeProvider.System;
+
     // JsonContent.Create defaults to PascalCase (unlike Post/GetAsJsonAsync which use
     // web defaults), so the manually-built edit requests carry these explicitly to
     // stay camelCase-consistent with the rw2 wire shape. WhenWritingNull keeps the
@@ -253,15 +256,32 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
             throw new ArgumentOutOfRangeException(nameof(timeout), timeout,
                 $"The wait must be between {MinWait.TotalSeconds:0} and {MaxWait.TotalSeconds:0} seconds.");
 
-        // ADR-9: a client-side poll; each poll is one short request inside the client's own timeout.
-        var clock = System.Diagnostics.Stopwatch.StartNew();
+        // ADR-9: a client-side poll on the injected clock. Every poll after the first is cut to the time left, so the
+        // wait never overruns its timeout by a slow request; a cut poll returns the last answer (design.md §2.7).
+        var deadline = _clock.GetUtcNow() + timeout;
+        var last = await GetRunProgressAsync(programId, runId, ct).ConfigureAwait(false);
         while (true)
         {
-            var progress = await GetRunProgressAsync(programId, runId, ct).ConfigureAwait(false);
-            var remaining = timeout - clock.Elapsed;
-            if (progress.State != ProgramExecutionState.Running || remaining <= TimeSpan.Zero)
-                return progress;
-            await Task.Delay(remaining < PollInterval ? remaining : PollInterval, ct).ConfigureAwait(false);
+            if (last.State != ProgramExecutionState.Running)
+                return last;
+            var remaining = deadline - _clock.GetUtcNow();
+            if (remaining <= TimeSpan.Zero)
+                return last;
+            await Task.Delay(remaining < PollInterval ? remaining : PollInterval, _clock, ct).ConfigureAwait(false);
+
+            remaining = deadline - _clock.GetUtcNow();
+            if (remaining <= TimeSpan.Zero)
+                return last;
+            using var bound = new CancellationTokenSource(remaining, _clock);
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(ct, bound.Token);
+            try
+            {
+                last = await GetRunProgressAsync(programId, runId, linked.Token).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException) when (bound.IsCancellationRequested && !ct.IsCancellationRequested)
+            {
+                return last;
+            }
         }
     }
 
