@@ -60,6 +60,21 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         await EnsureSuccessAsync(res, $"Delete program '{programId}'", ct).ConfigureAwait(false);
     }
 
+    public async Task DeleteAsync(Guid programId, ProgramEtag etag, CancellationToken ct = default)
+    {
+        using var res = await SendEditAsync(HttpMethod.Delete, $"api/programs/{programId}", etag, ct).ConfigureAwait(false);
+        // design.md §3 / ADR-10: a stale etag answers 409 {error, etag}; a running program answers 409 with the
+        // ProgramFault body, which has no etag property.
+        if (res.StatusCode == HttpStatusCode.Conflict)
+        {
+            var body = await BodyAsync(res, ct).ConfigureAwait(false);
+            if (HasEtagProperty(body))
+                throw new ProgramEtagMismatchException(programId, etag);
+            throw new ProgramRunningException(programId, body);
+        }
+        await EnsureSuccessAsync(res, $"Delete program '{programId}'", ct).ConfigureAwait(false);
+    }
+
     public Task<ProgramStatus?> GetStatusAsync(Guid programId, CancellationToken ct = default)
         => http.GetFromJsonAsync<ProgramStatus>($"api/programs/{programId}/status", ct);
 
@@ -161,6 +176,155 @@ internal sealed class ProgramsApi(HttpClient http) : IProgramsApi
         using var res = await SendEditAsync(HttpMethod.Post, $"{DefaultsUrl(programId)}/reset", etag, ct).ConfigureAwait(false);
         await ThrowIfValueErrorAsync(res, programId, block: null, etag, $"Reset defaults of program '{programId}'", ct).ConfigureAwait(false);
         return await ReadAsync<ProgramDefaults>(res, "POST /api/programs/{id}/defaults/reset", ct).ConfigureAwait(false);
+    }
+
+    // --- Points (design.md §1.1) ---
+
+    public async Task<IReadOnlyList<ProgramPoint>> GetPointsAsync(Guid programId, CancellationToken ct = default)
+    {
+        using var res = await http.GetAsync(PointsUrl(programId), ct).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode)
+            throw await ServerSentence.FailureAsync(res, $"Read points of program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<ProgramPoint[]>(res, "GET /api/programs/{id}/points", ct).ConfigureAwait(false);
+    }
+
+    public async Task<ProgramPoint> GetPointAsync(Guid programId, string name, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        using var res = await http.GetAsync(PointUrl(programId, name), ct).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode)
+            throw await ServerSentence.FailureAsync(res, $"Read point '{name}' of program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<ProgramPoint>(res, "GET /api/programs/{id}/points/{name}", ct).ConfigureAwait(false);
+    }
+
+    public async Task<PointEditResult> PutPointAsync(Guid programId, string name, PointWrite point, ProgramEtag etag, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(name);
+        ArgumentNullException.ThrowIfNull(point);
+        using var res = await SendEditAsync(HttpMethod.Put, PointUrl(programId, name), etag, point, ct).ConfigureAwait(false);
+        await ThrowIfPointErrorAsync(res, programId, etag, $"Write point '{name}' of program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<PointEditResult>(res, "PUT /api/programs/{id}/points/{name}", ct).ConfigureAwait(false);
+    }
+
+    public async Task<PointsEditResult> PutPointsAsync(Guid programId, IReadOnlyList<PointWrite> points, ProgramEtag etag, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(points);
+        using var res = await SendEditAsync(HttpMethod.Put, PointsUrl(programId), etag, points, ct).ConfigureAwait(false);
+        // ADR-2: a 422 lists every refused item; nothing was written.
+        if (res.StatusCode == HttpStatusCode.UnprocessableEntity && await RefusedAsync(res, ct).ConfigureAwait(false) is { } refused)
+            throw new PointsRefusedException(refused);
+        await ThrowIfPointErrorAsync(res, programId, etag, $"Write {points.Count} points of program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<PointsEditResult>(res, "PUT /api/programs/{id}/points", ct).ConfigureAwait(false);
+    }
+
+    public async Task<RingStartResult> CalculateRingStartAsync(Guid programId, BlockId ringBlockId, ProgramEtag etag, CancellationToken ct = default)
+    {
+        using var res = await SendEditAsync(HttpMethod.Post, $"{BlockUrl(programId, ringBlockId)}/calculate-start", etag, ct).ConfigureAwait(false);
+        if (res.StatusCode == HttpStatusCode.NotFound)
+        {
+            var message = await ServerSentence.MessageAsync(res, ct).ConfigureAwait(false);
+            throw message is null
+                ? new BlockNotFoundException(programId, ringBlockId)
+                : new BlockNotFoundException(programId, ringBlockId, message);
+        }
+        await ThrowIfPointErrorAsync(res, programId, etag, $"Calculate the start of ring '{ringBlockId}' in program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<RingStartResult>(res, "POST /api/programs/{id}/blocks/{blockId}/calculate-start", ct).ConfigureAwait(false);
+    }
+
+    // --- Run progress (design.md §2.6–§2.7) ---
+
+    /// <summary>The wait's poll period (ADR-9).</summary>
+    internal static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
+
+    /// <summary>The shortest and longest wait (FR-4.4).</summary>
+    internal static readonly TimeSpan MinWait = TimeSpan.FromSeconds(1), MaxWait = TimeSpan.FromSeconds(600);
+
+    public async Task<RunProgress> GetRunProgressAsync(Guid programId, Guid runId, CancellationToken ct = default)
+    {
+        using var res = await http.GetAsync($"api/programs/{programId}/runs/{runId}/progress", ct).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode)
+            throw await ServerSentence.FailureAsync(res, $"Read progress of run '{runId}' of program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<RunProgress>(res, "GET /api/programs/{id}/runs/{runId}/progress", ct).ConfigureAwait(false);
+    }
+
+    public async Task<RunProgress> WaitForRunAsync(Guid programId, Guid runId, TimeSpan timeout, CancellationToken ct = default)
+    {
+        if (timeout < MinWait || timeout > MaxWait)
+            throw new ArgumentOutOfRangeException(nameof(timeout), timeout,
+                $"The wait must be between {MinWait.TotalSeconds:0} and {MaxWait.TotalSeconds:0} seconds.");
+
+        // ADR-9: a client-side poll; each poll is one short request inside the client's own timeout.
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (true)
+        {
+            var progress = await GetRunProgressAsync(programId, runId, ct).ConfigureAwait(false);
+            var remaining = timeout - clock.Elapsed;
+            if (progress.State != ProgramExecutionState.Running || remaining <= TimeSpan.Zero)
+                return progress;
+            await Task.Delay(remaining < PollInterval ? remaining : PollInterval, ct).ConfigureAwait(false);
+        }
+    }
+
+    // --- History (design.md §3) ---
+
+    public async Task<HistoryLog> GetHistoryAsync(Guid programId, int? limit = null, CancellationToken ct = default)
+    {
+        using var res = await http.GetAsync(HistoryUrl($"api/programs/{programId}/history", limit), ct).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode)
+            throw await ServerSentence.FailureAsync(res, $"Read history of program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<HistoryLog>(res, "GET /api/programs/{id}/history", ct).ConfigureAwait(false);
+    }
+
+    internal static string HistoryUrl(string route, int? limit) =>
+        limit is { } n ? $"{route}?limit={n}" : route;
+
+    private static string PointsUrl(Guid programId) => $"api/programs/{programId}/points";
+
+    private static string PointUrl(Guid programId, string name) => $"{PointsUrl(programId)}/{Uri.EscapeDataString(name)}";
+
+    // design.md §1.1: 400/422 → rw2's refusal sentence; 409 → stale etag; any other failure → HttpRequestException with
+    // the status and the sentence.
+    private static async Task ThrowIfPointErrorAsync(HttpResponseMessage res, Guid programId, ProgramEtag etag, string action, CancellationToken ct)
+    {
+        switch (res.StatusCode)
+        {
+            case HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity:
+                throw await ValueRefusedException.FromAsync(res, ct).ConfigureAwait(false);
+            case HttpStatusCode.Conflict:
+                throw new ProgramEtagMismatchException(programId, etag);
+        }
+        if (!res.IsSuccessStatusCode)
+            throw await ServerSentence.FailureAsync(res, action, ct).ConfigureAwait(false);
+    }
+
+    // The bulk 422 body; null when the body is not a PointsRefused list (then the 422 is read as a sentence).
+    private static async Task<IReadOnlyList<PointRefusal>?> RefusedAsync(HttpResponseMessage res, CancellationToken ct)
+    {
+        var raw = await res.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+        try
+        {
+            return JsonSerializer.Deserialize<PointsRefused>(raw, Json)?.Refused is { Count: > 0 } refused ? refused : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static bool HasEtagProperty(string? body)
+    {
+        if (body is null)
+            return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(body);
+            return doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.EnumerateObject().Any(p => string.Equals(p.Name, "etag", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     private static string BlockValuesUrl(Guid programId, BlockId blockId) => $"{BlockUrl(programId, blockId)}/values";

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using RocketWelder.SDK.Http.Programs;
 
 namespace RocketWelder.SDK.Http.Repositories;
 
@@ -44,6 +45,15 @@ internal sealed class RepositoriesApi(HttpClient http) : IRepositoriesApi
         var result = await res.Content.ReadFromJsonAsync<CreateProgramResult>(ct).ConfigureAwait(false)
             ?? throw new InvalidOperationException("Server returned empty body for POST /api/repositories/{id}/programs.");
         return result.ProgramId;
+    }
+
+    public async Task<HistoryLog> GetHistoryAsync(Guid repositoryId, int? limit = null, CancellationToken ct = default)
+    {
+        using var res = await http.GetAsync(ProgramsApi.HistoryUrl($"api/repositories/{repositoryId}/history", limit), ct).ConfigureAwait(false);
+        if (!res.IsSuccessStatusCode)
+            throw await ServerSentence.FailureAsync(res, $"Read history of repository '{repositoryId}'", ct).ConfigureAwait(false);
+        return await res.Content.ReadFromJsonAsync<HistoryLog>(ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Server returned empty body for GET /api/repositories/{id}/history.");
     }
 
     // Preserve the server's descriptive body (e.g. "Invalid repository ID format") in a
