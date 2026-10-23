@@ -48,4 +48,12 @@ public interface IRepositoriesApi
     /// <exception cref="DuplicateProgramException">A program of that name already exists in the repository (HTTP 409).</exception>
     /// <exception cref="HttpRequestException">The id or name was rejected (HTTP 400/422) or the server failed otherwise.</exception>
     Task<Guid> CreateProgramAsync(Guid repositoryId, string name, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>GET /api/repositories/{repositoryId}/history[?limit=n]</c> — every commit of the repository, newest first,
+    /// including program deletions (epic-128 feature-001 design.md §3). <see cref="Programs.HistoryLog.Directory"/> is empty.
+    /// </summary>
+    /// <param name="limit">1–1000; <see langword="null"/> takes rw2's default.</param>
+    /// <exception cref="HttpRequestException">The id or limit was rejected (HTTP 400), or the repository is unknown or deleted (HTTP 404), or the server failed otherwise.</exception>
+    Task<Programs.HistoryLog> GetHistoryAsync(Guid repositoryId, int? limit = null, CancellationToken ct = default);
 }

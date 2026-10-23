@@ -38,6 +38,16 @@ public interface IProgramsApi
     Task DeleteAsync(Guid programId, CancellationToken ct = default);
 
     /// <summary>
+    /// <c>DELETE /api/programs/{programId}</c> with <c>If-Match: <paramref name="etag"/></c> (epic-128 feature-001
+    /// design.md §3, ADR-10) — delete the program only if it has not changed since <paramref name="etag"/> was read. The
+    /// repository records one <c>Delete program</c> commit.
+    /// </summary>
+    /// <exception cref="ProgramEtagMismatchException">The etag is stale; nothing was deleted (HTTP 409 whose body carries <c>etag</c>).</exception>
+    /// <exception cref="ProgramRunningException">The program is running and cannot be deleted (any other HTTP 409).</exception>
+    /// <exception cref="HttpRequestException">The id was rejected (HTTP 400) or unknown (HTTP 404), or the server failed otherwise.</exception>
+    Task DeleteAsync(Guid programId, ProgramEtag etag, CancellationToken ct = default);
+
+    /// <summary>
     /// <c>GET /api/programs/{programId}/status</c> — current execution state plus last-run
     /// summary. Null if the program id is unknown.
     /// </summary>
@@ -149,4 +159,72 @@ public interface IProgramsApi
     /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
     /// <exception cref="HttpRequestException">The If-Match is missing (HTTP 428), the program is unknown (HTTP 404), or the server failed otherwise.</exception>
     Task<ProgramDefaults> ResetProgramDefaultsAsync(Guid programId, ProgramEtag etag, CancellationToken ct = default);
+
+    // --- Points (epic-128 feature-001, design.md §1.1): read and write taught points; writes are etag-guarded edits. ---
+
+    /// <summary><c>GET /api/programs/{id}/points</c> — every taught point of the program.</summary>
+    /// <exception cref="HttpRequestException">The program is unknown (HTTP 404, rw2's sentence in the message), or the server failed otherwise.</exception>
+    Task<IReadOnlyList<ProgramPoint>> GetPointsAsync(Guid programId, CancellationToken ct = default);
+
+    /// <summary><c>GET /api/programs/{id}/points/{name}</c> — one taught point.</summary>
+    /// <exception cref="HttpRequestException">The program or the point is unknown (HTTP 404, rw2's sentence in the message), or the server failed otherwise.</exception>
+    Task<ProgramPoint> GetPointAsync(Guid programId, string name, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>PUT /api/programs/{id}/points/{name}</c> — write one declared point; members of <paramref name="point"/> left
+    /// <see langword="null"/> keep their stored value (its <see cref="PointWrite.Name"/> is ignored). One commit. Sends
+    /// <c>If-Match: <paramref name="etag"/></c>.
+    /// </summary>
+    /// <exception cref="ValueRefusedException">A malformed field (HTTP 400), or an undeclared name or a first write without a pose (HTTP 422); <see cref="ValueRefusedException.Reason"/> is rw2's sentence.</exception>
+    /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
+    /// <exception cref="HttpRequestException">The program is unknown (HTTP 404), or the server failed otherwise.</exception>
+    Task<PointEditResult> PutPointAsync(Guid programId, string name, PointWrite point, ProgramEtag etag, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>PUT /api/programs/{id}/points</c> — write up to 200 declared points in one call and one commit; all or nothing
+    /// (ADR-2). Sends <c>If-Match: <paramref name="etag"/></c>.
+    /// </summary>
+    /// <exception cref="PointsRefusedException">One or more items were refused; nothing was written (HTTP 422).</exception>
+    /// <exception cref="ValueRefusedException">The body was refused whole — empty, or more than 200 items (HTTP 400).</exception>
+    /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
+    /// <exception cref="HttpRequestException">The program is unknown (HTTP 404), or the server failed otherwise.</exception>
+    Task<PointsEditResult> PutPointsAsync(Guid programId, IReadOnlyList<PointWrite> points, ProgramEtag etag, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>POST /api/programs/{id}/blocks/{blockId}/calculate-start</c> — compute a Circle block's start point as the
+    /// editor's button does and write it as <c>circle_&lt;blockId&gt;_start</c>. One commit. Sends
+    /// <c>If-Match: <paramref name="etag"/></c>.
+    /// </summary>
+    /// <exception cref="ValueRefusedException">Not a Circle block (HTTP 400), or the ring cannot be planned (HTTP 422).</exception>
+    /// <exception cref="BlockNotFoundException">The program or block is unknown (HTTP 404).</exception>
+    /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
+    Task<RingStartResult> CalculateRingStartAsync(Guid programId, BlockId ringBlockId, ProgramEtag etag, CancellationToken ct = default);
+
+    // --- Run progress (epic-128 feature-001, design.md §2.6–§2.7). ---
+
+    /// <summary>
+    /// <c>GET /api/programs/{id}/runs/{runId}/progress</c> — the run's state, times, arc-on seconds and per-block progress
+    /// in program order.
+    /// </summary>
+    /// <exception cref="HttpRequestException">The program is unknown, or the run is not its latest run (HTTP 404, rw2's sentence in the message), or the server failed otherwise.</exception>
+    Task<RunProgress> GetRunProgressAsync(Guid programId, Guid runId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Waits for a run to end (ADR-9): polls <see cref="GetRunProgressAsync"/> every second and returns the first answer
+    /// whose <see cref="RunProgress.State"/> is not <see cref="ProgramExecutionState.Running"/>, or the last answer when
+    /// <paramref name="timeout"/> passes. A returned <c>Running</c> state means "still running"; the run continues.
+    /// </summary>
+    /// <param name="timeout">1 to 600 seconds.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="timeout"/> is outside 1–600 s; no request was sent.</exception>
+    /// <exception cref="HttpRequestException">As <see cref="GetRunProgressAsync"/>.</exception>
+    Task<RunProgress> WaitForRunAsync(Guid programId, Guid runId, TimeSpan timeout, CancellationToken ct = default);
+
+    // --- History (epic-128 feature-001, design.md §3). ---
+
+    /// <summary>
+    /// <c>GET /api/programs/{id}/history[?limit=n]</c> — the commits that changed the program's folder, newest first.
+    /// </summary>
+    /// <param name="limit">1–1000; <see langword="null"/> takes rw2's default.</param>
+    /// <exception cref="HttpRequestException">The id or limit was rejected (HTTP 400), or the program is unknown or deleted (HTTP 404), or the server failed otherwise.</exception>
+    Task<HistoryLog> GetHistoryAsync(Guid programId, int? limit = null, CancellationToken ct = default);
 }
