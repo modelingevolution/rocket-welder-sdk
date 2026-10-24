@@ -15,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write   # Trusted Publishing: GitHub mints an OIDC token, nuget.org swaps it for a 1-hour key
 
 jobs:
   publish-nuget:
@@ -54,6 +55,14 @@ jobs:
       working-directory: ./csharp
       run: dotnet pack RocketWelder.SDK.sln --configuration Release --no-build --output ./nupkg /p:PackageVersion=${{ steps.version.outputs.version }}
 
+    # nuget.org Trusted Publishing: no long-lived key. The policy on nuget.org names this repo and this
+    # workflow file; NUGET_USER is the nuget.org profile name that owns the packages (not an e-mail).
+    - name: NuGet login (OIDC → temporary API key)
+      id: nuget_login
+      uses: NuGet/login@v1
+      with:
+        user: ${{ secrets.NUGET_USER }}
+
     - name: Push all packages to NuGet
       working-directory: ./csharp
       # Push per file so one rejected package (e.g. an API key whose glob
@@ -64,7 +73,7 @@ jobs:
         for pkg in ./nupkg/*.nupkg; do
           echo "Pushing $pkg"
           dotnet nuget push "$pkg" \
-            --api-key ${{ secrets.NUGET_API_KEY }} \
+            --api-key ${{ steps.nuget_login.outputs.NUGET_API_KEY }} \
             --source https://api.nuget.org/v3/index.json \
             --skip-duplicate || failed="$failed $pkg"
         done
@@ -72,8 +81,6 @@ jobs:
           echo "::error::Failed to push:$failed"
           exit 1
         fi
-      env:
-        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
 
     - name: Publish to ModelingEvolution NuGet
       id: push_me
