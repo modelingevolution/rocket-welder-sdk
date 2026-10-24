@@ -55,10 +55,12 @@ jobs:
         #       indefinitely on this developer's machine; nobody has confirmed what they need on a
         #       hosted runner. Running them here would hang the job, not fail it.
         #
-        # Promoted 2026-08-21 (epic-065 It-2): AdaptivePoints, Devices.Robot and Robotics.Core.
+        # Promoted 2026-08-21 (epic-065 It-2): AdaptivePoints and Devices.Robot (Robotics.Core, promoted the
+        # same day, was deleted 2026-10-24 by epic-129 S2: no consumer).
+        #
         # They had been held out as "not observed producing a result locally" — that turned out to
         # be the org NuGet feed being down, not the tests. Restored from nuget.org and run with
-        # --no-restore they produce 14, 10 and 237 passing.
+        # --no-restore they produced 14 and 10 passing.
         run: |
           set -euo pipefail
           projects=(
@@ -71,7 +73,6 @@ jobs:
             RocketWelder.SDK.Types.Tests
             RocketWelder.SDK.AdaptivePoints.Tests
             RocketWelder.SDK.Devices.Robot.Tests
-            RocketWelder.SDK.Robotics.Core.Tests
             RocketWelder.SDK.Devices.Welding.Tests     # epic-110: job-catalog contract pins (enum ordinals, D-9 scan, signatures)
           )
           for p in "${projects[@]}"; do
