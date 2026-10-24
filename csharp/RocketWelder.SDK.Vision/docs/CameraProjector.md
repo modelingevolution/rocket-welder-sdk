@@ -106,12 +106,12 @@ var cornerC = new Point3<double>(400, 200, 50);    // defines plane
 
 // Create surface pose using right-hand rule
 // Z-axis points up from surface (a->b->c counter-clockwise)
-var surface = Pose3<double>.FromSurface(cornerA, cornerB, cornerC);
+var surface = Frame3<double>.FromSurface(cornerA, cornerB, cornerC).ToPose3(1.0); // mm in, mm out (scale 1)
 ```
 
 **Note**: Point order determines Z direction via right-hand rule:
-- `FromSurface(a, b, c)` - Z points "up" (counter-clockwise winding)
-- `FromSurface(c, b, a)` - Z points "down" (clockwise winding)
+- `Frame3.FromSurface(a, b, c)` - Z points "up" (counter-clockwise winding)
+- `Frame3.FromSurface(c, b, a)` - Z points "down" (clockwise winding)
 
 ### Surface Definition Options
 
@@ -119,7 +119,7 @@ All surface-based methods accept three interchangeable surface definitions:
 
 ```csharp
 // Option 1: Pose3 (pre-computed)
-var surface = Pose3<double>.FromSurface(cornerA, cornerB, cornerC);
+var surface = Frame3<double>.FromSurface(cornerA, cornerB, cornerC).ToPose3(1.0); // mm in, mm out (scale 1)
 var point = projector.ProjectPoint(pixel, surface);
 
 // Option 2: Triangle3 (when you have a triangle)
@@ -150,7 +150,7 @@ Console.WriteLine($"Detected at: X={worldPoint.X:F2}, Y={worldPoint.Y:F2}, Z={wo
 // Setup (once at startup)
 var imageProcessor = new ImageProcessor("http://127.0.0.1:5000");
 var projector = new CameraProjector(intrinsics, cameraToGripper, () => cobot.GetActualPose());
-var surface = Pose3<double>.FromSurface(cornerA, cornerB, cornerC);
+var surface = Frame3<double>.FromSurface(cornerA, cornerB, cornerC).ToPose3(1.0); // mm in, mm out (scale 1)
 
 const double torchHeight = 15.0; // mm above surface
 

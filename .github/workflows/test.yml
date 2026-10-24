@@ -11,15 +11,28 @@ on:
     paths:
       - 'csharp/**'
       - '.github/workflows/test.yml'
+      - '.github/scripts/grep-gate.sh'
   pull_request:
     paths:
       - 'csharp/**'
       - '.github/workflows/test.yml'
+      - '.github/scripts/grep-gate.sh'
 
 permissions:
   contents: read
 
 jobs:
+  grep-gate:
+    # epic-129 TS-129-48: deleted names cannot come back. One row per G-row switched on; a row fails on any line.
+    name: grep-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Grep gate
+        run: .github/scripts/grep-gate.sh
+
   csharp:
     name: C# tests
     runs-on: ubuntu-latest

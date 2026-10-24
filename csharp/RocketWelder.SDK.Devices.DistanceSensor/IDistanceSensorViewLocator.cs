@@ -23,7 +23,7 @@ public interface IDistanceSensorViewLocator
     /// <para>
     /// To sample multiple points on the same plane (e.g. the auto-probe's center +
     /// along-travel + perpendicular triple per FR-3.1), the caller composes translated
-    /// planes via <c>plane + Vector3</c> rather than passing a separate offset argument.
+    /// planes via <c>plane with { Position = plane.Position + offset }</c> rather than passing a separate offset argument.
     /// </para>
     /// <para>
     /// <b>Roll-about-beam.</b> Aiming the beam pins two rotational degrees of freedom
@@ -31,7 +31,7 @@ public interface IDistanceSensorViewLocator
     /// the implementation's chosen orthonormal-frame convention. Two calls with planes
     /// that differ only by translation may produce TCP poses with the same azimuth /
     /// elevation but different rolls if the impl uses a non-deterministic rotation
-    /// selector (e.g. <c>Vector3.RotationTo</c>'s shortest-arc rotation, which is
+    /// selector (e.g. <c>Quaternion.FromTo</c>'s shortest-arc rotation, which is
     /// geometrically valid but depends on the starting axis). Implementations that need
     /// stable roll across multi-sample probing (FR-3.1) must pin a third axis explicitly
     /// — see the camera-side precedent in rocket-welder2
