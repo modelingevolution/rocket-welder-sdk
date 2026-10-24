@@ -1,0 +1,21 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Devices.Tracker",
+  "description": "Seam tracker contract.",
+  "domain": "Application",
+  "subdomain": "Welding device",
+  "boundedContext": "welding",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Tracker contract",
+      "kind": "library",
+      "types": [
+        "ITracker"
+      ],
+      "status": "existing"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Types",
+  "description": "Video source and recording value types.",
+  "domain": "Video",
+  "subdomain": "Streaming",
+  "boundedContext": "video-streaming",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Video value types",
+      "kind": "library",
+      "types": [
+        "VideoSource",
+        "VideoCodec",
+        "VideoResolution",
+        "CameraAddress",
+        "IVideoRecordingLocator"
+      ],
+      "status": "existing"
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.AdaptivePoints",
+  "description": "Adaptive point and path contracts used by programs.",
+  "domain": "Robotic platform",
+  "subdomain": "Adaptive points",
+  "boundedContext": "adaptive-points",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Adaptive point contracts",
+      "kind": "library",
+      "types": [
+        "IAdaptivePoint",
+        "IAdaptivePointService",
+        "IAdaptivePath",
+        "IAdaptivePathService",
+        "AdaptResult",
+        "AdaptFailurePolicy"
+      ],
+      "status": "existing"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "RocketWelder.SDK.Runtime",
+      "pattern": "conformist"
+    },
+    {
+      "target": "RocketWelder.SDK.Devices.Robot",
+      "pattern": "conformist"
+    },
+    {
+      "target": "ModelingEvolution.Drawing",
+      "pattern": "conformist",
+      "note": "CF + PL: Drawing's value types are the published language"
+    }
+  ]
+}

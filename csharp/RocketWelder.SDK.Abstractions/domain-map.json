@@ -1,0 +1,25 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Abstractions",
+  "description": "Device kernel: IDevice, faults, lifetime.",
+  "domain": "Robotic platform",
+  "subdomain": "Devices",
+  "boundedContext": "device-lifecycle",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Device kernel",
+      "kind": "library",
+      "types": [
+        "IDevice",
+        "IFaultReporting",
+        "IFaultResettable",
+        "Lifetime",
+        "ShareMode"
+      ],
+      "status": "existing"
+    }
+  ]
+}

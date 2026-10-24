@@ -1,0 +1,95 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK",
+  "description": "Zero-copy frame client for AI containers (zerosink, zerofilter).",
+  "domain": "Video",
+  "subdomain": "Streaming",
+  "boundedContext": "video-streaming",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Container client",
+      "kind": "library",
+      "types": [
+        "RocketWelderClient",
+        "RocketWelderClientFactory",
+        "RocketWelderClientOptions"
+      ],
+      "status": "existing"
+    },
+    {
+      "name": "Frame transport",
+      "kind": "adapter",
+      "types": [
+        "IFrameSink",
+        "IFrameSource",
+        "TcpFrameSink",
+        "UnixSocketFrameSink",
+        "WebSocketFrameSink"
+      ],
+      "status": "existing"
+    },
+    {
+      "name": "Results writers",
+      "kind": "library",
+      "types": [
+        "ISegmentationResultWriter",
+        "IKeyPointsWriter",
+        "KeyPointsSink"
+      ],
+      "status": "existing",
+      "subdomain": "AI",
+      "boundedContext": "ai-segmentation"
+    },
+    {
+      "name": "Container UI controls",
+      "kind": "library",
+      "types": [
+        "UiService",
+        "IUiService",
+        "ControlBase"
+      ],
+      "status": "existing"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "RocketWelder.SDK.Protocols",
+      "pattern": "conformist"
+    },
+    {
+      "target": "RocketWelder.SDK.Types",
+      "pattern": "conformist"
+    },
+    {
+      "target": "RocketWelder.SDK.Hmi",
+      "pattern": "conformist"
+    },
+    {
+      "target": "RocketWelder.SDK.Vision",
+      "pattern": "conformist"
+    },
+    {
+      "target": "MicroPlumberd",
+      "pattern": "conformist",
+      "note": "framework / platform library"
+    },
+    {
+      "target": "MicroPlumberd.Services",
+      "pattern": "conformist",
+      "note": "framework / platform library"
+    },
+    {
+      "target": "MicroPlumberd.SourceGenerators",
+      "pattern": "conformist",
+      "note": "framework / platform library"
+    },
+    {
+      "target": "ModelingEvolution.Drawing",
+      "pattern": "conformist",
+      "note": "CF + PL: Drawing's value types are the published language"
+    }
+  ]
+}

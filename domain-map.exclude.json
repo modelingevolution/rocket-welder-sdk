@@ -1,0 +1,7 @@
+{
+  "exclude": [
+    { "path": "csharp/examples/*", "reason": "Example containers that show how to use the SDK; not part of the product." },
+    { "path": "csharp/samples/*", "reason": "Blazor sample app and client for the SDK's decoders; not part of the product." },
+    { "path": "csharp/TestExceptions/*", "reason": "Test helper console." }
+  ]
+}

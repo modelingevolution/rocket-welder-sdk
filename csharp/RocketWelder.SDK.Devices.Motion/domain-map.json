@@ -1,0 +1,43 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Devices.Motion",
+  "description": "External axes, tracks and positioners.",
+  "domain": "Robotic platform",
+  "subdomain": "Robot motion",
+  "boundedContext": "robot-motion",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Motion axes",
+      "kind": "library",
+      "types": [
+        "IMotionDevice",
+        "IMotionAxis",
+        "ILinearAxis",
+        "ILinearTrack",
+        "IRotaryAxis",
+        "IPositioner",
+        "AxisState"
+      ],
+      "status": "existing"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "RocketWelder.SDK.Abstractions",
+      "pattern": "conformist"
+    },
+    {
+      "target": "RocketWelder.SDK.Automation.Abstractions",
+      "pattern": "shared-kernel",
+      "note": "published shared kernel (device lifecycle L-C)"
+    },
+    {
+      "target": "ModelingEvolution.Drawing",
+      "pattern": "conformist",
+      "note": "CF + PL: Drawing's value types are the published language"
+    }
+  ]
+}

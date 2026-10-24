@@ -1,0 +1,47 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Vision",
+  "description": "Camera projection, intrinsics, key points frames.",
+  "domain": "Robotic platform",
+  "subdomain": "Vision",
+  "boundedContext": "vision",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Camera projection",
+      "kind": "library",
+      "types": [
+        "CameraProjector",
+        "ICameraProjector",
+        "DistortionCoefficients",
+        "ICameraViewLocator"
+      ],
+      "status": "existing"
+    },
+    {
+      "name": "Perception frames",
+      "kind": "library",
+      "types": [
+        "IKeyPointsSource",
+        "KeyPointsFrameHandle"
+      ],
+      "status": "existing",
+      "domain": "Video",
+      "subdomain": "AI",
+      "boundedContext": "ai-segmentation"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "RocketWelder.SDK.Protocols",
+      "pattern": "conformist"
+    },
+    {
+      "target": "ModelingEvolution.Drawing",
+      "pattern": "conformist",
+      "note": "CF + PL: Drawing's value types are the published language"
+    }
+  ]
+}

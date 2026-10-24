@@ -1,0 +1,25 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Protocols",
+  "description": "Binary key points and segmentation protocols.",
+  "domain": "Video",
+  "subdomain": "Streaming",
+  "boundedContext": "video-streaming",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Stream protocols",
+      "kind": "library",
+      "types": [
+        "KeyPointsProtocol",
+        "SegmentationProtocol",
+        "BinaryFrameReader",
+        "BinaryFrameWriter",
+        "Varint"
+      ],
+      "status": "existing"
+    }
+  ]
+}

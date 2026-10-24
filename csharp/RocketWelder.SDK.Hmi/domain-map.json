@@ -1,0 +1,31 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Hmi",
+  "description": "Operator UI layer contract for programs.",
+  "domain": "Robotic platform",
+  "subdomain": "Program",
+  "boundedContext": "program",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Program UI contract",
+      "kind": "library",
+      "types": [
+        "IUi",
+        "IUiLayer",
+        "IUiSink",
+        "PointSymbol"
+      ],
+      "status": "existing"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "ModelingEvolution.Drawing",
+      "pattern": "conformist",
+      "note": "CF + PL: Drawing's value types are the published language"
+    }
+  ]
+}

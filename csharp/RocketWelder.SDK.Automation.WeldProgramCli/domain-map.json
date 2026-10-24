@@ -1,0 +1,24 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Automation.WeldProgramCli",
+  "description": "CLI over the weld program model.",
+  "domain": "Application",
+  "subdomain": "Welding process",
+  "boundedContext": "welding",
+  "layer": "tooling",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Weld program CLI",
+      "kind": "tool",
+      "status": "existing"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "RocketWelder.SDK.Operations.Welding",
+      "pattern": "conformist"
+    }
+  ]
+}

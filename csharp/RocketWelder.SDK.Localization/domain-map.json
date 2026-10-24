@@ -1,0 +1,37 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Localization",
+  "description": "IResolver in feature-agnostic language (epic-037).",
+  "domain": "Robotic platform",
+  "subdomain": "Metrology",
+  "boundedContext": "localization",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Resolver contract",
+      "kind": "library",
+      "types": [
+        "IResolver",
+        "MetrologyRequest",
+        "ResolveResult",
+        "ResolveStatus",
+        "DeviationField",
+        "FeatureBinding"
+      ],
+      "status": "existing"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "RocketWelder.SDK.Vision",
+      "pattern": "conformist"
+    },
+    {
+      "target": "ModelingEvolution.Drawing",
+      "pattern": "conformist",
+      "note": "CF + PL: Drawing's value types are the published language"
+    }
+  ]
+}

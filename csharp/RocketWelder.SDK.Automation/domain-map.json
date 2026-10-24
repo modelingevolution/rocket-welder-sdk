@@ -1,0 +1,30 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Automation",
+  "description": "Plugin loader (L-R), MicroPlumberd-free.",
+  "domain": "Robotic platform",
+  "subdomain": "Devices",
+  "boundedContext": "device-lifecycle",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Plugin loader",
+      "kind": "service",
+      "types": [
+        "PluginLoader",
+        "PluginBootstrapper",
+        "PluginRejection"
+      ],
+      "status": "existing"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "RocketWelder.SDK.Automation.Abstractions",
+      "pattern": "shared-kernel",
+      "note": "published shared kernel (device lifecycle L-C)"
+    }
+  ]
+}

@@ -1,0 +1,54 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Operations.Welding",
+  "description": "The weld program model (rw.weldprogram/2): seams, passes, tool frame, job refs.",
+  "domain": "Application",
+  "subdomain": "Welding process",
+  "boundedContext": "welding",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Weld program model",
+      "kind": "library",
+      "types": [
+        "WeldProgram",
+        "Segment",
+        "Pass",
+        "ToolFrame",
+        "JobRef",
+        "SeamType",
+        "MotionProfile"
+      ],
+      "status": "existing"
+    },
+    {
+      "name": "Weld program serialization",
+      "kind": "library",
+      "types": [
+        "WeldProgramSerializer",
+        "WeldProgramDeserializer",
+        "WeldProgramMigrator"
+      ],
+      "status": "existing"
+    },
+    {
+      "name": "Edge binding",
+      "kind": "library",
+      "types": [
+        "EdgeBinding",
+        "EdgeBindingResolver",
+        "SegmentResolver"
+      ],
+      "status": "existing"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "ModelingEvolution.Drawing",
+      "pattern": "conformist",
+      "note": "CF + PL: Drawing's value types are the published language"
+    }
+  ]
+}

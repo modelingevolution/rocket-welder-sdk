@@ -1,0 +1,37 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Devices.Camera",
+  "description": "Camera device contract.",
+  "domain": "Robotic platform",
+  "subdomain": "Vision",
+  "boundedContext": "vision",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Camera contract",
+      "kind": "library",
+      "types": [
+        "ICamera",
+        "MatFrame"
+      ],
+      "status": "existing"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "RocketWelder.SDK.Abstractions",
+      "pattern": "conformist"
+    },
+    {
+      "target": "RocketWelder.SDK.Vision",
+      "pattern": "conformist"
+    },
+    {
+      "target": "ModelingEvolution.Drawing",
+      "pattern": "conformist",
+      "note": "CF + PL: Drawing's value types are the published language"
+    }
+  ]
+}

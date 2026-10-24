@@ -1,0 +1,56 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Runtime",
+  "description": "Program runtime contracts: IProgram, context, data providers.",
+  "domain": "Robotic platform",
+  "subdomain": "Program",
+  "boundedContext": "program",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Program contracts",
+      "kind": "library",
+      "types": [
+        "IProgram",
+        "IProgramContext",
+        "ProgramAttribute",
+        "ProgramMetadata",
+        "ProgramSignalName"
+      ],
+      "status": "existing"
+    },
+    {
+      "name": "Perception providers",
+      "kind": "library",
+      "types": [
+        "ISegmentationProvider",
+        "IKeyPointsProvider",
+        "IDataProvider"
+      ],
+      "status": "existing",
+      "subdomain": "AI",
+      "boundedContext": "ai-segmentation"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "RocketWelder.SDK.Abstractions",
+      "pattern": "conformist"
+    },
+    {
+      "target": "RocketWelder.SDK.Hmi",
+      "pattern": "conformist"
+    },
+    {
+      "target": "RocketWelder.SDK.Vision",
+      "pattern": "conformist"
+    },
+    {
+      "target": "ModelingEvolution.Drawing",
+      "pattern": "conformist",
+      "note": "CF + PL: Drawing's value types are the published language"
+    }
+  ]
+}

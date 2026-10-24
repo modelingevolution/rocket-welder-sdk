@@ -1,0 +1,31 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Server",
+  "description": "Sample frame server.",
+  "domain": "Video",
+  "subdomain": "Streaming",
+  "boundedContext": "video-streaming",
+  "layer": "application",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Frame server",
+      "kind": "tool",
+      "types": [
+        "Server"
+      ],
+      "status": "existing"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "RocketWelder.SDK",
+      "pattern": "conformist"
+    },
+    {
+      "target": "RocketWelder.SDK.Protocols",
+      "pattern": "conformist"
+    }
+  ]
+}

@@ -1,0 +1,59 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Http",
+  "description": "Typed REST client of rw2; each DTO declared once here (published language).",
+  "domain": "Robotic platform",
+  "subdomain": "Agent front door",
+  "boundedContext": "program",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "REST client",
+      "kind": "api",
+      "types": [
+        "IRocketWelderClient",
+        "RocketWelderClient"
+      ],
+      "status": "existing"
+    },
+    {
+      "name": "Program API",
+      "kind": "api",
+      "types": [
+        "IProgramsApi",
+        "ProgramTreeDto",
+        "BlockDto",
+        "RunProgress",
+        "ProgramPoint"
+      ],
+      "status": "existing"
+    },
+    {
+      "name": "Device, camera and robot APIs",
+      "kind": "api",
+      "types": [
+        "IDevicesApi",
+        "ICamerasApi",
+        "IRobotsApi",
+        "IModbusApi",
+        "IDistanceSensorsApi",
+        "IStationApi"
+      ],
+      "status": "existing"
+    },
+    {
+      "name": "Pipeline API",
+      "kind": "api",
+      "types": [
+        "IPipelinesApi",
+        "IGstElementsApi"
+      ],
+      "status": "existing",
+      "domain": "Video",
+      "subdomain": "Pipelines",
+      "boundedContext": "pipeline-authoring"
+    }
+  ]
+}

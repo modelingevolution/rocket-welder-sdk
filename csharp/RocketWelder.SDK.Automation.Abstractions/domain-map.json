@@ -1,0 +1,42 @@
+{
+  "$schema": "https://modelingevolution.com/schemas/domain-map/v1",
+  "repo": "rocket-welder-sdk",
+  "project": "RocketWelder.SDK.Automation.Abstractions",
+  "description": "Device lifecycle contracts (L-C): plugins, device types, config sets, device query.",
+  "domain": "Robotic platform",
+  "subdomain": "Devices",
+  "boundedContext": "device-lifecycle",
+  "layer": "platform",
+  "status": "existing",
+  "components": [
+    {
+      "name": "Plugin contracts",
+      "kind": "library",
+      "types": [
+        "IPlugin",
+        "IPluginContext",
+        "RocketWelderPluginAttribute"
+      ],
+      "status": "existing"
+    },
+    {
+      "name": "Device type registry",
+      "kind": "library",
+      "types": [
+        "DeviceTypeRegistry",
+        "DeviceTypeInfo",
+        "ConfigSet",
+        "ConfigProperty",
+        "IDeviceQuery",
+        "IDeviceSignalPublisher"
+      ],
+      "status": "existing"
+    }
+  ],
+  "dependsOn": [
+    {
+      "target": "RocketWelder.SDK.Abstractions",
+      "pattern": "conformist"
+    }
+  ]
+}
