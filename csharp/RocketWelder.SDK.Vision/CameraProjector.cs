@@ -6,6 +6,8 @@ using Point3d = ModelingEvolution.Drawing.Point3<double>;
 using Vector3d = ModelingEvolution.Drawing.Vector3<double>;
 using Pointd = ModelingEvolution.Drawing.Point<double>;
 using Triangle3d = ModelingEvolution.Drawing.Triangle3<double>;
+using Frame3d = ModelingEvolution.Drawing.Frame3<double>;
+using Quaterniond = ModelingEvolution.Drawing.Quaternion<double>;
 
 namespace RocketWelder.SDK.Vision;
 
@@ -13,10 +15,19 @@ namespace RocketWelder.SDK.Vision;
 /// Projects 2D pixel coordinates to 3D points on a surface using camera intrinsics
 /// and hand-eye calibration.
 /// </summary>
+/// <remarks>
+/// Pose maths composes <see cref="Frame3{T}"/> (epic-129 design.md, "Rules the design enforces", rule 2);
+/// <see cref="Pose3{T}"/> is the wire format of this API and is converted once at its edge. Every length
+/// in and out of the projector is in millimetres (poses, points, distances), so the frames are kept in
+/// millimetres too: the conversion scale is 1. Projection through the intrinsics divides by Z and is
+/// scale-free.
+/// </remarks>
 public class CameraProjector : ICameraProjector
 {
     private readonly CameraIntrinsics _intrinsics;
-    private readonly Pose3d _cameraToGripper;
+    private const double LengthScale = 1.0; // Pose3 wire (mm) → Frame3 (mm): see the class remarks.
+
+    private readonly Frame3d _cameraToGripper;
     private readonly Func<Pose3d> _getCurrentPosition;
 
     /// <summary>
@@ -28,7 +39,7 @@ public class CameraProjector : ICameraProjector
     public CameraProjector(CameraIntrinsics intrinsics, Pose3d cameraToGripper, Func<Pose3d> getCurrentPosition)
     {
         _intrinsics = intrinsics;
-        _cameraToGripper = cameraToGripper;
+        _cameraToGripper = Frame3d.FromPose3(cameraToGripper, LengthScale);
         _getCurrentPosition = getCurrentPosition;
     }
 
@@ -48,13 +59,16 @@ public class CameraProjector : ICameraProjector
     /// Projects a pixel coordinate onto a surface defined by a triangle.
     /// </summary>
     public Pose3d ProjectPose(Pointd pixel, Triangle3d surface)
-        => ProjectPose(pixel, surface.ToPose());
+        => ProjectPose(pixel, surface.ToFrame());
 
     /// <summary>
     /// Projects a pixel coordinate onto a surface defined by three points (right-hand rule for normal).
     /// </summary>
     public Pose3d ProjectPose(Pointd pixel, Point3d a, Point3d b, Point3d c)
-        => ProjectPose(pixel, Pose3d.FromSurface(a, b, c));
+        => ProjectPose(pixel, Frame3d.FromSurface(a, b, c));
+
+    private Pose3d ProjectPose(Pointd pixel, in Frame3d surface)
+        => (surface with { Position = ProjectPoint(pixel, surface) }).ToPose3(LengthScale);
 
     /// <summary>
     /// Projects a pixel coordinate to a point at a fixed distance along the ray.
@@ -67,11 +81,8 @@ public class CameraProjector : ICameraProjector
         // 1. Pixel to undistorted ray direction in camera frame
         var dirCam = PixelToRay(pixel);
 
-        // 2. Get current gripper pose
-        var gripperToBase = _getCurrentPosition();
-
-        // 3. Compose transforms: camera → gripper → base
-        var cameraToBase = gripperToBase * _cameraToGripper;
+        // 2-3. Current gripper pose; compose camera → gripper → base
+        var cameraToBase = CameraToBase();
 
         // 4. Transform ray to base frame
         var rayOrigin = cameraToBase.Position;
@@ -81,9 +92,9 @@ public class CameraProjector : ICameraProjector
         var position = rayOrigin + rayDir * distance;
 
         // 6. Build orientation with Z along ray direction
-        var rotation = Vector3d.EZ.RotationTo(rayDir);
+        var rotation = Quaterniond.FromTo(Vector3d.EZ, rayDir);
 
-        return new Pose3d(position, rotation);
+        return new Frame3d(position, rotation).ToPose3(LengthScale);
     }
 
     /// <summary>
@@ -109,24 +120,22 @@ public class CameraProjector : ICameraProjector
     /// <param name="surface">Surface pose in robot base frame (Z-axis is surface normal).</param>
     /// <returns>Correction vector (actual - expected) to apply to robot position.</returns>
     public Vector3d ProjectVector(Pointd actualLocation, Pointd expectedLocation, Pose3d surface)
-    {
-        var actualPoint = ProjectPoint(actualLocation, surface);
-        var expectedPoint = ProjectPoint(expectedLocation, surface);
-
-        return actualPoint - expectedPoint;
-    }
+        => ProjectVector(actualLocation, expectedLocation, Frame3d.FromPose3(surface, LengthScale));
 
     /// <summary>
     /// Computes the 3D correction vector projected onto a surface defined by a triangle.
     /// </summary>
     public Vector3d ProjectVector(Pointd actualLocation, Pointd expectedLocation, Triangle3d surface)
-        => ProjectVector(actualLocation, expectedLocation, surface.ToPose());
+        => ProjectVector(actualLocation, expectedLocation, surface.ToFrame());
 
     /// <summary>
     /// Computes the 3D correction vector projected onto a surface defined by three points.
     /// </summary>
     public Vector3d ProjectVector(Pointd actualLocation, Pointd expectedLocation, Point3d a, Point3d b, Point3d c)
-        => ProjectVector(actualLocation, expectedLocation, Pose3d.FromSurface(a, b, c));
+        => ProjectVector(actualLocation, expectedLocation, Frame3d.FromSurface(a, b, c));
+
+    private Vector3d ProjectVector(Pointd actualLocation, Pointd expectedLocation, in Frame3d surface)
+        => ProjectPoint(actualLocation, surface) - ProjectPoint(expectedLocation, surface);
 
     /// <summary>
     /// Projects a pixel coordinate onto a surface, returning the 3D point in robot base frame.
@@ -135,15 +144,15 @@ public class CameraProjector : ICameraProjector
     /// <param name="surface">Surface pose in robot base frame (Z-axis is surface normal).</param>
     /// <returns>3D point on surface in robot base frame.</returns>
     public Point3d ProjectPoint(Pointd pixel, Pose3d surface)
+        => ProjectPoint(pixel, Frame3d.FromPose3(surface, LengthScale));
+
+    private Point3d ProjectPoint(Pointd pixel, in Frame3d surface)
     {
         // 1. Pixel to undistorted ray direction in camera frame
         var dirCam = PixelToRay(pixel);
 
-        // 2. Get current gripper pose
-        var gripperToBase = _getCurrentPosition();
-
-        // 3. Compose transforms: camera → gripper → base
-        var cameraToBase = gripperToBase * _cameraToGripper;
+        // 2-3. Current gripper pose; compose camera → gripper → base
+        var cameraToBase = CameraToBase();
 
         // 4. Transform ray to base frame
         var rayOrigin = cameraToBase.Position;
@@ -151,7 +160,7 @@ public class CameraProjector : ICameraProjector
 
         // 5. Get plane from surface pose (point + normal)
         var planePoint = surface.Position;
-        var planeNormal = surface.Rotation.Rotate(Vector3d.EZ);
+        var planeNormal = surface.TransformVector(Vector3d.EZ);
 
         // 6. Ray-plane intersection: t = ((P0 - O) · N) / (D · N)
         var originToPlane = planePoint - rayOrigin;
@@ -173,16 +182,19 @@ public class CameraProjector : ICameraProjector
     /// Projects a pixel coordinate onto a surface defined by a triangle.
     /// </summary>
     public Point3d ProjectPoint(Pointd pixel, Triangle3d surface)
-        => ProjectPoint(pixel, surface.ToPose());
+        => ProjectPoint(pixel, surface.ToFrame());
 
     /// <summary>
     /// Projects a pixel coordinate onto a surface defined by three points (right-hand rule for normal).
     /// </summary>
     public Point3d ProjectPoint(Pointd pixel, Point3d a, Point3d b, Point3d c)
-        => ProjectPoint(pixel, Pose3d.FromSurface(a, b, c));
+        => ProjectPoint(pixel, Frame3d.FromSurface(a, b, c));
 
     /// <inheritdoc />
     public Polyline3<double> ProjectPoints(Polyline<float> pixels, Pose3d surface)
+        => ProjectPoints(pixels, Frame3d.FromPose3(surface, LengthScale));
+
+    private Polyline3<double> ProjectPoints(Polyline<float> pixels, in Frame3d surface)
     {
         var span = pixels.AsSpan();
         var points = new Point3d[span.Length];
@@ -196,10 +208,13 @@ public class CameraProjector : ICameraProjector
 
     /// <inheritdoc />
     public Polyline3<double> ProjectPoints(Polyline<float> pixels, Triangle3d surface)
-        => ProjectPoints(pixels, surface.ToPose());
+        => ProjectPoints(pixels, surface.ToFrame());
 
     /// <inheritdoc />
     public Polyline3<double> ProjectPoints(Polyline<double> pixels, Pose3d surface)
+        => ProjectPoints(pixels, Frame3d.FromPose3(surface, LengthScale));
+
+    private Polyline3<double> ProjectPoints(Polyline<double> pixels, in Frame3d surface)
     {
         var span = pixels.AsSpan();
         var points = new Point3d[span.Length];
@@ -210,16 +225,16 @@ public class CameraProjector : ICameraProjector
 
     /// <inheritdoc />
     public Polyline3<double> ProjectPoints(Polyline<double> pixels, Triangle3d surface)
-        => ProjectPoints(pixels, surface.ToPose());
+        => ProjectPoints(pixels, surface.ToFrame());
 
     /// <inheritdoc />
-    public Pose3d GetTcpForCameraPose(Pose3d cameraPose) => cameraPose * _cameraToGripper.Inverse();
+    public Pose3d GetTcpForCameraPose(Pose3d cameraPose)
+        => (Frame3d.FromPose3(cameraPose, LengthScale) * _cameraToGripper.Inverse()).ToPose3(LengthScale);
 
     /// <inheritdoc />
     public bool TryProjectToPixel(Point3d basePoint, out Pointd pixel)
     {
-        var gripperToBase = _getCurrentPosition();
-        var cameraToBase = gripperToBase * _cameraToGripper;
+        var cameraToBase = CameraToBase();
 
         var pointInCamera = cameraToBase.Inverse().TransformPoint(basePoint);
 
@@ -232,6 +247,9 @@ public class CameraProjector : ICameraProjector
         pixel = _intrinsics.PointToPixel(pointInCamera);
         return true;
     }
+
+    /// <summary>Camera → gripper → base, from the live gripper pose (the Pose3 wire edge).</summary>
+    private Frame3d CameraToBase() => Frame3d.FromPose3(_getCurrentPosition(), LengthScale) * _cameraToGripper;
 
     private Vector3d PixelToRay(Pointd pixel) => _intrinsics.PixelToRay(pixel);
 }

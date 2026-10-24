@@ -91,12 +91,17 @@ public static class RobotMotionExtensions
         var centre = vertex.Position + (radiusMm / Math.Sin(halfAngle)) * bisector;
         var via = centre - radiusMm * bisector;
 
-        var entryRotation = Rotation3<double>.Slerp(prev.Rotation, vertex.Rotation, (edgeIn - setback) / edgeIn);
-        var exitRotation = Rotation3<double>.Slerp(vertex.Rotation, next.Rotation, setback / edgeOut);
-        var viaRotation = Rotation3<double>.Slerp(entryRotation, exitRotation, 0.5);
+        // Rotation maths on quaternions (epic-129 design rule 2); Rotation3 is the wire format, converted once
+        // in and once out.
+        var qPrev = prev.Rotation.ToQuaternion();
+        var qVertex = vertex.Rotation.ToQuaternion();
+        var qNext = next.Rotation.ToQuaternion();
+        var entryRotation = Quaternion<double>.Slerp(qPrev, qVertex, (edgeIn - setback) / edgeIn);
+        var exitRotation = Quaternion<double>.Slerp(qVertex, qNext, setback / edgeOut);
+        var viaRotation = Quaternion<double>.Slerp(entryRotation, exitRotation, 0.5);
 
-        return (new Pose3<double>(entryTangent, entryRotation),
-                new Pose3<double>(via, viaRotation),
-                new Pose3<double>(exitTangent, exitRotation));
+        return (new Pose3<double>(entryTangent, Rotation3<double>.FromQuaternion(entryRotation)),
+                new Pose3<double>(via, Rotation3<double>.FromQuaternion(viaRotation)),
+                new Pose3<double>(exitTangent, Rotation3<double>.FromQuaternion(exitRotation)));
     }
 }

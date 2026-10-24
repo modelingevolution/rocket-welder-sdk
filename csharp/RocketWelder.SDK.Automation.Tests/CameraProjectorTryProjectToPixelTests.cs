@@ -130,7 +130,7 @@ public class CameraProjectorTryProjectToPixelTests
         // Independent ground truth: pick a point Q in the camera frame, map it into base
         // frame with the SAME composition the projector uses, then assert the projector
         // recovers the pinhole pixel of Q.
-        var cameraToBase = gripper * handEye;
+        var cameraToBase = Frame3<double>.FromPose3(gripper, 1.0) * Frame3<double>.FromPose3(handEye, 1.0);
         var qCamera = new Point3d(12, -7, 250);
         var basePoint = cameraToBase.TransformPoint(qCamera);
 
@@ -149,7 +149,7 @@ public class CameraProjectorTryProjectToPixelTests
         var handEye = new Pose3d(5, -3, 50, 0, 0, 90);
         var p = Projector(intr, handEye, gripper);
 
-        var cameraToBase = gripper * handEye;
+        var cameraToBase = Frame3<double>.FromPose3(gripper, 1.0) * Frame3<double>.FromPose3(handEye, 1.0);
         var behind = cameraToBase.TransformPoint(new Point3d(0, 0, -50));
 
         var ok = p.TryProjectToPixel(behind, out var pixel);

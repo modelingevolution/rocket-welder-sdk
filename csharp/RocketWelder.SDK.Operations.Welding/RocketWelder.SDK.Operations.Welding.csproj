@@ -16,7 +16,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ModelingEvolution.Drawing" Version="1.9.8.75" />
+    <PackageReference Include="ModelingEvolution.Drawing" Version="2.0.0.72-preview.1" />
     <PackageReference Include="ModelingEvolution.JsonParsableConverter" Version="1.0.1" />
   </ItemGroup>
 
