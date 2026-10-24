@@ -7,10 +7,10 @@ cd "$(git rev-parse --show-toplevel)"
 
 ROWS=(
   # G-18 (S3): the Pose3 maths members are deleted in Drawing 2.0; Frame3.Interpolate/Distance/FromSurface replace them.
-  $'G-18\tPose3(<[^>]*>)?\\.(Lerp|Distance|FromSurface)\\b\tcsharp/'
-  # G-19d (S3, drawing's numbering): no Euler rotation algebra on Rotation3 and no direction → Euler shortcut
+  $'G-18\t\\bPose3(d|<[^>]*>)?\\.(Lerp|Distance|FromSurface)\\b\tcsharp/'
+  # G-18a (S3, epic-129 test-scenarios numbering): no Euler rotation algebra on Rotation3 and no direction → Euler shortcut
   # (Rotation3.Combine/Slerp and Vector3.RotationTo are deleted; use Quaternion.Slerp / Quaternion.FromTo).
-  $'G-19d\tRotation3(<[^>]*>)?\\.(Combine|Slerp)\\b|\\bRotationTo\\s*\\(\tcsharp/'
+  $'G-18a\t\\bRotation3(d|<[^>]*>)?\\.(Combine|Slerp|Inverse|Rotate|ToMatrix3x3)\\b|\\bRotationTo\\s*\\(\tcsharp/'
 )
 
 failed=0

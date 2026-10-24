@@ -19,7 +19,7 @@
        regression; RocketWelder.SDK.Devices.Motion.Tests/TransportDependencyTests fails the Tests
        workflow (.github/workflows/test.yml) if it happens. -->
   <ItemGroup>
-    <PackageReference Include="ModelingEvolution.Drawing" Version="2.0.0.72-preview.1" />
+    <PackageReference Include="ModelingEvolution.Drawing" Version="2.0.0.72" />
   </ItemGroup>
 
   <ItemGroup>

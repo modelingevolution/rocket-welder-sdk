@@ -16,7 +16,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="ModelingEvolution.Drawing" Version="2.0.0.72-preview.1" />
+    <PackageReference Include="ModelingEvolution.Drawing" Version="2.0.0.72" />
     <ProjectReference Include="..\RocketWelder.SDK.Vision\RocketWelder.SDK.Vision.csproj" />
   </ItemGroup>
 
