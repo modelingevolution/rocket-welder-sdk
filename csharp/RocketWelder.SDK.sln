@@ -38,10 +38,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Types.Test
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Automation.Tests", "RocketWelder.SDK.Automation.Tests\RocketWelder.SDK.Automation.Tests.csproj", "{09679B63-9EED-4B76-840F-569195C84151}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Robotics.Core", "RocketWelder.SDK.Robotics.Core\RocketWelder.SDK.Robotics.Core.csproj", "{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Robotics.Core.Tests", "RocketWelder.SDK.Robotics.Core.Tests\RocketWelder.SDK.Robotics.Core.Tests.csproj", "{3753E954-5C68-4AE9-B3FA-24D7374147DB}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Http", "RocketWelder.SDK.Http\RocketWelder.SDK.Http.csproj", "{0CE66E9A-D7B0-459E-AF62-DBC89AEEB732}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "RocketWelder.SDK.Automation.WeldProgramCli", "RocketWelder.SDK.Automation.WeldProgramCli\RocketWelder.SDK.Automation.WeldProgramCli.csproj", "{58C412F3-6B7D-4044-878B-5AE2E9FFCBE4}"
@@ -242,30 +238,6 @@ Global
 		{09679B63-9EED-4B76-840F-569195C84151}.Release|x64.Build.0 = Release|Any CPU
 		{09679B63-9EED-4B76-840F-569195C84151}.Release|x86.ActiveCfg = Release|Any CPU
 		{09679B63-9EED-4B76-840F-569195C84151}.Release|x86.Build.0 = Release|Any CPU
-		{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}.Debug|x64.Build.0 = Debug|Any CPU
-		{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}.Debug|x86.Build.0 = Debug|Any CPU
-		{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}.Release|Any CPU.Build.0 = Release|Any CPU
-		{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}.Release|x64.ActiveCfg = Release|Any CPU
-		{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}.Release|x64.Build.0 = Release|Any CPU
-		{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}.Release|x86.ActiveCfg = Release|Any CPU
-		{6C6A2B8E-90E6-46FC-A237-0AAD50E8FEE2}.Release|x86.Build.0 = Release|Any CPU
-		{3753E954-5C68-4AE9-B3FA-24D7374147DB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{3753E954-5C68-4AE9-B3FA-24D7374147DB}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{3753E954-5C68-4AE9-B3FA-24D7374147DB}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{3753E954-5C68-4AE9-B3FA-24D7374147DB}.Debug|x64.Build.0 = Debug|Any CPU
-		{3753E954-5C68-4AE9-B3FA-24D7374147DB}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{3753E954-5C68-4AE9-B3FA-24D7374147DB}.Debug|x86.Build.0 = Debug|Any CPU
-		{3753E954-5C68-4AE9-B3FA-24D7374147DB}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{3753E954-5C68-4AE9-B3FA-24D7374147DB}.Release|Any CPU.Build.0 = Release|Any CPU
-		{3753E954-5C68-4AE9-B3FA-24D7374147DB}.Release|x64.ActiveCfg = Release|Any CPU
-		{3753E954-5C68-4AE9-B3FA-24D7374147DB}.Release|x64.Build.0 = Release|Any CPU
-		{3753E954-5C68-4AE9-B3FA-24D7374147DB}.Release|x86.ActiveCfg = Release|Any CPU
-		{3753E954-5C68-4AE9-B3FA-24D7374147DB}.Release|x86.Build.0 = Release|Any CPU
 		{0CE66E9A-D7B0-459E-AF62-DBC89AEEB732}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{0CE66E9A-D7B0-459E-AF62-DBC89AEEB732}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0CE66E9A-D7B0-459E-AF62-DBC89AEEB732}.Debug|x64.ActiveCfg = Debug|Any CPU
