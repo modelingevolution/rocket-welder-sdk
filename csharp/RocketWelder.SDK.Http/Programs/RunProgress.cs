@@ -16,7 +16,10 @@ namespace RocketWelder.SDK.Http.Programs;
 /// <param name="DurationSeconds"><paramref name="EndedAt"/> − <paramref name="StartedAt"/> in seconds; <see langword="null"/>
 /// while it runs.</param>
 /// <param name="ArcOnSeconds">The sum over each ArcOn → ArcOff pair of ArcOff start − ArcOn end, in seconds. An ArcOn
-/// whose ArcOff never started counts until the run ended, or until now while the run is running (ADR-8).</param>
+/// whose ArcOff never started counts until the run ended, or until now while the run is running (ADR-8).
+/// <see langword="null"/> (ABSENT on the wire) when the server cannot give a true figure; <see cref="ArcOnSecondsUnknown"/>
+/// then says why. An unknown time is never sent as 0. A client from before this field was nullable reads an absent value
+/// as 0 until it is updated; it does not fail.</param>
 /// <param name="Blocks">Every block in program order.</param>
 public sealed record RunProgress(
     Guid ProgramId,
@@ -26,5 +29,15 @@ public sealed record RunProgress(
     DateTimeOffset? StartedAt,
     DateTimeOffset? EndedAt,
     double? DurationSeconds,
-    double ArcOnSeconds,
-    IReadOnlyList<BlockProgress> Blocks);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] double? ArcOnSeconds,
+    IReadOnlyList<BlockProgress> Blocks)
+{
+    /// <summary>
+    /// Why <see cref="ArcOnSeconds"/> is absent: a stable key, null (absent on the wire) whenever the figure is given.
+    /// <c>"recorded-run-shared-body"</c>: answered from the recorded run (after a host restart) for a program whose weld
+    /// path runs in a shared body, so the per-pass times are not kept. <c>"unpaired-passes"</c>: a weld path's ArcOn and
+    /// ArcOff ran a different number of times (an ArcOn inside a shared body with its ArcOff outside it).
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? ArcOnSecondsUnknown { get; init; }
+}
