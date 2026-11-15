@@ -64,6 +64,51 @@ public class RunProgressApiTests
         written["blocks"]![3]!["startedAt"].Should().BeNull();
     }
 
+    // ---- epic-150 (owner 2026-11-14): arc-on that cannot be true is ABSENT with a reason key, never 0 ----
+
+    private static string ProgressWith(string arc) => $$"""
+        {"programId":"{{ProgramId}}","runId":"{{RunId}}","state":"Finished","dryRun":false,
+         "startedAt":"2026-10-23T10:00:00+00:00","endedAt":"2026-10-23T10:00:10+00:00","durationSeconds":10{{arc}},"blocks":[]}
+        """;
+
+    private static JsonNode? RoundTrip(string json) =>
+        JsonNode.Parse(JsonSerializer.Serialize(JsonSerializer.Deserialize<RunProgress>(json, Web)!, Web));
+
+    [Fact]
+    public void An_answer_with_arc_on_present_round_trips_unchanged_and_carries_no_reason()
+    {
+        var written = RoundTrip(ProgressWith(",\"arcOnSeconds\":5.5"))!;
+
+        written["arcOnSeconds"]!.GetValue<double>().Should().Be(5.5);
+        written.AsObject().ContainsKey("arcOnSecondsUnknown").Should().BeFalse("a true figure has no reason key");
+    }
+
+    [Fact]
+    public void An_answer_with_arc_on_absent_stays_absent_never_a_zero()
+    {
+        var written = RoundTrip(ProgressWith(""))!;
+
+        written.AsObject().ContainsKey("arcOnSeconds").Should().BeFalse("an unknown arc-on time is not 0");
+    }
+
+    [Fact]
+    public void An_answer_with_arc_on_absent_and_its_reason_keeps_the_reason()
+    {
+        var written = RoundTrip(ProgressWith(",\"arcOnSecondsUnknown\":\"unpaired-passes\""))!;
+
+        written.AsObject().ContainsKey("arcOnSeconds").Should().BeFalse();
+        written["arcOnSecondsUnknown"]!.GetValue<string>().Should().Be("unpaired-passes");
+    }
+
+    [Fact]
+    public void An_answer_with_arc_on_null_is_read_as_unknown_not_refused()
+    {
+        var act = () => RoundTrip(ProgressWith(",\"arcOnSeconds\":null,\"arcOnSecondsUnknown\":\"recorded-run-shared-body\""));
+
+        act.Should().NotThrow("a server may write null; the client reads it as unknown")
+            .Which!.AsObject().ContainsKey("arcOnSeconds").Should().BeFalse("and writes it absent");
+    }
+
     [Fact]
     public void RunProgress_ReadsAnOrdinalRunState_F001_U_006()
     {
