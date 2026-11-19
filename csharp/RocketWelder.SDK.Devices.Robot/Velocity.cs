@@ -1,15 +1,18 @@
 using System.Globalization;
 using System.Text.Json.Serialization;
-using ModelingEvolution.JsonParsableConverter;
 
 namespace RocketWelder.SDK.Devices.Robot;
 
-public enum VelocityUnit { Percentage, MmPerSecond, CmPerMinute }
+/// <summary>The unit of a <see cref="Velocity"/>. The numbers 0, 1, 2 are load-bearing: the old object wire form
+/// <c>{"value":50,"unit":0}</c> carries them.</summary>
+public enum VelocityUnit { Percentage = 0, MmPerSecond = 1, CmPerMinute = 2 }
 
 /// <summary>
 /// Robot motion velocity with explicit unit. Prevents bare numeric ambiguity.
+/// JSON: written as the text form ("20%", "100mm/s", "50cm/min"); read from that text and from the old object form
+/// <c>{"value":50,"unit":0}</c> / <c>{"value":50,"unit":"percent"}</c> (see <see cref="VelocityJsonConverter"/>).
 /// </summary>
-[JsonConverter(typeof(JsonParsableConverter<Velocity>))]
+[JsonConverter(typeof(VelocityJsonConverter))]
 public readonly record struct Velocity : IParsable<Velocity>
 {
     public double Value { get; }
@@ -31,14 +34,19 @@ public readonly record struct Velocity : IParsable<Velocity>
         _ => throw new ArgumentOutOfRangeException()
     };
 
-    /// <summary>Formats as "20%", "100mm/s", or "50cm/min".</summary>
-    public override string ToString() => Unit switch
+    /// <summary>Formats as "20%", "100mm/s", or "50cm/min", always with the invariant culture (a '.' decimal point), so
+    /// the text reads back with <see cref="Parse"/> on any machine.</summary>
+    public override string ToString()
     {
-        VelocityUnit.Percentage => $"{Value}%",
-        VelocityUnit.MmPerSecond => $"{Value}mm/s",
-        VelocityUnit.CmPerMinute => $"{Value}cm/min",
-        _ => Value.ToString(CultureInfo.InvariantCulture)
-    };
+        var value = Value.ToString(CultureInfo.InvariantCulture);
+        return Unit switch
+        {
+            VelocityUnit.Percentage => value + "%",
+            VelocityUnit.MmPerSecond => value + "mm/s",
+            VelocityUnit.CmPerMinute => value + "cm/min",
+            _ => value
+        };
+    }
 
     /// <summary>Parses "20%", "100mm/s", "50cm/min". Throws FormatException on unknown format.</summary>
     public static Velocity Parse(string s, IFormatProvider? provider = null)
