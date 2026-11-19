@@ -49,6 +49,22 @@ internal sealed class ProgramsApi(HttpClient http, TimeProvider? clock = null) :
             ?? throw new InvalidOperationException("Server returned empty body for POST /api/programs/{id}/run.");
     }
 
+    public async Task<RunResult> RunAsync(Guid programId, bool dryRun, BlockId fromBlockId, CancellationToken ct = default)
+    {
+        var body = new { dryRun, fromBlockId };
+        using var res = await http.PostAsJsonAsync($"api/programs/{programId}/run", body, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(res, $"Run program '{programId}' from block '{fromBlockId}'", ct).ConfigureAwait(false);
+        return await res.Content.ReadFromJsonAsync<RunResult>(ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Server returned empty body for POST /api/programs/{id}/run.");
+    }
+
+    public async Task<UndoResult> UndoAsync(Guid programId, CancellationToken ct = default)
+    {
+        using var res = await http.PostAsync($"api/programs/{programId}/undo", content: null, ct).ConfigureAwait(false);
+        await EnsureSuccessAsync(res, $"Undo the last step of program '{programId}'", ct).ConfigureAwait(false);
+        return await ReadAsync<UndoResult>(res, "POST /api/programs/{id}/undo", ct).ConfigureAwait(false);
+    }
+
     public async Task CancelAsync(Guid programId, CancellationToken ct = default)
     {
         using var res = await http.PostAsync($"api/programs/{programId}/cancel", content: null, ct).ConfigureAwait(false);
@@ -116,6 +132,14 @@ internal sealed class ProgramsApi(HttpClient http, TimeProvider? clock = null) :
         using var res = await SendEditAsync(HttpMethod.Delete, BlockUrl(programId, blockId), etag, ct).ConfigureAwait(false);
         await ThrowIfEditErrorAsync(res, programId, blockId, etag, $"Remove block '{blockId}' from program '{programId}'", ct).ConfigureAwait(false);
         return await ReadEtagAsync(res, ct).ConfigureAwait(false);
+    }
+
+    public async Task<BlockEditResult> CopyBlockAsync(Guid programId, BlockId blockId, ProgramEtag etag, CancellationToken ct = default)
+    {
+        using var res = await SendEditAsync(HttpMethod.Post, $"{BlockUrl(programId, blockId)}/copy", etag, ct).ConfigureAwait(false);
+        await ThrowIfEditErrorAsync(res, programId, blockId, etag, $"Copy group '{blockId}' in program '{programId}'", ct).ConfigureAwait(false);
+        return await res.Content.ReadFromJsonAsync<BlockEditResult>(ct).ConfigureAwait(false)
+            ?? throw new InvalidOperationException("Server returned empty body for POST /api/programs/{id}/blocks/{blockId}/copy.");
     }
 
     public async Task<EtagEditResult> MoveBlockAsync(Guid programId, BlockId blockId, MoveBlockRequest request, ProgramEtag etag, CancellationToken ct = default)
