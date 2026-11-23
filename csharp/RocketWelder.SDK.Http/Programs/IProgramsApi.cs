@@ -26,6 +26,20 @@ public interface IProgramsApi
     /// <param name="dryRun">When true, <c>IProgram.ExecuteAsync</c> runs with <c>ctx.IsDryRun = true</c> (no physical actuation).</param>
     Task<RunResult> RunAsync(Guid programId, bool dryRun, CancellationToken ct = default);
 
+    /// <summary>
+    /// <c>POST /api/programs/{programId}/run</c> with <c>fromBlockId</c> — run from that block to the end, the run the editor's
+    /// "Run from here" starts (rocket-welder2 epic-150). A block a run cannot start at answers 404 and a refusal 409, each
+    /// raised as <see cref="HttpRequestException"/> carrying the status and rw2's body, as <see cref="RunAsync(Guid, bool, CancellationToken)"/>.
+    /// </summary>
+    Task<RunResult> RunAsync(Guid programId, bool dryRun, BlockId fromBlockId, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>POST /api/programs/{programId}/undo</c> — the designer's Undo: reverses the program's most recent history step and
+    /// records it as a step of its own (rocket-welder2 epic-150). Nothing undone (nothing to undo, a conflict, busy) answers
+    /// 409, raised as <see cref="HttpRequestException"/> carrying the status and rw2's body.
+    /// </summary>
+    Task<UndoResult> UndoAsync(Guid programId, CancellationToken ct = default);
+
     /// <summary><c>POST /api/programs/{programId}/cancel</c> — abort a running execution.</summary>
     Task CancelAsync(Guid programId, CancellationToken ct = default);
 
@@ -104,6 +118,16 @@ public interface IProgramsApi
     /// <exception cref="ProgramEtagMismatchException">The etag is stale (HTTP 409).</exception>
     /// <exception cref="BlockNotFoundException">The block id (or anchor reference) is unknown (HTTP 404).</exception>
     Task<EtagEditResult> MoveBlockAsync(Guid programId, BlockId blockId, MoveBlockRequest request, ProgramEtag etag, CancellationToken ct = default);
+
+    /// <summary>
+    /// <c>POST /api/programs/{programId}/blocks/{blockId}/copy</c> — pastes a copy of the group that begins at
+    /// <paramref name="blockId"/> (a Frame) right after it, with its own points (rocket-welder2 epic-150). Sends
+    /// <c>If-Match: <paramref name="etag"/></c>; no body. The result carries the new Frame (<see cref="BlockEditResult.Block"/>),
+    /// its end (<see cref="BlockEditResult.EndBlock"/>) and the renamed points (<see cref="BlockEditResult.Points"/>).
+    /// 409 → <see cref="ProgramEtagMismatchException"/>, 404 → <see cref="BlockNotFoundException"/>, as every edit; any
+    /// other refusal (400 when the block is not a group) → <see cref="HttpRequestException"/> with rw2's body.
+    /// </summary>
+    Task<BlockEditResult> CopyBlockAsync(Guid programId, BlockId blockId, ProgramEtag etag, CancellationToken ct = default);
 
     /// <summary>
     /// <c>POST /api/programs/{id}/capture</c> (FR-6) — capture rocket-welder2's own
