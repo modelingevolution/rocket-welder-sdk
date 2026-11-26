@@ -20,4 +20,15 @@ public sealed record StationDefault(
     string? Stored,
     string Effective,
     string Layer,
-    string? Warning);
+    string? Warning)
+{
+    /// <summary>A cell value's source text: where the value comes from (who measured or ruled it, when). Present on station-only cell
+    /// values (<see cref="StationOnly"/>); absent on block-property defaults. Optional: older stations do not send it.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? Source { get; init; }
+
+    /// <summary>True for a cell value (kind <c>Cell</c>, e.g. <c>Cell.HoldPosture</c>): the station's only, never copied into a program, and
+    /// needs its <see cref="Source"/> when set. False for a block-property default.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool StationOnly { get; init; }
+}
