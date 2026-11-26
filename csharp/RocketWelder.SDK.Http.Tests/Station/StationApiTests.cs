@@ -79,6 +79,36 @@ public class StationApiTests
     }
 
     [Fact]
+    public async Task ACellValuesSourceAndStationOnlyFlag_AreRead_AndOlderAnswersWithoutThemStillRead()
+    {
+        // A station's cell value (rw2 F-21): Cell.HoldPosture carries its source and stationOnly; a block property carries neither.
+        const string json = """
+            {"values":[
+              {"key":"Adaptation.PathTolerance","kind":"Adaptation","blockTypes":["Adapt"],"control":"ToleranceBandField","stored":null,"effective":"10:10","layer":"builtIn","warning":null},
+              {"key":"Cell.HoldPosture","kind":"Cell","blockTypes":[],"control":"JointsField","stored":"26.1,-108.9,111.9,-94.6,-89.9,0","effective":"26.1,-108.9,111.9,-94.6,-89.9,0","layer":"station","warning":null,"source":"the cell's home; measured 2026-11-26","stationOnly":true}
+            ]}
+            """;
+        var handler = new RecordingHandler(HttpStatusCode.OK, json);
+
+        var result = await Station(handler).GetProgrammingDefaultsAsync();
+
+        result.Values[0].Source.Should().BeNull();
+        result.Values[0].StationOnly.Should().BeFalse();
+        result.Values[1].Source.Should().Be("the cell's home; measured 2026-11-26");
+        result.Values[1].StationOnly.Should().BeTrue();
+    }
+
+    [Fact]
+    public void ASetValueRequestWithoutASource_SerializesAsBefore_WithOneTheSourceIsSent()
+    {
+        var web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+
+        JsonSerializer.Serialize(new SetValueRequest("1:3"), web).Should().Be("""{"value":"1:3"}""", "every existing request is unchanged");
+        JsonNode.Parse(JsonSerializer.Serialize(new SetValueRequest("1,2,3,4,5,6") { Source = "measured" }, web))!["source"]!.GetValue<string>()
+            .Should().Be("measured");
+    }
+
+    [Fact]
     public async Task SetProgrammingDefaultAsync_EscapesReservedCharactersInTheKey()
     {
         var handler = new RecordingHandler(HttpStatusCode.OK, StationDefaultsJson);
